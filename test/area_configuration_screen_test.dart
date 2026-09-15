@@ -3,11 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
 
+import 'support/test_repository.dart';
+
 Future<void> _startHighRiseSetup(WidgetTester tester) async {
-  await tester.pumpWidget(const ProviderScope(child: ProDefactApp()));
+  await tester.pumpWidget(
+    ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
+  );
   await tester.pumpAndSettle();
 
   await tester.tap(find.text('Start Home Inspection'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('New Inspection'));
   await tester.pumpAndSettle();
 
   await tester.tap(find.text('High Rise'));

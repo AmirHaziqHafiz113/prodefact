@@ -5,6 +5,8 @@ import 'package:prodefact/app/app.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
+import 'support/test_repository.dart';
+
 /// go_router pushes keep every previous screen mounted (for back-swipe /
 /// transition support), so several of these screens are simultaneously in
 /// the widget tree at once (e.g. the area configuration screen still has
@@ -22,7 +24,7 @@ Finder _dialogButton(String label) =>
     find.descendant(of: find.byType(AlertDialog), matching: find.text(label));
 
 Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
-  final container = ProviderContainer();
+  final container = ProviderContainer(overrides: testOverrides());
   addTearDown(container.dispose);
 
   await tester.pumpWidget(
@@ -34,6 +36,9 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('Start Home Inspection')));
+  await tester.pumpAndSettle();
+
+  await tester.tap(_within(find.text('New Inspection')));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('High Rise')));

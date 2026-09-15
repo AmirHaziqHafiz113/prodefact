@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../providers/active_session_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
 
 /// Overview of the physical inspection: the ordered queue of included
@@ -45,13 +46,21 @@ class InspectionQueueScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           child: FilledButton(
             onPressed: canComplete
-                ? () => context.push('/home-inspection/complete')
+                ? () => _completeInspection(context, ref)
                 : null,
             child: const Text('Complete Physical Inspection'),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _completeInspection(BuildContext context, WidgetRef ref) async {
+    await ref
+        .read(activeSessionProvider.notifier)
+        .markPhysicalInspectionComplete();
+    if (!context.mounted) return;
+    context.push('/home-inspection/complete');
   }
 }
 

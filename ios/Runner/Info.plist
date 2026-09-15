@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ProDefact uses the camera to attach photos as evidence for inspection findings.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ProDefact uses your photo library to attach photos as evidence for inspection findings.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

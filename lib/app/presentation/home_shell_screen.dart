@@ -14,7 +14,7 @@ class HomeShellScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('ProDefact')),
       body: Center(
         child: FilledButton(
-          onPressed: () => context.push('/home-inspection'),
+          onPressed: () => context.push('/home-inspection/sessions'),
           child: const Text('Start Home Inspection'),
         ),
       ),

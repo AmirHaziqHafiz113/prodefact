@@ -1,0 +1,327 @@
+import 'package:drift/drift.dart';
+
+import '../../core/inspection/inspection_domain.dart';
+import 'database.dart';
+import 'element_serialization.dart';
+
+/// Drift-backed implementation of [InspectionRepository]. This is the
+/// only place that touches [AppDatabase]/generated row types directly —
+/// everything else in the app depends on the abstract interface.
+class DriftInspectionRepository implements InspectionRepository {
+  DriftInspectionRepository(this._db);
+
+  final AppDatabase _db;
+
+  String _newId(String prefix) =>
+      '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+
+  @override
+  Future<InspectionSession> createSession({
+    required Industry industry,
+    required String assetTypeId,
+    required List<Section> initialSections,
+  }) async {
+    final now = DateTime.now();
+    final id = _newId('session');
+
+    await _db.transaction(() async {
+      await _db
+          .into(_db.inspectionSessionRows)
+          .insert(
+            InspectionSessionRowsCompanion.insert(
+              id: id,
+              industry: industry.name,
+              assetTypeId: assetTypeId,
+              status: InspectionStatus.inProgress.name,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      for (var i = 0; i < initialSections.length; i++) {
+        await _insertSection(
+          sessionId: id,
+          section: initialSections[i],
+          orderIndex: i,
+          timestamp: now,
+        );
+      }
+    });
+
+    return InspectionSession(
+      id: id,
+      industry: industry,
+      assetTypeId: assetTypeId,
+      sections: initialSections,
+      sectionStatuses: const {},
+      findings: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  Future<void> _insertSection({
+    required String sessionId,
+    required Section section,
+    required int orderIndex,
+    required DateTime timestamp,
+  }) {
+    return _db
+        .into(_db.sectionRows)
+        .insert(
+          SectionRowsCompanion.insert(
+            id: section.id,
+            sessionId: sessionId,
+            name: section.name,
+            isPlumbing: Value(section.isPlumbing),
+            isIncluded: Value(section.isIncluded),
+            elementsJson: encodeElements(section.elements),
+            orderIndex: orderIndex,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          ),
+        );
+  }
+
+  @override
+  Future<InspectionSession?> loadSession(String id) async {
+    final sessionRow = await (_db.select(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (sessionRow == null) return null;
+
+    final sectionRows =
+        await (_db.select(_db.sectionRows)
+              ..where((t) => t.sessionId.equals(id))
+              ..orderBy([(t) => OrderingTerm.asc(t.orderIndex)]))
+            .get();
+
+    final findingRows = await (_db.select(
+      _db.findingRows,
+    )..where((t) => t.sessionId.equals(id))).get();
+
+    final findingIds = findingRows.map((f) => f.id).toList();
+    final evidenceRows = findingIds.isEmpty
+        ? <EvidenceRow>[]
+        : await (_db.select(
+            _db.evidenceRows,
+          )..where((t) => t.findingId.isIn(findingIds))).get();
+
+    final sections = sectionRows
+        .map(
+          (row) => Section(
+            id: row.id,
+            name: row.name,
+            elements: decodeElements(row.elementsJson),
+            isPlumbing: row.isPlumbing,
+            isIncluded: row.isIncluded,
+          ),
+        )
+        .toList();
+
+    final sectionStatuses = {
+      for (final row in sectionRows)
+        row.id: SectionStatus.values.byName(row.status),
+    };
+
+    final findings = findingRows.map((row) {
+      final evidence = evidenceRows
+          .where((e) => e.findingId == row.id)
+          .map(
+            (e) => Evidence(
+              id: e.id,
+              findingId: e.findingId,
+              filePath: e.filePath,
+              createdAt: e.createdAt,
+              mediaType: EvidenceMediaType.values.byName(e.mediaType),
+              source: EvidenceSource.values.byName(e.source),
+              caption: e.caption,
+              syncStatus: SyncStatus.values.byName(e.syncStatus),
+            ),
+          )
+          .toList();
+
+      return Finding(
+        id: row.id,
+        sectionId: row.sectionId,
+        elementId: row.elementId,
+        componentId: row.componentId,
+        description: row.description,
+        notes: row.notes,
+        status: FindingStatus.values.byName(row.status),
+        evidence: evidence,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      );
+    }).toList();
+
+    return InspectionSession(
+      id: sessionRow.id,
+      industry: Industry.values.byName(sessionRow.industry),
+      assetTypeId: sessionRow.assetTypeId,
+      sections: sections,
+      sectionStatuses: sectionStatuses,
+      findings: findings,
+      status: InspectionStatus.values.byName(sessionRow.status),
+      createdAt: sessionRow.createdAt,
+      updatedAt: sessionRow.updatedAt,
+      syncStatus: SyncStatus.values.byName(sessionRow.syncStatus),
+    );
+  }
+
+  @override
+  Future<List<InspectionSessionSummary>> listSessions() async {
+    final rows = await (_db.select(
+      _db.inspectionSessionRows,
+    )..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
+
+    return rows
+        .map(
+          (row) => InspectionSessionSummary(
+            id: row.id,
+            industry: Industry.values.byName(row.industry),
+            assetTypeId: row.assetTypeId,
+            status: InspectionStatus.values.byName(row.status),
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> saveSections(String sessionId, List<Section> sections) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.sectionRows,
+      )..where((t) => t.sessionId.equals(sessionId))).go();
+      for (var i = 0; i < sections.length; i++) {
+        await _insertSection(
+          sessionId: sessionId,
+          section: sections[i],
+          orderIndex: i,
+          timestamp: now,
+        );
+      }
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> saveSectionStatus(
+    String sessionId,
+    String sectionId,
+    SectionStatus status,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.sectionRows)..where(
+            (t) => t.sessionId.equals(sessionId) & t.id.equals(sectionId),
+          ))
+          .write(
+            SectionRowsCompanion(
+              status: Value(status.name),
+              updatedAt: Value(now),
+            ),
+          );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> saveFinding(String sessionId, Finding finding) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await _db
+          .into(_db.findingRows)
+          .insertOnConflictUpdate(
+            FindingRowsCompanion.insert(
+              id: finding.id,
+              sessionId: sessionId,
+              sectionId: finding.sectionId,
+              elementId: finding.elementId,
+              componentId: Value(finding.componentId),
+              description: Value(finding.description),
+              notes: Value(finding.notes),
+              status: Value(finding.status.name),
+              createdAt: finding.createdAt,
+              updatedAt: finding.updatedAt,
+            ),
+          );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> deleteFinding(String sessionId, String findingId) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.evidenceRows,
+      )..where((t) => t.findingId.equals(findingId))).go();
+      await (_db.delete(
+        _db.findingRows,
+      )..where((t) => t.id.equals(findingId))).go();
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> addEvidence(String sessionId, Evidence evidence) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await _db
+          .into(_db.evidenceRows)
+          .insert(
+            EvidenceRowsCompanion.insert(
+              id: evidence.id,
+              findingId: evidence.findingId,
+              filePath: evidence.filePath,
+              mediaType: Value(evidence.mediaType.name),
+              source: Value(evidence.source.name),
+              caption: Value(evidence.caption),
+              syncStatus: Value(evidence.syncStatus.name),
+              createdAt: evidence.createdAt,
+            ),
+          );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> removeEvidence(String sessionId, String evidenceId) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.evidenceRows,
+      )..where((t) => t.id.equals(evidenceId))).go();
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> setSessionStatus(
+    String sessionId,
+    InspectionStatus status,
+  ) async {
+    final now = DateTime.now();
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(
+        status: Value(status.name),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  Future<void> _touchSession(String sessionId, DateTime timestamp) {
+    return (_db.update(_db.inspectionSessionRows)
+          ..where((t) => t.id.equals(sessionId)))
+        .write(InspectionSessionRowsCompanion(updatedAt: Value(timestamp)));
+  }
+
+  @override
+  Future<void> close() => _db.close();
+}

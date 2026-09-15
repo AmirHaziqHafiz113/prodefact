@@ -4,6 +4,7 @@ import '../../features/home_inspection/presentation/screens/area_configuration_s
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/element_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/next_stage_placeholder_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
 import '../presentation/home_shell_screen.dart';
@@ -18,6 +19,10 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: HomeShellScreen.routePath,
         builder: (context, state) => const HomeShellScreen(),
+      ),
+      GoRoute(
+        path: InspectionSessionsScreen.routePath,
+        builder: (context, state) => const InspectionSessionsScreen(),
       ),
       GoRoute(
         path: PropertyTypeSelectionScreen.routePath,

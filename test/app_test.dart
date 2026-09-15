@@ -3,17 +3,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
 
+import 'support/test_repository.dart';
+
 void main() {
   testWidgets('app boots to the shell and can navigate into Home Inspection', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: ProDefactApp()));
+    await tester.pumpWidget(
+      ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('ProDefact'), findsOneWidget);
     expect(find.text('Start Home Inspection'), findsOneWidget);
 
     await tester.tap(find.text('Start Home Inspection'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home Inspections'), findsOneWidget);
+    expect(find.text('No saved inspections yet.'), findsOneWidget);
+
+    await tester.tap(find.text('New Inspection'));
     await tester.pumpAndSettle();
 
     expect(find.text('Select property type'), findsOneWidget);
@@ -24,10 +34,14 @@ void main() {
   testWidgets(
     'selecting a property type shows its default areas, plumbing first',
     (tester) async {
-      await tester.pumpWidget(const ProviderScope(child: ProDefactApp()));
+      await tester.pumpWidget(
+        ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Start Home Inspection'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New Inspection'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Landed'));

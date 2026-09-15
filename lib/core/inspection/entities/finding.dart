@@ -13,6 +13,8 @@ class Finding {
     required this.id,
     required this.sectionId,
     required this.elementId,
+    required this.createdAt,
+    required this.updatedAt,
     this.componentId,
     this.description,
     this.notes,
@@ -37,11 +39,13 @@ class Finding {
 
   final FindingStatus status;
 
-  /// Photos/other evidence attached to this finding. Empty for now —
-  /// capture is implemented in a later phase.
+  /// Photos/other evidence attached to this finding.
   final List<Evidence> evidence;
 
   final AiSuggestion? aiSuggestion;
+
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
   Finding copyWith({
     String? description,
@@ -49,6 +53,7 @@ class Finding {
     FindingStatus? status,
     List<Evidence>? evidence,
     AiSuggestion? aiSuggestion,
+    DateTime? updatedAt,
   }) {
     return Finding(
       id: id,
@@ -60,6 +65,8 @@ class Finding {
       status: status ?? this.status,
       evidence: evidence ?? this.evidence,
       aiSuggestion: aiSuggestion ?? this.aiSuggestion,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

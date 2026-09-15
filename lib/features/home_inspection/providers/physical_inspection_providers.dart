@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
+import 'active_session_providers.dart';
 import 'home_inspection_providers.dart';
 
 /// The ordered queue of areas to physically inspect: included areas
@@ -26,20 +27,21 @@ final inspectionQueueProvider = Provider<List<Section>>((ref) {
 /// Per-area physical inspection progress, keyed by section id. An area
 /// missing from the map is [SectionStatus.notStarted].
 ///
-/// Resets only when the property type changes (a new inspection begins)
-/// — unrelated widget rebuilds and navigation never lose progress.
+/// Derived from and written through [activeSessionProvider], so progress
+/// is durable across restarts and never lost to unrelated rebuilds.
 class SectionStatuses extends Notifier<Map<String, SectionStatus>> {
   @override
   Map<String, SectionStatus> build() {
-    ref.watch(selectedPropertyTypeProvider);
-    return const {};
+    return ref.watch(activeSessionProvider)?.sectionStatuses ?? const {};
   }
 
   SectionStatus statusOf(String sectionId) =>
       state[sectionId] ?? SectionStatus.notStarted;
 
   void setStatus(String sectionId, SectionStatus status) {
-    state = {...state, sectionId: status};
+    ref
+        .read(activeSessionProvider.notifier)
+        .setSectionStatus(sectionId, status);
   }
 }
 
@@ -63,21 +65,15 @@ final isPhysicalInspectionCompleteProvider = Provider<bool>((ref) {
   );
 });
 
-String? _orNull(String? value) {
-  final trimmed = value?.trim();
-  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-}
-
 /// Findings recorded during physical inspection.
 ///
-/// Resets only when the property type changes (a new inspection begins)
-/// — unrelated widget rebuilds and navigation never lose in-progress
-/// findings.
+/// Derived from and written through [activeSessionProvider], so
+/// findings are durable across restarts and never lost to unrelated
+/// rebuilds or navigation.
 class InspectionFindings extends Notifier<List<Finding>> {
   @override
   List<Finding> build() {
-    ref.watch(selectedPropertyTypeProvider);
-    return const [];
+    return ref.watch(activeSessionProvider)?.findings ?? const [];
   }
 
   Finding addFinding({
@@ -87,16 +83,15 @@ class InspectionFindings extends Notifier<List<Finding>> {
     String? description,
     String? notes,
   }) {
-    final finding = Finding(
-      id: 'finding_${DateTime.now().microsecondsSinceEpoch}',
-      sectionId: sectionId,
-      elementId: elementId,
-      componentId: componentId,
-      description: _orNull(description),
-      notes: _orNull(notes),
-    );
-    state = [...state, finding];
-    return finding;
+    return ref
+        .read(activeSessionProvider.notifier)
+        .addFinding(
+          sectionId: sectionId,
+          elementId: elementId,
+          componentId: componentId,
+          description: description,
+          notes: notes,
+        );
   }
 
   /// Replaces the description and notes of an existing finding. Both are
@@ -107,20 +102,17 @@ class InspectionFindings extends Notifier<List<Finding>> {
     required String? description,
     required String? notes,
   }) {
-    state = [
-      for (final finding in state)
-        if (finding.id == findingId)
-          finding.copyWith(
-            description: _orNull(description) ?? '',
-            notes: _orNull(notes) ?? '',
-          )
-        else
-          finding,
-    ];
+    ref
+        .read(activeSessionProvider.notifier)
+        .updateFinding(
+          findingId: findingId,
+          description: description,
+          notes: notes,
+        );
   }
 
   void removeFinding(String findingId) {
-    state = state.where((finding) => finding.id != findingId).toList();
+    ref.read(activeSessionProvider.notifier).removeFinding(findingId);
   }
 
   List<Finding> forSection(String sectionId) =>

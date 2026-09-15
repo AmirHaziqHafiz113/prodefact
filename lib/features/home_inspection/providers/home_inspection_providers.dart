@@ -1,16 +1,30 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
-import '../config/home_inspection_config.dart';
 import '../config/property_type.dart';
+import 'active_session_providers.dart';
 
-/// The property type the inspector has chosen for the current inspection.
-/// Null until a choice is made on the entry screen.
+/// The property type of the active inspection session. Null until a
+/// session is started or resumed.
+///
+/// Derived from [activeSessionProvider] — [select] starts a brand new
+/// local session (see [ActiveInspectionSession.startNew]) rather than
+/// holding its own state, so the property type and the rest of the
+/// session's persisted data can never drift apart.
 class SelectedPropertyType extends Notifier<PropertyType?> {
   @override
-  PropertyType? build() => null;
+  PropertyType? build() {
+    final session = ref.watch(activeSessionProvider);
+    if (session == null) return null;
+    for (final propertyType in PropertyType.values) {
+      if (propertyType.name == session.assetTypeId) return propertyType;
+    }
+    return null;
+  }
 
-  void select(PropertyType propertyType) => state = propertyType;
+  Future<void> select(PropertyType propertyType) {
+    return ref.read(activeSessionProvider.notifier).startNew(propertyType);
+  }
 }
 
 final selectedPropertyTypeProvider =
@@ -18,60 +32,39 @@ final selectedPropertyTypeProvider =
       SelectedPropertyType.new,
     );
 
-/// The inspector's configured areas (sections) for the current
-/// inspection setup: included/excluded state, renames, custom additions,
-/// and removals all live here as mutable state.
+/// The inspector's configured areas (sections) for the active session:
+/// included/excluded state, renames, custom additions, and removals all
+/// write through to local storage via [activeSessionProvider].
 ///
-/// [build] re-initializes to the selected property type's defaults only
-/// when the property type actually changes (it watches
-/// [selectedPropertyTypeProvider]) — unrelated widget rebuilds do not
-/// reset the inspector's configuration.
+/// [build] re-derives from the active session, so unrelated widget
+/// rebuilds never reset the inspector's configuration — only starting
+/// or resuming a session changes it.
 class ConfiguredAreas extends Notifier<List<Section>> {
   @override
   List<Section> build() {
-    final propertyType = ref.watch(selectedPropertyTypeProvider);
-    if (propertyType == null) return const [];
-    return HomeInspectionConfig.defaultSectionsFor(propertyType);
+    return ref.watch(activeSessionProvider)?.sections ?? const [];
   }
 
   /// Discards all edits and restores the default area list for the
-  /// currently selected property type.
+  /// active session's property type.
   void resetToDefaults() {
-    final propertyType = ref.read(selectedPropertyTypeProvider);
-    if (propertyType == null) return;
-    state = HomeInspectionConfig.defaultSectionsFor(propertyType);
+    ref.read(activeSessionProvider.notifier).resetAreasToDefaults();
   }
 
   void toggleIncluded(String sectionId) {
-    state = [
-      for (final section in state)
-        if (section.id == sectionId)
-          section.copyWith(isIncluded: !section.isIncluded)
-        else
-          section,
-    ];
+    ref.read(activeSessionProvider.notifier).toggleAreaIncluded(sectionId);
   }
 
   void rename(String sectionId, String newName) {
-    final trimmed = newName.trim();
-    if (trimmed.isEmpty) return;
-    state = [
-      for (final section in state)
-        if (section.id == sectionId)
-          section.copyWith(name: trimmed)
-        else
-          section,
-    ];
+    ref.read(activeSessionProvider.notifier).renameArea(sectionId, newName);
   }
 
   void remove(String sectionId) {
-    state = state.where((section) => section.id != sectionId).toList();
+    ref.read(activeSessionProvider.notifier).removeArea(sectionId);
   }
 
   void addCustom(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
-    state = [...state, HomeInspectionConfig.customSection(trimmed)];
+    ref.read(activeSessionProvider.notifier).addCustomArea(name);
   }
 }
 

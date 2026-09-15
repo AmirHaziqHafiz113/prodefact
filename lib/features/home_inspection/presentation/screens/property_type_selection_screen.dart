@@ -49,12 +49,13 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
     );
   }
 
-  void _selectPropertyType(
+  Future<void> _selectPropertyType(
     BuildContext context,
     WidgetRef ref,
     PropertyType propertyType,
-  ) {
-    ref.read(selectedPropertyTypeProvider.notifier).select(propertyType);
+  ) async {
+    await ref.read(selectedPropertyTypeProvider.notifier).select(propertyType);
+    if (!context.mounted) return;
     context.push('/home-inspection/areas');
   }
 }

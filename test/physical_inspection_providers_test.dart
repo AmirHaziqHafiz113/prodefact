@@ -5,9 +5,11 @@ import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/home_inspection_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
-ProviderContainer _highRiseContainer() {
-  final container = ProviderContainer();
-  container
+import 'support/test_repository.dart';
+
+Future<ProviderContainer> _highRiseContainer() async {
+  final container = ProviderContainer(overrides: testOverrides());
+  await container
       .read(selectedPropertyTypeProvider.notifier)
       .select(PropertyType.highRise);
   return container;
@@ -15,8 +17,8 @@ ProviderContainer _highRiseContainer() {
 
 void main() {
   group('inspectionQueueProvider', () {
-    test('excluded areas do not enter the inspection queue', () {
-      final container = _highRiseContainer();
+    test('excluded areas do not enter the inspection queue', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final configuredNotifier = container.read(
@@ -32,8 +34,8 @@ void main() {
       expect(queue.any((s) => s.id == kitchenId), isFalse);
     });
 
-    test('plumbing areas are ordered first', () {
-      final container = _highRiseContainer();
+    test('plumbing areas are ordered first', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final queue = container.read(inspectionQueueProvider);
@@ -44,8 +46,8 @@ void main() {
       expect(lastPlumbingIndex, lessThan(firstNonPlumbingIndex));
     });
 
-    test('remaining (non-plumbing) areas follow after plumbing ones', () {
-      final container = _highRiseContainer();
+    test('remaining (non-plumbing) areas follow after plumbing ones', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final queue = container.read(inspectionQueueProvider);
@@ -57,40 +59,43 @@ void main() {
       expect(kitchenIndex, lessThan(livingRoomIndex));
     });
 
-    test('configuration from Phase 2 is respected (rename, exclude, add)', () {
-      final container = _highRiseContainer();
-      addTearDown(container.dispose);
+    test(
+      'configuration from Phase 2 is respected (rename, exclude, add)',
+      () async {
+        final container = await _highRiseContainer();
+        addTearDown(container.dispose);
 
-      final notifier = container.read(configuredAreasProvider.notifier);
-      final bedroom2Id = container
-          .read(configuredAreasProvider)
-          .firstWhere((s) => s.name == 'Bedroom 2')
-          .id;
-      notifier.rename(bedroom2Id, "Son's Room");
+        final notifier = container.read(configuredAreasProvider.notifier);
+        final bedroom2Id = container
+            .read(configuredAreasProvider)
+            .firstWhere((s) => s.name == 'Bedroom 2')
+            .id;
+        notifier.rename(bedroom2Id, "Son's Room");
 
-      final livingRoomId = container
-          .read(configuredAreasProvider)
-          .firstWhere((s) => s.name == 'Living Room')
-          .id;
-      notifier.toggleIncluded(livingRoomId);
+        final livingRoomId = container
+            .read(configuredAreasProvider)
+            .firstWhere((s) => s.name == 'Living Room')
+            .id;
+        notifier.toggleIncluded(livingRoomId);
 
-      notifier.addCustom('Home Office');
+        notifier.addCustom('Home Office');
 
-      final queueNames = container
-          .read(inspectionQueueProvider)
-          .map((s) => s.name)
-          .toList();
+        final queueNames = container
+            .read(inspectionQueueProvider)
+            .map((s) => s.name)
+            .toList();
 
-      expect(queueNames.contains("Son's Room"), isTrue);
-      expect(queueNames.contains('Bedroom 2'), isFalse);
-      expect(queueNames.contains('Living Room'), isFalse);
-      expect(queueNames.contains('Home Office'), isTrue);
-    });
+        expect(queueNames.contains("Son's Room"), isTrue);
+        expect(queueNames.contains('Bedroom 2'), isFalse);
+        expect(queueNames.contains('Living Room'), isFalse);
+        expect(queueNames.contains('Home Office'), isTrue);
+      },
+    );
   });
 
   group('sectionStatusesProvider', () {
-    test('area status transitions correctly', () {
-      final container = _highRiseContainer();
+    test('area status transitions correctly', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final sectionId = container.read(inspectionQueueProvider).first.id;
@@ -107,8 +112,8 @@ void main() {
   });
 
   group('isPhysicalInspectionCompleteProvider', () {
-    test('cannot complete while an included area remains unfinished', () {
-      final container = _highRiseContainer();
+    test('cannot complete while an included area remains unfinished', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final queue = container.read(inspectionQueueProvider);
@@ -121,8 +126,8 @@ void main() {
       expect(container.read(isPhysicalInspectionCompleteProvider), isFalse);
     });
 
-    test('can complete once every included area is completed', () {
-      final container = _highRiseContainer();
+    test('can complete once every included area is completed', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final queue = container.read(inspectionQueueProvider);
@@ -134,8 +139,8 @@ void main() {
       expect(container.read(isPhysicalInspectionCompleteProvider), isTrue);
     });
 
-    test('excluded areas do not block completion', () {
-      final container = _highRiseContainer();
+    test('excluded areas do not block completion', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final configuredNotifier = container.read(
@@ -158,54 +163,60 @@ void main() {
   });
 
   group('inspectionFindingsProvider', () {
-    test('a finding can be added and references area/element/component', () {
-      final container = _highRiseContainer();
-      addTearDown(container.dispose);
+    test(
+      'a finding can be added and references area/element/component',
+      () async {
+        final container = await _highRiseContainer();
+        addTearDown(container.dispose);
 
-      final section = container.read(inspectionQueueProvider).first;
-      final element = section.elements.first;
-      final component = element.components.first;
-      final notifier = container.read(inspectionFindingsProvider.notifier);
+        final section = container.read(inspectionQueueProvider).first;
+        final element = section.elements.first;
+        final component = element.components.first;
+        final notifier = container.read(inspectionFindingsProvider.notifier);
 
-      final finding = notifier.addFinding(
-        sectionId: section.id,
-        elementId: element.id,
-        componentId: component.id,
-        description: 'Crack in tile',
-        notes: 'Near the drain',
-      );
+        final finding = notifier.addFinding(
+          sectionId: section.id,
+          elementId: element.id,
+          componentId: component.id,
+          description: 'Crack in tile',
+          notes: 'Near the drain',
+        );
 
-      expect(finding.sectionId, section.id);
-      expect(finding.elementId, element.id);
-      expect(finding.componentId, component.id);
-      expect(finding.description, 'Crack in tile');
-      expect(finding.notes, 'Near the drain');
-      expect(finding.status, FindingStatus.draft);
-      expect(
-        container.read(inspectionFindingsProvider).contains(finding),
-        isTrue,
-      );
-    });
+        expect(finding.sectionId, section.id);
+        expect(finding.elementId, element.id);
+        expect(finding.componentId, component.id);
+        expect(finding.description, 'Crack in tile');
+        expect(finding.notes, 'Near the drain');
+        expect(finding.status, FindingStatus.draft);
+        expect(
+          container.read(inspectionFindingsProvider).contains(finding),
+          isTrue,
+        );
+      },
+    );
 
-    test('a finding can be added without a component (element-level)', () {
-      final container = _highRiseContainer();
-      addTearDown(container.dispose);
+    test(
+      'a finding can be added without a component (element-level)',
+      () async {
+        final container = await _highRiseContainer();
+        addTearDown(container.dispose);
 
-      final section = container.read(inspectionQueueProvider).first;
-      final element = section.elements.first;
-      final notifier = container.read(inspectionFindingsProvider.notifier);
+        final section = container.read(inspectionQueueProvider).first;
+        final element = section.elements.first;
+        final notifier = container.read(inspectionFindingsProvider.notifier);
 
-      final finding = notifier.addFinding(
-        sectionId: section.id,
-        elementId: element.id,
-        description: 'General wear',
-      );
+        final finding = notifier.addFinding(
+          sectionId: section.id,
+          elementId: element.id,
+          description: 'General wear',
+        );
 
-      expect(finding.componentId, isNull);
-    });
+        expect(finding.componentId, isNull);
+      },
+    );
 
-    test('a finding can be edited', () {
-      final container = _highRiseContainer();
+    test('a finding can be edited', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final section = container.read(inspectionQueueProvider).first;
@@ -233,8 +244,8 @@ void main() {
       expect(updated.elementId, element.id);
     });
 
-    test('a finding can be removed', () {
-      final container = _highRiseContainer();
+    test('a finding can be removed', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final section = container.read(inspectionQueueProvider).first;
@@ -258,8 +269,8 @@ void main() {
       );
     });
 
-    test('findings reset when the property type changes', () {
-      final container = _highRiseContainer();
+    test('findings reset when the property type changes', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final section = container.read(inspectionQueueProvider).first;
@@ -268,7 +279,7 @@ void main() {
           .read(inspectionFindingsProvider.notifier)
           .addFinding(sectionId: section.id, elementId: element.id);
 
-      container
+      await container
           .read(selectedPropertyTypeProvider.notifier)
           .select(PropertyType.landed);
 

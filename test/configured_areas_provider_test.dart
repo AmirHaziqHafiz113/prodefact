@@ -3,15 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/home_inspection_providers.dart';
 
+import 'support/test_repository.dart';
+
+Future<ProviderContainer> _highRiseContainer() async {
+  final container = ProviderContainer(overrides: testOverrides());
+  await container
+      .read(selectedPropertyTypeProvider.notifier)
+      .select(PropertyType.highRise);
+  return container;
+}
+
 void main() {
   group('configuredAreasProvider', () {
-    test('High Rise loads the correct default sections', () {
-      final container = ProviderContainer();
+    test('High Rise loads the correct default sections', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
 
       final names = container
           .read(configuredAreasProvider)
@@ -26,11 +32,10 @@ void main() {
 
     test(
       'Landed loads the correct default sections including landed-only ones',
-      () {
-        final container = ProviderContainer();
+      () async {
+        final container = ProviderContainer(overrides: testOverrides());
         addTearDown(container.dispose);
-
-        container
+        await container
             .read(selectedPropertyTypeProvider.notifier)
             .select(PropertyType.landed);
 
@@ -46,13 +51,9 @@ void main() {
       },
     );
 
-    test('every default section starts included', () {
-      final container = ProviderContainer();
+    test('every default section starts included', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
 
       expect(
         container.read(configuredAreasProvider).every((s) => s.isIncluded),
@@ -60,46 +61,41 @@ void main() {
       );
     });
 
-    test('toggleIncluded flips a single section without affecting others', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
-      final notifier = container.read(configuredAreasProvider.notifier);
-      final kitchenId = container
-          .read(configuredAreasProvider)
-          .firstWhere((s) => s.name == 'Kitchen')
-          .id;
-
-      notifier.toggleIncluded(kitchenId);
-
-      final sections = container.read(configuredAreasProvider);
-      final kitchen = sections.firstWhere((s) => s.id == kitchenId);
-      expect(kitchen.isIncluded, isFalse);
-      expect(
-        sections.where((s) => s.id != kitchenId).every((s) => s.isIncluded),
-        isTrue,
-      );
-
-      notifier.toggleIncluded(kitchenId);
-      expect(
-        container
+    test(
+      'toggleIncluded flips a single section without affecting others',
+      () async {
+        final container = await _highRiseContainer();
+        addTearDown(container.dispose);
+        final notifier = container.read(configuredAreasProvider.notifier);
+        final kitchenId = container
             .read(configuredAreasProvider)
-            .firstWhere((s) => s.id == kitchenId)
-            .isIncluded,
-        isTrue,
-      );
-    });
+            .firstWhere((s) => s.name == 'Kitchen')
+            .id;
 
-    test('rename updates only the targeted section name', () {
-      final container = ProviderContainer();
+        notifier.toggleIncluded(kitchenId);
+
+        final sections = container.read(configuredAreasProvider);
+        final kitchen = sections.firstWhere((s) => s.id == kitchenId);
+        expect(kitchen.isIncluded, isFalse);
+        expect(
+          sections.where((s) => s.id != kitchenId).every((s) => s.isIncluded),
+          isTrue,
+        );
+
+        notifier.toggleIncluded(kitchenId);
+        expect(
+          container
+              .read(configuredAreasProvider)
+              .firstWhere((s) => s.id == kitchenId)
+              .isIncluded,
+          isTrue,
+        );
+      },
+    );
+
+    test('rename updates only the targeted section name', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       final notifier = container.read(configuredAreasProvider.notifier);
       final bedroomId = container
           .read(configuredAreasProvider)
@@ -113,13 +109,9 @@ void main() {
       expect(sections.any((s) => s.name == 'Bedroom 3'), isTrue);
     });
 
-    test('rename ignores blank input', () {
-      final container = ProviderContainer();
+    test('rename ignores blank input', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       final notifier = container.read(configuredAreasProvider.notifier);
       final kitchenId = container
           .read(configuredAreasProvider)
@@ -137,13 +129,9 @@ void main() {
       );
     });
 
-    test('addCustom appends a new included, non-plumbing section', () {
-      final container = ProviderContainer();
+    test('addCustom appends a new included, non-plumbing section', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       final notifier = container.read(configuredAreasProvider.notifier);
       final beforeCount = container.read(configuredAreasProvider).length;
 
@@ -157,13 +145,9 @@ void main() {
       expect(added.elements, isNotEmpty);
     });
 
-    test('remove deletes the targeted section entirely', () {
-      final container = ProviderContainer();
+    test('remove deletes the targeted section entirely', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       final notifier = container.read(configuredAreasProvider.notifier);
       final beforeCount = container.read(configuredAreasProvider).length;
       final bedroom4Id = container
@@ -180,13 +164,9 @@ void main() {
 
     test(
       'plumbing metadata is preserved through include/exclude and rename',
-      () {
-        final container = ProviderContainer();
+      () async {
+        final container = await _highRiseContainer();
         addTearDown(container.dispose);
-
-        container
-            .read(selectedPropertyTypeProvider.notifier)
-            .select(PropertyType.highRise);
         final notifier = container.read(configuredAreasProvider.notifier);
         final masterBathroomId = container
             .read(configuredAreasProvider)
@@ -205,13 +185,9 @@ void main() {
       },
     );
 
-    test('resetToDefaults discards edits and restores defaults', () {
-      final container = ProviderContainer();
+    test('resetToDefaults discards edits and restores defaults', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       final notifier = container.read(configuredAreasProvider.notifier);
       notifier.addCustom('Home Office');
       final kitchenId = container
@@ -230,16 +206,12 @@ void main() {
       expect(names.contains('Kitchen'), isTrue);
     });
 
-    test('changing property type re-initializes to the new defaults', () {
-      final container = ProviderContainer();
+    test('changing property type re-initializes to the new defaults', () async {
+      final container = await _highRiseContainer();
       addTearDown(container.dispose);
-
-      container
-          .read(selectedPropertyTypeProvider.notifier)
-          .select(PropertyType.highRise);
       container.read(configuredAreasProvider.notifier).addCustom('Home Office');
 
-      container
+      await container
           .read(selectedPropertyTypeProvider.notifier)
           .select(PropertyType.landed);
 
