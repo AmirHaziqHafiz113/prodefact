@@ -71,3 +71,15 @@ class FakeReportShareService implements ReportShareService {
     shareCalls.add((filePath: filePath, fileName: fileName));
   }
 }
+
+/// In-memory [EvidenceFileStore] fake — records every path it was asked
+/// to delete instead of touching the real filesystem, so tests can
+/// assert cleanup actually happened.
+class FakeEvidenceFileStore implements EvidenceFileStore {
+  final List<String> deletedPaths = [];
+
+  @override
+  Future<void> deleteEvidenceFile(String filePath) async {
+    deletedPaths.add(filePath);
+  }
+}

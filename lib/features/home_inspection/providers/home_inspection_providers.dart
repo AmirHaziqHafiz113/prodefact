@@ -22,7 +22,9 @@ class SelectedPropertyType extends Notifier<PropertyType?> {
     return null;
   }
 
-  Future<void> select(PropertyType propertyType) {
+  /// Returns false (state left unchanged) if the new session could not
+  /// be created/persisted — see [ActiveInspectionSession.startNew].
+  Future<bool> select(PropertyType propertyType) {
     return ref.read(activeSessionProvider.notifier).startNew(propertyType);
   }
 }

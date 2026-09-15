@@ -22,8 +22,23 @@ class DefaultSyncCoordinator implements SyncCoordinator {
   final CloudInspectionRepository _cloud;
   final AuthService _auth;
 
+  /// Guards against two concurrent `syncSession` calls for the same
+  /// session — see `docs/production_readiness.md` ("Concurrency").
+  final Set<String> _inFlight = {};
+
   @override
   Future<SyncResult> syncSession(String sessionId) async {
+    if (!_inFlight.add(sessionId)) {
+      return const SyncResult.failure('A sync is already running.');
+    }
+    try {
+      return await _syncSession(sessionId);
+    } finally {
+      _inFlight.remove(sessionId);
+    }
+  }
+
+  Future<SyncResult> _syncSession(String sessionId) async {
     final user = _auth.currentUser;
     if (user == null) return const SyncResult.unauthenticated();
 

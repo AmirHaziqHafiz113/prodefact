@@ -21,6 +21,14 @@ part 'database.g.dart';
 ///   `AiSuggestionRows` table for AI review — see `docs/ai_review.md`.
 /// - v4: (Phase 7) added the new `ReportRows` table for generated PDF
 ///   report metadata — see `docs/report.md`.
+/// - v5: (Phase 8) added indexes on the foreign-key columns SQLite
+///   doesn't index automatically (`FindingRows.sessionId`,
+///   `EvidenceRows.findingId`, `AiSuggestionRows.sessionId`/`findingId`)
+///   — `loadSession` looks up rows by exactly these columns, and an
+///   inspection with many findings/suggestions would otherwise force a
+///   full table scan per lookup. Indexes only; no column/table changes,
+///   so nothing here can affect existing data. See
+///   `docs/production_readiness.md` ("Database hardening").
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -39,11 +47,14 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) => migrator.createAll(),
+    onCreate: (migrator) async {
+      await migrator.createAll();
+      await _createV5Indexes(migrator);
+    },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.addColumn(
@@ -62,8 +73,30 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await migrator.createTable(reportRows);
       }
+      if (from < 5) {
+        await _createV5Indexes(migrator);
+      }
     },
   );
+
+  static Future<void> _createV5Indexes(Migrator migrator) async {
+    await migrator.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_finding_rows_session_id '
+      'ON finding_rows (session_id)',
+    );
+    await migrator.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_evidence_rows_finding_id '
+      'ON evidence_rows (finding_id)',
+    );
+    await migrator.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_ai_suggestion_rows_session_id '
+      'ON ai_suggestion_rows (session_id)',
+    );
+    await migrator.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_ai_suggestion_rows_finding_id '
+      'ON ai_suggestion_rows (finding_id)',
+    );
+  }
 }
 
 LazyDatabase _openConnection() {

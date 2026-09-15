@@ -19,11 +19,32 @@ class DefaultAiReviewCoordinator implements AiReviewCoordinator {
   final InspectionRepository _local;
   final AiInspectionService _ai;
 
+  /// Guards against two concurrent `runAnalysis` calls for the same
+  /// session racing each other before either has durably recorded
+  /// `analyzing` — without this, a double-tap of "Start AI Analysis"
+  /// could see both calls read `notStarted`, both pass the gate, and
+  /// both call the AI backend, duplicating every suggestion. This
+  /// in-memory guard is per-coordinator-instance, which is sufficient
+  /// since the app only ever holds one via `aiReviewCoordinatorProvider`
+  /// — see `docs/production_readiness.md` ("Concurrency").
+  final Set<String> _inFlight = {};
+
   String _newId(String prefix) =>
       '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
 
   @override
   Future<AiAnalysisResult> runAnalysis(String sessionId) async {
+    if (!_inFlight.add(sessionId)) {
+      return const AiAnalysisResult.alreadyReviewed();
+    }
+    try {
+      return await _runAnalysis(sessionId);
+    } finally {
+      _inFlight.remove(sessionId);
+    }
+  }
+
+  Future<AiAnalysisResult> _runAnalysis(String sessionId) async {
     final session = await _local.loadSession(sessionId);
     if (session == null) return const AiAnalysisResult.sessionNotFound();
 

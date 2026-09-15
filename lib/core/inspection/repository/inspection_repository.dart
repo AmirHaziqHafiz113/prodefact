@@ -59,6 +59,17 @@ abstract class InspectionRepository {
 
   Future<void> deleteFinding(String sessionId, String findingId);
 
+  /// Permanently deletes a session and everything that references it
+  /// (sections, findings, evidence metadata, AI suggestions, report
+  /// metadata) via cascading foreign keys. Does not touch any file on
+  /// disk — callers are responsible for deleting the evidence/report
+  /// files a session referenced *before* calling this, using the file
+  /// paths from a freshly [loadSession]ed copy (see
+  /// `docs/production_readiness.md`, "Session deletion").
+  ///
+  /// A no-op (not an error) if [sessionId] doesn't exist.
+  Future<void> deleteSession(String sessionId);
+
   /// Attaches evidence metadata to a finding. The file itself must
   /// already exist at [Evidence.filePath] in app-managed storage.
   Future<void> addEvidence(String sessionId, Evidence evidence);

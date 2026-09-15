@@ -20,11 +20,39 @@ class DefaultReportCoordinator implements ReportCoordinator {
   final ReportRenderer _renderer;
   final ReportFileStore _fileStore;
 
+  /// Guards against two concurrent `generateReport` calls for the same
+  /// session racing to render/write the same (date-based, therefore
+  /// often identical) filename — without this, a double-tap of
+  /// "Generate Report"/"Regenerate" could interleave two writes to the
+  /// same path. Per-coordinator-instance, which is sufficient since the
+  /// app only ever holds one via `reportCoordinatorProvider` — see
+  /// `docs/production_readiness.md` ("Concurrency").
+  final Set<String> _inFlight = {};
+
   String _newId(String prefix) =>
       '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
 
   @override
   Future<ReportGenerationResult> generateReport(
+    String sessionId, {
+    required String propertyTypeLabel,
+  }) async {
+    if (!_inFlight.add(sessionId)) {
+      return const ReportGenerationResult.failure(
+        'A report is already being generated for this inspection.',
+      );
+    }
+    try {
+      return await _generateReport(
+        sessionId,
+        propertyTypeLabel: propertyTypeLabel,
+      );
+    } finally {
+      _inFlight.remove(sessionId);
+    }
+  }
+
+  Future<ReportGenerationResult> _generateReport(
     String sessionId, {
     required String propertyTypeLabel,
   }) async {

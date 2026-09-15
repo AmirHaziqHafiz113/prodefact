@@ -241,21 +241,28 @@ class _EvidenceThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final file = File(evidence.filePath);
+    final fileExists = file.existsSync();
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 72,
-            height: 72,
-            child: file.existsSync()
-                ? Image.file(file, fit: BoxFit.cover)
-                : Container(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    child: const Icon(Icons.broken_image_outlined),
-                  ),
+        Semantics(
+          label: fileExists
+              ? 'Evidence photo'
+              : 'Evidence photo unavailable — the file is missing',
+          image: true,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 72,
+              height: 72,
+              child: fileExists
+                  ? Image.file(file, fit: BoxFit.cover)
+                  : Container(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
+                      child: const Icon(Icons.broken_image_outlined),
+                    ),
+            ),
           ),
         ),
         Positioned(

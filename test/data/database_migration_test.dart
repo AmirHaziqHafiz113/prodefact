@@ -1,0 +1,242 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
+
+import 'package:prodefact/data/local/database.dart';
+
+/// Exercises the real `MigrationStrategy.onUpgrade` in
+/// `lib/data/local/database.dart` against on-disk databases created at
+/// each older schema version by hand (raw SQL, mirroring exactly what
+/// that version's Dart table definitions produced) — the app's actual
+/// upgrade path, not a re-implementation of it. See
+/// `docs/production_readiness.md` ("Database hardening").
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  late Directory tempDir;
+
+  setUp(() async {
+    tempDir = await Directory.systemTemp.createTemp('prodefact_migration_test');
+  });
+
+  tearDown(() async {
+    await tempDir.delete(recursive: true);
+  });
+
+  test('upgrading from v1 preserves existing data and adds v2-v5 schema '
+      'without dropping/recreating anything', () async {
+    final dbFile = File('${tempDir.path}/v1.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, id)
+      );
+      CREATE TABLE finding_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        section_id TEXT NOT NULL,
+        element_id TEXT NOT NULL,
+        component_id TEXT,
+        description TEXT,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE evidence_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        finding_id TEXT NOT NULL REFERENCES finding_rows(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        media_type TEXT NOT NULL DEFAULT 'photo',
+        source TEXT NOT NULL DEFAULT 'gallery',
+        caption TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL
+      );
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, sync_status, created_at, updated_at)
+      VALUES
+        ('session_1', 'homeInspection', 'highRise', 'inProgress', 'localOnly', 1000, 1000);
+      INSERT INTO section_rows
+        (id, session_id, name, is_plumbing, is_included, status, elements_json, order_index, created_at, updated_at)
+      VALUES
+        ('bathroom', 'session_1', 'Bathroom', 1, 1, 'notStarted', '[]', 0, 1000, 1000);
+      INSERT INTO finding_rows
+        (id, session_id, section_id, element_id, description, status, created_at, updated_at)
+      VALUES
+        ('finding_1', 'session_1', 'bathroom', 'floor', 'Cracked tile', 'draft', 1000, 1000);
+      INSERT INTO evidence_rows
+        (id, finding_id, file_path, media_type, source, sync_status, created_at)
+      VALUES
+        ('evidence_1', 'finding_1', '/fake/e1.jpg', 'photo', 'gallery', 'localOnly', 1000);
+    ''');
+    raw.execute('PRAGMA user_version = 1');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    // The migration itself already ran as part of opening the database
+    // above (lazily, on first query) — force it now and confirm it
+    // didn't throw.
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_1'))).getSingle();
+
+    // Pre-existing data survived untouched.
+    expect(sessionRow.industry, 'homeInspection');
+    expect(sessionRow.assetTypeId, 'highRise');
+    // New v2 column present with its default rather than the row being
+    // dropped/recreated.
+    expect(sessionRow.ownerUid, isNull);
+    // New v3 column present with its default.
+    expect(sessionRow.aiReviewState, 'notStarted');
+
+    final findingRow = await (db.select(
+      db.findingRows,
+    )..where((t) => t.id.equals('finding_1'))).getSingle();
+    expect(findingRow.description, 'Cracked tile');
+
+    final evidenceRow = await (db.select(
+      db.evidenceRows,
+    )..where((t) => t.id.equals('evidence_1'))).getSingle();
+    expect(evidenceRow.filePath, '/fake/e1.jpg');
+    // New v2 column present with its default (null).
+    expect(evidenceRow.storagePath, isNull);
+
+    // v3's new table exists and is queryable (empty, but not missing).
+    final suggestions = await db.select(db.aiSuggestionRows).get();
+    expect(suggestions, isEmpty);
+
+    // v4's new table exists and is queryable.
+    final reports = await db.select(db.reportRows).get();
+    expect(reports, isEmpty);
+
+    // v5's indexes were created (raw check — drift has no typed API for
+    // "does this index exist").
+    final indexNames = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND "
+          "name LIKE 'idx_%'",
+        )
+        .get();
+    final names = indexNames.map((r) => r.data['name'] as String).toSet();
+    expect(names, contains('idx_finding_rows_session_id'));
+    expect(names, contains('idx_evidence_rows_finding_id'));
+    expect(names, contains('idx_ai_suggestion_rows_session_id'));
+    expect(names, contains('idx_ai_suggestion_rows_finding_id'));
+  });
+
+  test('upgrading from v2 preserves the v2-only columns and adds v3-v5 '
+      'schema', () async {
+    final dbFile = File('${tempDir.path}/v2.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        owner_uid TEXT
+      );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, id)
+      );
+      CREATE TABLE finding_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        section_id TEXT NOT NULL,
+        element_id TEXT NOT NULL,
+        component_id TEXT,
+        description TEXT,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE evidence_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        finding_id TEXT NOT NULL REFERENCES finding_rows(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        media_type TEXT NOT NULL DEFAULT 'photo',
+        source TEXT NOT NULL DEFAULT 'gallery',
+        caption TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        storage_path TEXT
+      );
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, sync_status, created_at, updated_at, owner_uid)
+      VALUES
+        ('session_2', 'homeInspection', 'landed', 'inProgress', 'localOnly', 2000, 2000, 'uid_123');
+    ''');
+    raw.execute('PRAGMA user_version = 2');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_2'))).getSingle();
+    // The v2 ownership column survives the v3-v5 upgrade untouched.
+    expect(sessionRow.ownerUid, 'uid_123');
+    expect(sessionRow.aiReviewState, 'notStarted');
+  });
+
+  test('a fresh install (onCreate) also gets the v5 indexes', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    // Touch the database so it's actually opened/created.
+    await db.select(db.inspectionSessionRows).get();
+
+    final indexNames = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND "
+          "name LIKE 'idx_%'",
+        )
+        .get();
+    final names = indexNames.map((r) => r.data['name'] as String).toSet();
+    expect(names, contains('idx_finding_rows_session_id'));
+  });
+}

@@ -32,6 +32,11 @@ void main() {
       'package:firebase_auth/firebase_auth.dart',
       'package:cloud_firestore/cloud_firestore.dart',
       'package:firebase_storage/firebase_storage.dart',
+      // Phase 8 additions — same rule: only the data layer may depend
+      // on these SDKs directly.
+      'package:firebase_analytics/firebase_analytics.dart',
+      'package:firebase_crashlytics/firebase_crashlytics.dart',
+      'package:firebase_app_check/firebase_app_check.dart',
       // Concrete AI implementations — UI/providers depend on
       // AiInspectionService/AiReviewCoordinator (the abstractions) or
       // the Riverpod provider file that wires them, never these.

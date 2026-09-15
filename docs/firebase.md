@@ -279,9 +279,11 @@ to commit — but this repo does not depend on their presence either way.
 
 ## Deferred to later phases
 
-- Firebase Crashlytics / Analytics ("may also prepare" — not added; no
-  code depends on them, so adding them later is additive, not a
-  rework).
 - Any pull-based (cloud → local) sync or real conflict merging.
 - Automatic/background sync triggers.
+
+Firebase Crashlytics, Analytics, and App Check were added in Phase 8 —
+see `docs/production_readiness.md` for their setup and policy; they
+follow the exact same "optional, guarded, local-first-unaffected"
+pattern as everything above.
 - Multi-account-per-device local data partitioning.

@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/inspection/inspection_domain.dart';
-import '../../core/inspection/services/evidence_capture_service.dart';
 import 'database.dart';
 import 'drift_inspection_repository.dart';
 import 'image_picker_evidence_capture_service.dart';
+import 'local_evidence_file_store.dart';
 
 /// The app's on-device database. Tests override this with an in-memory
 /// instance instead of touching the real device filesystem.
@@ -25,4 +25,10 @@ final inspectionRepositoryProvider = Provider<InspectionRepository>((ref) {
 /// returns canned file paths instead of driving a real picker.
 final evidenceCaptureServiceProvider = Provider<EvidenceCaptureService>((ref) {
   return ImagePickerEvidenceCaptureService();
+});
+
+/// Deletes app-managed evidence files. Tests override this with an
+/// in-memory fake instead of touching the real device filesystem.
+final evidenceFileStoreProvider = Provider<EvidenceFileStore>((ref) {
+  return LocalEvidenceFileStore();
 });

@@ -340,6 +340,13 @@ class DriftInspectionRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> deleteSession(String sessionId) async {
+    await (_db.delete(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).go();
+  }
+
+  @override
   Future<void> addEvidence(String sessionId, Evidence evidence) async {
     final now = DateTime.now();
     await _db.transaction(() async {

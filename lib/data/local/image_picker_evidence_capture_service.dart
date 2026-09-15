@@ -7,6 +7,20 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/inspection/entities/evidence.dart';
 import '../../core/inspection/services/evidence_capture_service.dart';
 
+/// Thrown by [ImagePickerEvidenceCaptureService] when acquiring or
+/// importing a photo fails (permission denied, picker platform error,
+/// disk full/unreadable during the copy into app-managed storage).
+/// Callers should show [message] to the user rather than a raw
+/// exception — see `docs/production_readiness.md` ("Error handling").
+class EvidenceCaptureException implements Exception {
+  const EvidenceCaptureException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'EvidenceCaptureException: $message';
+}
+
 /// Production [EvidenceCaptureService]: uses `image_picker` to acquire a
 /// photo, then copies it into an app-managed `evidence/<findingId>/`
 /// directory under the app's documents directory so the reference stays
@@ -22,28 +36,42 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
     required String findingId,
     required EvidenceSource source,
   }) async {
-    final picked = await _picker.pickImage(
-      source: source == EvidenceSource.camera
-          ? ImageSource.camera
-          : ImageSource.gallery,
-      maxWidth: 2000,
-      imageQuality: 90,
-    );
+    final XFile? picked;
+    try {
+      picked = await _picker.pickImage(
+        source: source == EvidenceSource.camera
+            ? ImageSource.camera
+            : ImageSource.gallery,
+        maxWidth: 2000,
+        imageQuality: 90,
+      );
+    } catch (error) {
+      // Most commonly a `PlatformException` for camera/photo-library
+      // permission denial — surfaced as one friendly, generic message
+      // rather than a raw platform exception reaching the UI.
+      throw EvidenceCaptureException(
+        'Could not access the camera/photo library ($error).',
+      );
+    }
     if (picked == null) return null;
 
-    final documentsDir = await getApplicationDocumentsDirectory();
-    final evidenceDir = Directory(
-      p.join(documentsDir.path, 'evidence', findingId),
-    );
-    await evidenceDir.create(recursive: true);
+    try {
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final evidenceDir = Directory(
+        p.join(documentsDir.path, 'evidence', findingId),
+      );
+      await evidenceDir.create(recursive: true);
 
-    final extension = p.extension(picked.path);
-    final destinationPath = p.join(
-      evidenceDir.path,
-      '${DateTime.now().microsecondsSinceEpoch}${extension.isEmpty ? '.jpg' : extension}',
-    );
-    await File(picked.path).copy(destinationPath);
+      final extension = p.extension(picked.path);
+      final destinationPath = p.join(
+        evidenceDir.path,
+        '${DateTime.now().microsecondsSinceEpoch}${extension.isEmpty ? '.jpg' : extension}',
+      );
+      await File(picked.path).copy(destinationPath);
 
-    return CapturedEvidence(filePath: destinationPath, source: source);
+      return CapturedEvidence(filePath: destinationPath, source: source);
+    } catch (error) {
+      throw EvidenceCaptureException('Could not save that photo ($error).');
+    }
   }
 }

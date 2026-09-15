@@ -54,8 +54,18 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
     WidgetRef ref,
     PropertyType propertyType,
   ) async {
-    await ref.read(selectedPropertyTypeProvider.notifier).select(propertyType);
+    final started = await ref
+        .read(selectedPropertyTypeProvider.notifier)
+        .select(propertyType);
     if (!context.mounted) return;
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not start a new inspection. Please try again.'),
+        ),
+      );
+      return;
+    }
     context.push('/home-inspection/areas');
   }
 }

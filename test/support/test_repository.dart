@@ -6,7 +6,9 @@ import 'package:prodefact/core/inspection/entities/evidence.dart';
 import 'package:prodefact/core/inspection/report/report_file_store.dart';
 import 'package:prodefact/core/inspection/report/report_renderer.dart';
 import 'package:prodefact/core/inspection/report/report_share_service.dart';
+import 'package:prodefact/core/inspection/repository/inspection_repository.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
+import 'package:prodefact/core/inspection/services/evidence_file_store.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
@@ -57,18 +59,26 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
 /// tests use an in-memory database and a fake image picker instead of
 /// real device storage/camera.
 List<Override> testOverrides({
+  InspectionRepository? repository,
   EvidenceCaptureService? captureService,
+  EvidenceFileStore? evidenceFileStore,
   ReportRenderer? reportRenderer,
   ReportFileStore? reportFileStore,
   ReportShareService? reportShareService,
 }) {
   return [
-    inspectionRepositoryProvider.overrideWithValue(createInMemoryRepository()),
+    inspectionRepositoryProvider.overrideWithValue(
+      repository ?? createInMemoryRepository(),
+    ),
     evidenceCaptureServiceProvider.overrideWithValue(
       captureService ?? FakeEvidenceCaptureService(),
     ),
-    // Report generation in tests never touches real PDF rendering,
-    // device filesystem, or the OS share sheet.
+    // Evidence/report file "deletion" in tests never touches the real
+    // filesystem, device camera/gallery picker, PDF rendering, or the
+    // OS share sheet.
+    evidenceFileStoreProvider.overrideWithValue(
+      evidenceFileStore ?? FakeEvidenceFileStore(),
+    ),
     reportRendererProvider.overrideWithValue(
       reportRenderer ?? FakeReportRenderer(),
     ),

@@ -10,8 +10,11 @@ dependencies:
   cloud_firestore: ^6.10.0
   collection: ^1.19.1
   drift: ^2.35.0
+  firebase_analytics: ^12.6.0
+  firebase_app_check: ^0.4.8
   firebase_auth: ^6.7.0
   firebase_core: ^4.15.0
+  firebase_crashlytics: ^5.4.0
   firebase_storage: ^13.6.0
   flutter:
     sdk: flutter

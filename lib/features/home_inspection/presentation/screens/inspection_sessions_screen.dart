@@ -77,6 +77,16 @@ class InspectionSessionsScreen extends ConsumerWidget {
                               ? () => _syncOne(context, ref, summary.id)
                               : null,
                         ),
+                        IconButton(
+                          tooltip: 'Delete inspection',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _confirmDelete(
+                            context,
+                            ref,
+                            summary.id,
+                            propertyTypeLabel ?? summary.assetTypeId,
+                          ),
+                        ),
                       ],
                     ),
                     onTap: () => _resume(context, ref, summary.id),
@@ -97,8 +107,18 @@ class InspectionSessionsScreen extends ConsumerWidget {
     WidgetRef ref,
     String sessionId,
   ) async {
-    await ref.read(activeSessionProvider.notifier).resume(sessionId);
+    final resumed = await ref
+        .read(activeSessionProvider.notifier)
+        .resume(sessionId);
     if (!context.mounted) return;
+    if (!resumed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open that inspection. Please try again.'),
+        ),
+      );
+      return;
+    }
     context.push('/home-inspection/inspection');
   }
 
@@ -117,6 +137,40 @@ class InspectionSessionsScreen extends ConsumerWidget {
         : 'Sync failed: ${result.message ?? result.outcome.name}';
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String sessionId,
+    String label,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete inspection?'),
+        content: Text(
+          'This permanently deletes the "$label" inspection, its photos, '
+          'and its report on this device. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(activeSessionProvider.notifier).deleteSession(sessionId);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Inspection deleted.')));
   }
 
   String _formatUpdatedAt(DateTime dateTime) {

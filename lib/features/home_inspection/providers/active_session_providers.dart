@@ -4,7 +4,9 @@ import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../data/ai/ai_providers.dart';
+import '../../../data/analytics/analytics_providers.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/remote/remote_providers.dart';
 import '../../../data/report/report_providers.dart';
@@ -26,6 +28,23 @@ typedef _ReviewedFields = ({
   String? notes,
 });
 
+/// Holds the most recent local-write failure message for the active
+/// session, if any — a durable-write "surfaced failure" companion to
+/// [activeSessionProvider]. UI can watch this to show a banner/snackbar
+/// without every screen re-implementing its own error plumbing. Cleared
+/// automatically the next time any write succeeds.
+class ActiveSessionError extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String message) => state = message;
+
+  void clear() => state = null;
+}
+
+final activeSessionErrorProvider =
+    NotifierProvider<ActiveSessionError, String?>(ActiveSessionError.new);
+
 /// The single active inspection session, held fully in memory and
 /// written through to [InspectionRepository] on every change.
 ///
@@ -34,7 +53,12 @@ typedef _ReviewedFields = ({
 /// state synchronously without waiting on disk I/O for every rebuild.
 /// Persistence happens as an un-awaited write-through after each
 /// in-memory update, which is why normal inspection work never blocks
-/// on storage — offline or otherwise.
+/// on storage — offline or otherwise. If a write-through actually fails
+/// (disk full, permission error, etc.), [_persist] rolls the in-memory
+/// state back to what was durably saved and reports the failure via
+/// [activeSessionErrorProvider] — the UI can never be left believing a
+/// change was saved when it wasn't. See `docs/production_readiness.md`
+/// ("Durable write safety").
 ///
 /// Null until a session is started ([startNew]) or resumed ([resume]).
 class ActiveInspectionSession extends Notifier<InspectionSession?> {
@@ -44,30 +68,116 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   InspectionRepository get _repository =>
       ref.read(inspectionRepositoryProvider);
 
-  Future<void> startNew(PropertyType propertyType) async {
+  bool _isSyncing = false;
+  bool _isAnalyzing = false;
+  bool _isGeneratingReport = false;
+
+  /// Runs [write] (the durable persistence for a mutation already
+  /// applied optimistically to [state]). If it throws, [state] is rolled
+  /// back to [previous] — the last state known to match the database —
+  /// and the failure is surfaced via [activeSessionErrorProvider] rather
+  /// than left silent. On success, any previously-surfaced error is
+  /// cleared.
+  Future<void> _persist(
+    Future<void> Function() write, {
+    required InspectionSession previous,
+    required String action,
+  }) async {
+    // The value the caller optimistically assigned to `state` right
+    // before calling this — captured now so a failure can tell whether
+    // anything *else* has changed `state` since (a later, unrelated
+    // edit made while this write was still in flight), in which case
+    // rolling back to `previous` would incorrectly discard it.
+    final optimistic = state;
+    try {
+      await write();
+      // The notifier (and its `ref`) may have been disposed while this
+      // write was in flight — e.g. the screen was popped, or (in tests)
+      // the container was torn down. There's nothing left to update at
+      // that point, and touching a disposed `ref` throws.
+      if (!ref.mounted) return;
+      ref.read(activeSessionErrorProvider.notifier).clear();
+    } catch (error, stackTrace) {
+      if (!ref.mounted) return;
+      AppLogger.error('Failed to save: $action', error, stackTrace);
+      if (identical(state, optimistic)) {
+        state = previous;
+      }
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set('Could not save your change ($action). Please try again.');
+    }
+  }
+
+  /// Logs a coarse product-usage milestone, swallowing any failure —
+  /// including a failure to even construct the analytics service (e.g.
+  /// Firebase not initialized in a plain Dart test, or Analytics
+  /// unreachable). Analytics is always best-effort and must never affect
+  /// the outcome of the workflow step it's attached to.
+  void _logAnalytics(AnalyticsEvent event) {
+    try {
+      unawaited(ref.read(analyticsServiceProvider).logEvent(event));
+    } catch (error) {
+      AppLogger.warning('Could not log an analytics event', error);
+    }
+  }
+
+  Future<bool> startNew(PropertyType propertyType) async {
     final sections = HomeInspectionConfig.defaultSectionsFor(propertyType);
-    final session = await _repository.createSession(
-      industry: Industry.homeInspection,
-      assetTypeId: propertyType.name,
-      initialSections: sections,
-      ownerUid: ref.read(authServiceProvider).currentUser?.uid,
-    );
-    state = session;
-    ref.invalidate(sessionSummariesProvider);
+    try {
+      final session = await _repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: propertyType.name,
+        initialSections: sections,
+        ownerUid: ref.read(authServiceProvider).currentUser?.uid,
+      );
+      state = session;
+      ref.read(activeSessionErrorProvider.notifier).clear();
+      ref.invalidate(sessionSummariesProvider);
+      _logAnalytics(AnalyticsEvent.inspectionStarted);
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.error('Failed to start a new inspection', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set('Could not start a new inspection. Please try again.');
+      return false;
+    }
   }
 
   /// Loads a session for the resume screen. If it's an unclaimed
   /// "guest" session and the inspector is now signed in, it becomes
   /// owned by that user from this point on — see the ownership policy
-  /// in `docs/firebase.md`.
-  Future<void> resume(String sessionId) async {
-    final uid = ref.read(authServiceProvider).currentUser?.uid;
-    var session = await _repository.loadSession(sessionId);
-    if (session != null && session.ownerUid == null && uid != null) {
-      await _repository.setSessionOwner(sessionId, uid);
-      session = await _repository.loadSession(sessionId);
+  /// in `docs/firebase.md`. Returns false (state left unchanged) if the
+  /// session could not be loaded at all.
+  Future<bool> resume(String sessionId) async {
+    try {
+      final uid = ref.read(authServiceProvider).currentUser?.uid;
+      var session = await _repository.loadSession(sessionId);
+      if (session != null && session.ownerUid == null && uid != null) {
+        await _repository.setSessionOwner(sessionId, uid);
+        session = await _repository.loadSession(sessionId);
+      }
+      if (session == null) {
+        ref
+            .read(activeSessionErrorProvider.notifier)
+            .set('That inspection could not be found.');
+        return false;
+      }
+      state = session;
+      ref.read(activeSessionErrorProvider.notifier).clear();
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to resume inspection $sessionId',
+        error,
+        stackTrace,
+      );
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set('Could not open that inspection. Please try again.');
+      return false;
     }
-    state = session;
   }
 
   void clear() => state = null;
@@ -133,7 +243,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final session = state;
     if (session == null) return;
     state = session.copyWith(sections: sections, updatedAt: DateTime.now());
-    unawaited(_repository.saveSections(session.id, sections));
+    unawaited(
+      _persist(
+        () => _repository.saveSections(session.id, sections),
+        previous: session,
+        action: 'update areas',
+      ),
+    );
     ref.invalidate(sessionSummariesProvider);
   }
 
@@ -146,7 +262,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       sectionStatuses: {...session.sectionStatuses, sectionId: status},
       updatedAt: DateTime.now(),
     );
-    unawaited(_repository.saveSectionStatus(session.id, sectionId, status));
+    unawaited(
+      _persist(
+        () => _repository.saveSectionStatus(session.id, sectionId, status),
+        previous: session,
+        action: 'update area status',
+      ),
+    );
     ref.invalidate(sessionSummariesProvider);
   }
 
@@ -176,7 +298,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       findings: [...session.findings, finding],
       updatedAt: now,
     );
-    unawaited(_repository.saveFinding(session.id, finding));
+    unawaited(
+      _persist(
+        () => _repository.saveFinding(session.id, finding),
+        previous: session,
+        action: 'save finding',
+      ),
+    );
     ref.invalidate(sessionSummariesProvider);
     return finding;
   }
@@ -204,20 +332,41 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final finding = updatedFinding;
     if (finding == null) return;
     state = session.copyWith(findings: findings, updatedAt: now);
-    unawaited(_repository.saveFinding(session.id, finding));
+    unawaited(
+      _persist(
+        () => _repository.saveFinding(session.id, finding),
+        previous: session,
+        action: 'save finding',
+      ),
+    );
     ref.invalidate(sessionSummariesProvider);
   }
 
   void removeFinding(String findingId) {
     final session = state;
     if (session == null) return;
+    final removedFinding = session.findings.firstWhereOrNull(
+      (finding) => finding.id == findingId,
+    );
     state = session.copyWith(
       findings: session.findings
           .where((finding) => finding.id != findingId)
           .toList(),
       updatedAt: DateTime.now(),
     );
-    unawaited(_repository.deleteFinding(session.id, findingId));
+    unawaited(
+      _persist(
+        () => _repository.deleteFinding(session.id, findingId),
+        previous: session,
+        action: 'delete finding',
+      ),
+    );
+    if (removedFinding != null) {
+      final fileStore = ref.read(evidenceFileStoreProvider);
+      for (final evidence in removedFinding.evidence) {
+        unawaited(fileStore.deleteEvidenceFile(evidence.filePath));
+      }
+    }
     ref.invalidate(sessionSummariesProvider);
   }
 
@@ -229,15 +378,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       status: InspectionStatus.physicalInspectionComplete,
       updatedAt: now,
     );
-    await _repository.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
+    await _persist(
+      () => _repository.setSessionStatus(
+        session.id,
+        InspectionStatus.physicalInspectionComplete,
+      ),
+      previous: session,
+      action: 'complete physical inspection',
     );
     ref.invalidate(sessionSummariesProvider);
   }
 
   // ---- evidence (Phase 4) ----
 
+  /// Captures/imports a photo and attaches it to a finding. Any capture
+  /// failure (permission denied, picker/import error) or persistence
+  /// failure is caught and surfaced via [activeSessionErrorProvider]
+  /// instead of throwing out of a UI callback.
   Future<void> addEvidence({
     required String findingId,
     required EvidenceSource source,
@@ -245,11 +402,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final session = state;
     if (session == null) return;
 
-    final captureService = ref.read(evidenceCaptureServiceProvider);
-    final captured = await captureService.captureImage(
-      findingId: findingId,
-      source: source,
-    );
+    final CapturedEvidence? captured;
+    try {
+      final captureService = ref.read(evidenceCaptureServiceProvider);
+      captured = await captureService.captureImage(
+        findingId: findingId,
+        source: source,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error('Evidence capture failed', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set(
+            'Could not add that photo. Check camera/photo permissions and '
+            'try again.',
+          );
+      return;
+    }
     if (captured == null) return; // user cancelled the picker
 
     final now = DateTime.now();
@@ -272,44 +441,79 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           finding,
     ];
     state = session.copyWith(findings: findings, updatedAt: now);
-    unawaited(_repository.addEvidence(session.id, evidence));
+    unawaited(
+      _persist(
+        () => _repository.addEvidence(session.id, evidence),
+        previous: session,
+        action: 'attach photo',
+      ),
+    );
   }
 
   void removeEvidence({required String findingId, required String evidenceId}) {
     final session = state;
     if (session == null) return;
     final now = DateTime.now();
+    String? removedFilePath;
     final findings = [
       for (final finding in session.findings)
         if (finding.id == findingId)
           finding.copyWith(
-            evidence: finding.evidence
-                .where((e) => e.id != evidenceId)
-                .toList(),
+            evidence: finding.evidence.where((e) {
+              final keep = e.id != evidenceId;
+              if (!keep) removedFilePath = e.filePath;
+              return keep;
+            }).toList(),
             updatedAt: now,
           )
         else
           finding,
     ];
     state = session.copyWith(findings: findings, updatedAt: now);
-    unawaited(_repository.removeEvidence(session.id, evidenceId));
+    unawaited(
+      _persist(
+        () => _repository.removeEvidence(session.id, evidenceId),
+        previous: session,
+        action: 'remove photo',
+      ),
+    );
+    final filePath = removedFilePath;
+    if (filePath != null) {
+      unawaited(
+        ref.read(evidenceFileStoreProvider).deleteEvidenceFile(filePath),
+      );
+    }
   }
 
   // ---- cloud sync (Phase 5) ----
 
   /// Pushes the active session to the cloud and refreshes in-memory
   /// state (sync status, claimed ownership, per-evidence storage paths)
-  /// from whatever the coordinator actually persisted locally.
+  /// from whatever the coordinator actually persisted locally. A no-op
+  /// (returns the same failure every time) while a previous sync for
+  /// this notifier is still in flight, so a double-tap of "Sync now"
+  /// can never race two pushes against each other.
   Future<SyncResult> syncNow() async {
     final session = state;
     if (session == null) return const SyncResult.sessionNotFound();
+    if (_isSyncing) {
+      return const SyncResult.failure('A sync is already running.');
+    }
 
-    final result = await ref
-        .read(syncCoordinatorProvider)
-        .syncSession(session.id);
-    state = await _repository.loadSession(session.id);
-    ref.invalidate(sessionSummariesProvider);
-    return result;
+    _isSyncing = true;
+    try {
+      final result = await ref
+          .read(syncCoordinatorProvider)
+          .syncSession(session.id);
+      state = await _repository.loadSession(session.id);
+      ref.invalidate(sessionSummariesProvider);
+      return result;
+    } catch (error, stackTrace) {
+      AppLogger.error('Sync failed unexpectedly', error, stackTrace);
+      return SyncResult.failure(error.toString());
+    } finally {
+      _isSyncing = false;
+    }
   }
 
   // ---- AI review (Phase 6) ----
@@ -317,17 +521,35 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Runs AI analysis for the active session, refusing to do anything
   /// (via [AiReviewCoordinator]'s gate) unless physical inspection is
   /// already complete. Refreshes in-memory state either way so the UI
-  /// reflects the resulting `aiReviewState` and any new suggestions.
+  /// reflects the resulting `aiReviewState` and any new suggestions. A
+  /// no-op while a previous call for this notifier is still in flight —
+  /// double-tapping "Start AI Analysis" can never trigger two concurrent
+  /// analysis runs (which, without this guard, could each pass the
+  /// coordinator's own gate check before either had persisted
+  /// `analyzing`, and so both call the AI backend and duplicate
+  /// suggestions).
   Future<AiAnalysisResult> startAiAnalysis() async {
     final session = state;
     if (session == null) return const AiAnalysisResult.sessionNotFound();
+    if (_isAnalyzing) return const AiAnalysisResult.alreadyReviewed();
 
-    final result = await ref
-        .read(aiReviewCoordinatorProvider)
-        .runAnalysis(session.id);
-    state = await _repository.loadSession(session.id);
-    ref.invalidate(sessionSummariesProvider);
-    return result;
+    _isAnalyzing = true;
+    try {
+      final result = await ref
+          .read(aiReviewCoordinatorProvider)
+          .runAnalysis(session.id);
+      state = await _repository.loadSession(session.id);
+      ref.invalidate(sessionSummariesProvider);
+      if (result.outcome == AiAnalysisOutcome.success) {
+        _logAnalytics(AnalyticsEvent.aiReviewStarted);
+      }
+      return result;
+    } catch (error, stackTrace) {
+      AppLogger.error('AI analysis failed unexpectedly', error, stackTrace);
+      return AiAnalysisResult.failure(error.toString());
+    } finally {
+      _isAnalyzing = false;
+    }
   }
 
   void acceptSuggestion(String suggestionId) {
@@ -420,7 +642,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           : session.aiReviewState,
       status: allResolved ? InspectionStatus.aiReviewComplete : session.status,
     );
-    unawaited(_repository.saveAiSuggestion(finalUpdated));
+    unawaited(
+      _persist(
+        () => _repository.saveAiSuggestion(finalUpdated),
+        previous: session,
+        action: 'save AI review decision',
+      ),
+    );
     if (allResolved) {
       unawaited(
         _repository.setAiReviewState(session.id, AiReviewState.completed),
@@ -431,6 +659,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           InspectionStatus.aiReviewComplete,
         ),
       );
+      _logAnalytics(AnalyticsEvent.aiReviewCompleted);
     }
     ref.invalidate(sessionSummariesProvider);
   }
@@ -458,32 +687,101 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Generates (or regenerates) the PDF report for the active session,
   /// refusing to do anything (via [ReportCoordinator]'s gate) unless
   /// physical inspection *and* AI review are both complete. Refreshes
-  /// in-memory state either way so the UI reflects the resulting
-  /// report metadata.
+  /// in-memory state either way so the UI reflects the resulting report
+  /// metadata. A no-op while a previous call for this notifier is still
+  /// in flight, so double-tapping "Generate Report" can never start two
+  /// concurrent renders that would race writing the same predictable
+  /// filename.
   Future<ReportGenerationResult> generateReport() async {
     final session = state;
     if (session == null) return const ReportGenerationResult.sessionNotFound();
+    if (_isGeneratingReport) {
+      return const ReportGenerationResult.failure(
+        'A report is already being generated.',
+      );
+    }
 
-    final propertyType = PropertyType.values.firstWhereOrNull(
-      (p) => p.name == session.assetTypeId,
-    );
-    final result = await ref
-        .read(reportCoordinatorProvider)
-        .generateReport(
-          session.id,
-          propertyTypeLabel: propertyType?.label ?? session.assetTypeId,
-        );
-    state = await _repository.loadSession(session.id);
-    ref.invalidate(sessionSummariesProvider);
-    return result;
+    _isGeneratingReport = true;
+    try {
+      final propertyType = PropertyType.values.firstWhereOrNull(
+        (p) => p.name == session.assetTypeId,
+      );
+      final result = await ref
+          .read(reportCoordinatorProvider)
+          .generateReport(
+            session.id,
+            propertyTypeLabel: propertyType?.label ?? session.assetTypeId,
+          );
+      state = await _repository.loadSession(session.id);
+      ref.invalidate(sessionSummariesProvider);
+      if (result.isSuccess) {
+        _logAnalytics(AnalyticsEvent.reportGenerated);
+        _logAnalytics(AnalyticsEvent.inspectionCompleted);
+      }
+      return result;
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Report generation failed unexpectedly',
+        error,
+        stackTrace,
+      );
+      return ReportGenerationResult.failure(error.toString());
+    } finally {
+      _isGeneratingReport = false;
+    }
   }
 
   Future<void> shareReport() async {
     final report = state?.report;
     if (report == null) return;
-    await ref
-        .read(reportShareServiceProvider)
-        .shareReport(filePath: report.filePath, fileName: report.fileName);
+    try {
+      await ref
+          .read(reportShareServiceProvider)
+          .shareReport(filePath: report.filePath, fileName: report.fileName);
+    } catch (error, stackTrace) {
+      AppLogger.error('Report share failed', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set('Could not share the report. Please try again.');
+    }
+  }
+
+  // ---- session deletion (Phase 8) ----
+
+  /// Permanently deletes [sessionId]: its database row (and, via
+  /// cascading foreign keys, its sections/findings/evidence metadata/AI
+  /// suggestions/report metadata), plus every evidence file and the
+  /// generated report file it referenced. Local-only — cloud data
+  /// previously synced for this session is not deleted; see
+  /// `docs/production_readiness.md` ("Session deletion").
+  ///
+  /// If [sessionId] is the active session, the active session is
+  /// cleared. Best-effort file cleanup: a file that fails to delete is
+  /// logged and otherwise ignored — it never blocks or reverts the
+  /// database deletion.
+  Future<void> deleteSession(String sessionId) async {
+    final toDelete = await _repository.loadSession(sessionId);
+    await _repository.deleteSession(sessionId);
+
+    if (toDelete != null) {
+      final evidenceFileStore = ref.read(evidenceFileStoreProvider);
+      for (final finding in toDelete.findings) {
+        for (final evidence in finding.evidence) {
+          unawaited(evidenceFileStore.deleteEvidenceFile(evidence.filePath));
+        }
+      }
+      final report = toDelete.report;
+      if (report != null) {
+        unawaited(
+          ref.read(reportFileStoreProvider).deleteReportFile(report.filePath),
+        );
+      }
+    }
+
+    if (state?.id == sessionId) {
+      state = null;
+    }
+    ref.invalidate(sessionSummariesProvider);
   }
 }
 
