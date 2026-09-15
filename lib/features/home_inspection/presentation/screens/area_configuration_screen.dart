@@ -1,0 +1,191 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/inspection/inspection_domain.dart';
+import '../../providers/home_inspection_providers.dart';
+
+/// Lets the inspector configure which areas apply to this property before
+/// physical inspection begins: include/exclude, rename, remove, add
+/// custom areas, or reset back to the property type's defaults.
+class AreaConfigurationScreen extends ConsumerWidget {
+  const AreaConfigurationScreen({super.key});
+
+  static const routePath = '/home-inspection/areas';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final propertyType = ref.watch(selectedPropertyTypeProvider);
+    final sections = ref.watch(configuredAreasProvider);
+    final notifier = ref.read(configuredAreasProvider.notifier);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          propertyType == null
+              ? 'Configure Areas'
+              : '${propertyType.label} Areas',
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Reset to defaults',
+            icon: const Icon(Icons.restore),
+            onPressed: propertyType == null ? null : notifier.resetToDefaults,
+          ),
+        ],
+      ),
+      body: sections.isEmpty
+          ? const Center(child: Text('No property type selected.'))
+          : ListView.builder(
+              itemCount: sections.length,
+              itemBuilder: (context, index) {
+                final section = sections[index];
+                return _AreaTile(
+                  section: section,
+                  onToggleIncluded: () => notifier.toggleIncluded(section.id),
+                  onRename: () => _showRenameDialog(context, notifier, section),
+                  onRemove: () => notifier.remove(section.id),
+                );
+              },
+            ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: propertyType == null
+                      ? null
+                      : () => _showAddAreaDialog(context, notifier),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add area'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: sections.any((s) => s.isIncluded)
+                      ? () => context.push('/home-inspection/inspection')
+                      : null,
+                  child: const Text('Continue'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showRenameDialog(
+    BuildContext context,
+    ConfiguredAreas notifier,
+    Section section,
+  ) async {
+    final controller = TextEditingController(text: section.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename area'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Area name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newName != null) {
+      notifier.rename(section.id, newName);
+    }
+  }
+
+  Future<void> _showAddAreaDialog(
+    BuildContext context,
+    ConfiguredAreas notifier,
+  ) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add area'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Area name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (name != null) {
+      notifier.addCustom(name);
+    }
+  }
+}
+
+class _AreaTile extends StatelessWidget {
+  const _AreaTile({
+    required this.section,
+    required this.onToggleIncluded,
+    required this.onRename,
+    required this.onRemove,
+  });
+
+  final Section section;
+  final VoidCallback onToggleIncluded;
+  final VoidCallback onRename;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(
+        section.name,
+        style: section.isIncluded
+            ? null
+            : TextStyle(color: Theme.of(context).disabledColor),
+      ),
+      subtitle: section.isPlumbing
+          ? const Text('Plumbing area — inspect first')
+          : null,
+      leading: Switch(
+        value: section.isIncluded,
+        onChanged: (_) => onToggleIncluded(),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Rename',
+            icon: const Icon(Icons.edit),
+            onPressed: onRename,
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+    );
+  }
+}

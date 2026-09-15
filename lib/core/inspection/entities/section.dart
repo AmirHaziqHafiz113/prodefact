@@ -6,26 +6,35 @@ import 'element.dart';
 /// Sections are inspector-configurable per inspection: they can be
 /// included, excluded, added, removed, or renamed. [isPlumbing] flags
 /// sections that must be inspected first, since leakage/ponding tests
-/// need time to run while other sections are inspected.
+/// need time to run while other sections are inspected. [isIncluded]
+/// tracks whether the inspector has excluded this section from the
+/// current inspection without deleting it outright.
 class Section {
   const Section({
     required this.id,
     required this.name,
     required this.elements,
     this.isPlumbing = false,
+    this.isIncluded = true,
   });
 
   final String id;
   final String name;
   final List<InspectionElement> elements;
   final bool isPlumbing;
+  final bool isIncluded;
 
-  Section copyWith({String? name}) {
+  Section copyWith({
+    String? name,
+    List<InspectionElement>? elements,
+    bool? isIncluded,
+  }) {
     return Section(
       id: id,
       name: name ?? this.name,
-      elements: elements,
+      elements: elements ?? this.elements,
       isPlumbing: isPlumbing,
+      isIncluded: isIncluded ?? this.isIncluded,
     );
   }
 

@@ -146,6 +146,18 @@ abstract final class HomeInspectionConfig {
     ];
   }
 
+  /// Builds a section for a custom area the inspector adds at setup time.
+  /// Custom areas start included, non-plumbing, and with the same
+  /// standard element set as default areas so they can participate in
+  /// findings/evidence/AI review/reporting the same way.
+  static Section customSection(String name) {
+    return Section(
+      id: 'custom_${_slugify(name)}_${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      elements: defaultElements(),
+    );
+  }
+
   static String _slugify(String name) => name
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
