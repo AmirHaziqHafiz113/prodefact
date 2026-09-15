@@ -24,6 +24,13 @@ Future<void> _revealAndTap(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+/// go_router keeps every previously pushed screen mounted, so once the
+/// inspection queue screen is pushed on top of the area configuration
+/// screen, both may show the same area name ("Kitchen"). Scope lookups
+/// to the topmost screen to avoid matching the screen underneath.
+Finder _within(Finder matching) =>
+    find.descendant(of: find.byType(Scaffold).last, matching: matching);
+
 void main() {
   testWidgets('toggling an area include/exclude switch works', (tester) async {
     await _startHighRiseSetup(tester);
@@ -93,7 +100,7 @@ void main() {
     expect(find.text('Bedroom 4'), findsNothing);
   });
 
-  testWidgets('Continue navigates to the inspection placeholder screen', (
+  testWidgets('Continue navigates to the physical inspection queue', (
     tester,
   ) async {
     await _startHighRiseSetup(tester);
@@ -101,50 +108,52 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Physical inspection starts here (coming in Phase 3).'),
-      findsOneWidget,
-    );
+    expect(find.text('Physical Inspection'), findsOneWidget);
   });
 
-  testWidgets('configuration survives navigating to the placeholder and back', (
-    tester,
-  ) async {
-    await _startHighRiseSetup(tester);
+  testWidgets(
+    'excluding an area in setup keeps it out of the inspection queue, '
+    'and the exclusion survives navigating back',
+    (tester) async {
+      await _startHighRiseSetup(tester);
 
-    final kitchenTile = find.widgetWithText(ListTile, 'Kitchen');
-    await tester.scrollUntilVisible(
-      kitchenTile,
-      200,
-      scrollable: find.byType(Scrollable),
-    );
-    final kitchenSwitch = find.descendant(
-      of: kitchenTile,
-      matching: find.byType(Switch),
-    );
-    await tester.tap(kitchenSwitch);
-    await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(kitchenSwitch).value, isFalse);
+      final kitchenTile = find.widgetWithText(ListTile, 'Kitchen');
+      await tester.scrollUntilVisible(
+        kitchenTile,
+        200,
+        scrollable: find.byType(Scrollable),
+      );
+      final kitchenSwitch = find.descendant(
+        of: kitchenTile,
+        matching: find.byType(Switch),
+      );
+      await tester.tap(kitchenSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(kitchenSwitch).value, isFalse);
 
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
 
-    final navigator = tester.state<NavigatorState>(
-      find.byType(Navigator).first,
-    );
-    navigator.pop();
-    await tester.pumpAndSettle();
+      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(_within(find.text('Kitchen')), findsNothing);
 
-    final kitchenTileAfter = find.widgetWithText(ListTile, 'Kitchen');
-    await tester.scrollUntilVisible(
-      kitchenTileAfter,
-      200,
-      scrollable: find.byType(Scrollable),
-    );
-    final kitchenSwitchAfter = find.descendant(
-      of: kitchenTileAfter,
-      matching: find.byType(Switch),
-    );
-    expect(tester.widget<Switch>(kitchenSwitchAfter).value, isFalse);
-  });
+      final navigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      final kitchenTileAfter = find.widgetWithText(ListTile, 'Kitchen');
+      await tester.scrollUntilVisible(
+        kitchenTileAfter,
+        200,
+        scrollable: find.byType(Scrollable),
+      );
+      final kitchenSwitchAfter = find.descendant(
+        of: kitchenTileAfter,
+        matching: find.byType(Switch),
+      );
+      expect(tester.widget<Switch>(kitchenSwitchAfter).value, isFalse);
+    },
+  );
 }
