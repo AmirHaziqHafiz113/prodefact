@@ -8,7 +8,7 @@ import '../../features/home_inspection/presentation/screens/element_inspection_s
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
-import '../../features/home_inspection/presentation/screens/report_placeholder_screen.dart';
+import '../../features/home_inspection/presentation/screens/report_screen.dart';
 import '../presentation/home_shell_screen.dart';
 
 /// Builds a fresh router. Each [ProDefactApp] instance owns its own router
@@ -59,8 +59,8 @@ GoRouter buildAppRouter() {
         builder: (context, state) => const AiReviewOverviewScreen(),
       ),
       GoRoute(
-        path: ReportPlaceholderScreen.routePath,
-        builder: (context, state) => const ReportPlaceholderScreen(),
+        path: ReportScreen.routePath,
+        builder: (context, state) => const ReportScreen(),
       ),
     ],
   );

@@ -7,6 +7,7 @@ import '../../../core/inspection/inspection_domain.dart';
 import '../../../data/ai/ai_providers.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/remote/remote_providers.dart';
+import '../../../data/report/report_providers.dart';
 import '../config/home_inspection_config.dart';
 import '../config/property_type.dart';
 import 'session_list_providers.dart';
@@ -450,6 +451,39 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       finalRecommendation: finalValues.recommendation ?? '',
       finalNotes: finalValues.notes ?? '',
     );
+  }
+
+  // ---- report generation (Phase 7) ----
+
+  /// Generates (or regenerates) the PDF report for the active session,
+  /// refusing to do anything (via [ReportCoordinator]'s gate) unless
+  /// physical inspection *and* AI review are both complete. Refreshes
+  /// in-memory state either way so the UI reflects the resulting
+  /// report metadata.
+  Future<ReportGenerationResult> generateReport() async {
+    final session = state;
+    if (session == null) return const ReportGenerationResult.sessionNotFound();
+
+    final propertyType = PropertyType.values.firstWhereOrNull(
+      (p) => p.name == session.assetTypeId,
+    );
+    final result = await ref
+        .read(reportCoordinatorProvider)
+        .generateReport(
+          session.id,
+          propertyTypeLabel: propertyType?.label ?? session.assetTypeId,
+        );
+    state = await _repository.loadSession(session.id);
+    ref.invalidate(sessionSummariesProvider);
+    return result;
+  }
+
+  Future<void> shareReport() async {
+    final report = state?.report;
+    if (report == null) return;
+    await ref
+        .read(reportShareServiceProvider)
+        .shareReport(filePath: report.filePath, fileName: report.fileName);
   }
 }
 

@@ -3,6 +3,7 @@ import 'ai_review_state.dart';
 import 'finding.dart';
 import 'industry.dart';
 import 'inspection.dart';
+import 'report.dart';
 import 'section.dart';
 import 'section_status.dart';
 import 'sync_status.dart';
@@ -29,6 +30,7 @@ class InspectionSession {
     this.ownerUid,
     this.aiReviewState = AiReviewState.notStarted,
     this.aiSuggestions = const [],
+    this.report,
   });
 
   final String id;
@@ -56,6 +58,10 @@ class InspectionSession {
   /// inspection completes and analysis has run.
   final List<AiSuggestion> aiSuggestions;
 
+  /// The most recently generated PDF report for this session, if any —
+  /// see `docs/report.md` for the "latest report per inspection" policy.
+  final Report? report;
+
   /// The authenticated user this session belongs to, if any. Null means
   /// a "guest" session created while signed out — see the ownership
   /// policy in `docs/firebase.md`. Cloud sync only ever touches sessions
@@ -77,6 +83,7 @@ class InspectionSession {
     String? ownerUid,
     AiReviewState? aiReviewState,
     List<AiSuggestion>? aiSuggestions,
+    Report? report,
   }) {
     return InspectionSession(
       id: id,
@@ -92,6 +99,7 @@ class InspectionSession {
       ownerUid: ownerUid ?? this.ownerUid,
       aiReviewState: aiReviewState ?? this.aiReviewState,
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
+      report: report ?? this.report,
     );
   }
 }

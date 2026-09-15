@@ -3,14 +3,19 @@ import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:prodefact/core/inspection/entities/auth_user.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
+import 'package:prodefact/core/inspection/report/report_file_store.dart';
+import 'package:prodefact/core/inspection/report/report_renderer.dart';
+import 'package:prodefact/core/inspection/report/report_share_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
 import 'package:prodefact/data/remote/remote_providers.dart';
+import 'package:prodefact/data/report/report_providers.dart';
 
 import 'fake_auth_service.dart';
 import 'fake_cloud_inspection_repository.dart';
+import 'fake_report_services.dart';
 
 /// An in-memory-backed [DriftInspectionRepository] for tests — same
 /// behavior as production, no real device filesystem involved.
@@ -51,11 +56,27 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
 /// providers should pass to `ProviderContainer`/`ProviderScope`, so
 /// tests use an in-memory database and a fake image picker instead of
 /// real device storage/camera.
-List<Override> testOverrides({EvidenceCaptureService? captureService}) {
+List<Override> testOverrides({
+  EvidenceCaptureService? captureService,
+  ReportRenderer? reportRenderer,
+  ReportFileStore? reportFileStore,
+  ReportShareService? reportShareService,
+}) {
   return [
     inspectionRepositoryProvider.overrideWithValue(createInMemoryRepository()),
     evidenceCaptureServiceProvider.overrideWithValue(
       captureService ?? FakeEvidenceCaptureService(),
+    ),
+    // Report generation in tests never touches real PDF rendering,
+    // device filesystem, or the OS share sheet.
+    reportRendererProvider.overrideWithValue(
+      reportRenderer ?? FakeReportRenderer(),
+    ),
+    reportFileStoreProvider.overrideWithValue(
+      reportFileStore ?? FakeReportFileStore(),
+    ),
+    reportShareServiceProvider.overrideWithValue(
+      reportShareService ?? FakeReportShareService(),
     ),
   ];
 }

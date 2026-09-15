@@ -3438,6 +3438,487 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
   }
 }
 
+class $ReportRowsTable extends ReportRows
+    with TableInfo<$ReportRowsTable, ReportRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReportRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES inspection_session_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
+  @override
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+    'file_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileNameMeta = const VerificationMeta(
+    'fileName',
+  );
+  @override
+  late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
+    'file_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _generatedAtMeta = const VerificationMeta(
+    'generatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> generatedAt = GeneratedColumn<DateTime>(
+    'generated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceUpdatedAtMeta = const VerificationMeta(
+    'sourceUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> sourceUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'source_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
+    'syncStatus',
+  );
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+    'sync_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('localOnly'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    filePath,
+    fileName,
+    generatedAt,
+    sourceUpdatedAt,
+    syncStatus,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'report_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReportRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('file_path')) {
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['file_path']!, _filePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filePathMeta);
+    }
+    if (data.containsKey('file_name')) {
+      context.handle(
+        _fileNameMeta,
+        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fileNameMeta);
+    }
+    if (data.containsKey('generated_at')) {
+      context.handle(
+        _generatedAtMeta,
+        generatedAt.isAcceptableOrUnknown(
+          data['generated_at']!,
+          _generatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_generatedAtMeta);
+    }
+    if (data.containsKey('source_updated_at')) {
+      context.handle(
+        _sourceUpdatedAtMeta,
+        sourceUpdatedAt.isAcceptableOrUnknown(
+          data['source_updated_at']!,
+          _sourceUpdatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceUpdatedAtMeta);
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+        _syncStatusMeta,
+        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sessionId};
+  @override
+  ReportRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReportRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_path'],
+      )!,
+      fileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_name'],
+      )!,
+      generatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}generated_at'],
+      )!,
+      sourceUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}source_updated_at'],
+      )!,
+      syncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_status'],
+      )!,
+    );
+  }
+
+  @override
+  $ReportRowsTable createAlias(String alias) {
+    return $ReportRowsTable(attachedDatabase, alias);
+  }
+}
+
+class ReportRow extends DataClass implements Insertable<ReportRow> {
+  final String id;
+  final String sessionId;
+  final String filePath;
+  final String fileName;
+  final DateTime generatedAt;
+
+  /// Snapshot of the session's `updatedAt` at generation time, used to
+  /// detect staleness — see `Report.isStaleRelativeTo`.
+  final DateTime sourceUpdatedAt;
+  final String syncStatus;
+  const ReportRow({
+    required this.id,
+    required this.sessionId,
+    required this.filePath,
+    required this.fileName,
+    required this.generatedAt,
+    required this.sourceUpdatedAt,
+    required this.syncStatus,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['file_path'] = Variable<String>(filePath);
+    map['file_name'] = Variable<String>(fileName);
+    map['generated_at'] = Variable<DateTime>(generatedAt);
+    map['source_updated_at'] = Variable<DateTime>(sourceUpdatedAt);
+    map['sync_status'] = Variable<String>(syncStatus);
+    return map;
+  }
+
+  ReportRowsCompanion toCompanion(bool nullToAbsent) {
+    return ReportRowsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      filePath: Value(filePath),
+      fileName: Value(fileName),
+      generatedAt: Value(generatedAt),
+      sourceUpdatedAt: Value(sourceUpdatedAt),
+      syncStatus: Value(syncStatus),
+    );
+  }
+
+  factory ReportRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReportRow(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      filePath: serializer.fromJson<String>(json['filePath']),
+      fileName: serializer.fromJson<String>(json['fileName']),
+      generatedAt: serializer.fromJson<DateTime>(json['generatedAt']),
+      sourceUpdatedAt: serializer.fromJson<DateTime>(json['sourceUpdatedAt']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'filePath': serializer.toJson<String>(filePath),
+      'fileName': serializer.toJson<String>(fileName),
+      'generatedAt': serializer.toJson<DateTime>(generatedAt),
+      'sourceUpdatedAt': serializer.toJson<DateTime>(sourceUpdatedAt),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+    };
+  }
+
+  ReportRow copyWith({
+    String? id,
+    String? sessionId,
+    String? filePath,
+    String? fileName,
+    DateTime? generatedAt,
+    DateTime? sourceUpdatedAt,
+    String? syncStatus,
+  }) => ReportRow(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    filePath: filePath ?? this.filePath,
+    fileName: fileName ?? this.fileName,
+    generatedAt: generatedAt ?? this.generatedAt,
+    sourceUpdatedAt: sourceUpdatedAt ?? this.sourceUpdatedAt,
+    syncStatus: syncStatus ?? this.syncStatus,
+  );
+  ReportRow copyWithCompanion(ReportRowsCompanion data) {
+    return ReportRow(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      generatedAt: data.generatedAt.present
+          ? data.generatedAt.value
+          : this.generatedAt,
+      sourceUpdatedAt: data.sourceUpdatedAt.present
+          ? data.sourceUpdatedAt.value
+          : this.sourceUpdatedAt,
+      syncStatus: data.syncStatus.present
+          ? data.syncStatus.value
+          : this.syncStatus,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReportRow(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('filePath: $filePath, ')
+          ..write('fileName: $fileName, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('sourceUpdatedAt: $sourceUpdatedAt, ')
+          ..write('syncStatus: $syncStatus')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    filePath,
+    fileName,
+    generatedAt,
+    sourceUpdatedAt,
+    syncStatus,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReportRow &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.filePath == this.filePath &&
+          other.fileName == this.fileName &&
+          other.generatedAt == this.generatedAt &&
+          other.sourceUpdatedAt == this.sourceUpdatedAt &&
+          other.syncStatus == this.syncStatus);
+}
+
+class ReportRowsCompanion extends UpdateCompanion<ReportRow> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String> filePath;
+  final Value<String> fileName;
+  final Value<DateTime> generatedAt;
+  final Value<DateTime> sourceUpdatedAt;
+  final Value<String> syncStatus;
+  final Value<int> rowid;
+  const ReportRowsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.fileName = const Value.absent(),
+    this.generatedAt = const Value.absent(),
+    this.sourceUpdatedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReportRowsCompanion.insert({
+    required String id,
+    required String sessionId,
+    required String filePath,
+    required String fileName,
+    required DateTime generatedAt,
+    required DateTime sourceUpdatedAt,
+    this.syncStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       filePath = Value(filePath),
+       fileName = Value(fileName),
+       generatedAt = Value(generatedAt),
+       sourceUpdatedAt = Value(sourceUpdatedAt);
+  static Insertable<ReportRow> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? filePath,
+    Expression<String>? fileName,
+    Expression<DateTime>? generatedAt,
+    Expression<DateTime>? sourceUpdatedAt,
+    Expression<String>? syncStatus,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (filePath != null) 'file_path': filePath,
+      if (fileName != null) 'file_name': fileName,
+      if (generatedAt != null) 'generated_at': generatedAt,
+      if (sourceUpdatedAt != null) 'source_updated_at': sourceUpdatedAt,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReportRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String>? filePath,
+    Value<String>? fileName,
+    Value<DateTime>? generatedAt,
+    Value<DateTime>? sourceUpdatedAt,
+    Value<String>? syncStatus,
+    Value<int>? rowid,
+  }) {
+    return ReportRowsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      filePath: filePath ?? this.filePath,
+      fileName: fileName ?? this.fileName,
+      generatedAt: generatedAt ?? this.generatedAt,
+      sourceUpdatedAt: sourceUpdatedAt ?? this.sourceUpdatedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (filePath.present) {
+      map['file_path'] = Variable<String>(filePath.value);
+    }
+    if (fileName.present) {
+      map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (generatedAt.present) {
+      map['generated_at'] = Variable<DateTime>(generatedAt.value);
+    }
+    if (sourceUpdatedAt.present) {
+      map['source_updated_at'] = Variable<DateTime>(sourceUpdatedAt.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReportRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('filePath: $filePath, ')
+          ..write('fileName: $fileName, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('sourceUpdatedAt: $sourceUpdatedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3449,6 +3930,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AiSuggestionRowsTable aiSuggestionRows = $AiSuggestionRowsTable(
     this,
   );
+  late final $ReportRowsTable reportRows = $ReportRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3459,6 +3941,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     findingRows,
     evidenceRows,
     aiSuggestionRows,
+    reportRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3496,6 +3979,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('ai_suggestion_rows', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'inspection_session_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('report_rows', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -3591,6 +4081,24 @@ final class $$InspectionSessionRowsTableReferences
     final cache = $_typedResult.readTableOrNull(
       _aiSuggestionRowsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ReportRowsTable, List<ReportRow>>
+  _reportRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.reportRows,
+    aliasName: 'inspection_session_rows__id__report_rows__session_id',
+  );
+
+  $$ReportRowsTableProcessedTableManager get reportRowsRefs {
+    final manager = $$ReportRowsTableTableManager(
+      $_db,
+      $_db.reportRows,
+    ).filter((f) => f.sessionId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_reportRowsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3717,6 +4225,31 @@ class $$InspectionSessionRowsTableFilterComposer
           }) => $$AiSuggestionRowsTableFilterComposer(
             $db: $db,
             $table: $db.aiSuggestionRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> reportRowsRefs(
+    Expression<bool> Function($$ReportRowsTableFilterComposer f) f,
+  ) {
+    final $$ReportRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.reportRows,
+      getReferencedColumn: (t) => t.sessionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReportRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.reportRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3898,6 +4431,31 @@ class $$InspectionSessionRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> reportRowsRefs<T extends Object>(
+    Expression<T> Function($$ReportRowsTableAnnotationComposer a) f,
+  ) {
+    final $$ReportRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.reportRows,
+      getReferencedColumn: (t) => t.sessionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReportRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.reportRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$InspectionSessionRowsTableTableManager
@@ -3917,6 +4475,7 @@ class $$InspectionSessionRowsTableTableManager
             bool sectionRowsRefs,
             bool findingRowsRefs,
             bool aiSuggestionRowsRefs,
+            bool reportRowsRefs,
           })
         > {
   $$InspectionSessionRowsTableTableManager(
@@ -4005,6 +4564,7 @@ class $$InspectionSessionRowsTableTableManager
                 sectionRowsRefs = false,
                 findingRowsRefs = false,
                 aiSuggestionRowsRefs = false,
+                reportRowsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -4012,6 +4572,7 @@ class $$InspectionSessionRowsTableTableManager
                     if (sectionRowsRefs) db.sectionRows,
                     if (findingRowsRefs) db.findingRows,
                     if (aiSuggestionRowsRefs) db.aiSuggestionRows,
+                    if (reportRowsRefs) db.reportRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -4082,6 +4643,28 @@ class $$InspectionSessionRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (reportRowsRefs)
+                        await $_getPrefetchedData<
+                          InspectionSessionRow,
+                          $InspectionSessionRowsTable,
+                          ReportRow
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$InspectionSessionRowsTableReferences
+                                  ._reportRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InspectionSessionRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).reportRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.sessionId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -4106,6 +4689,7 @@ typedef $$InspectionSessionRowsTableProcessedTableManager =
         bool sectionRowsRefs,
         bool findingRowsRefs,
         bool aiSuggestionRowsRefs,
+        bool reportRowsRefs,
       })
     >;
 typedef $$SectionRowsTableCreateCompanionBuilder =
@@ -6205,6 +6789,367 @@ typedef $$AiSuggestionRowsTableProcessedTableManager =
       AiSuggestionRow,
       PrefetchHooks Function({bool sessionId, bool findingId})
     >;
+typedef $$ReportRowsTableCreateCompanionBuilder = ReportRowsCompanion Function({
+  required String id,
+  required String sessionId,
+  required String filePath,
+  required String fileName,
+  required DateTime generatedAt,
+  required DateTime sourceUpdatedAt,
+  Value<String> syncStatus,
+  Value<int> rowid,
+});
+typedef $$ReportRowsTableUpdateCompanionBuilder = ReportRowsCompanion Function({
+  Value<String> id,
+  Value<String> sessionId,
+  Value<String> filePath,
+  Value<String> fileName,
+  Value<DateTime> generatedAt,
+  Value<DateTime> sourceUpdatedAt,
+  Value<String> syncStatus,
+  Value<int> rowid,
+});
+
+final class $$ReportRowsTableReferences
+    extends BaseReferences<_$AppDatabase, $ReportRowsTable, ReportRow> {
+  $$ReportRowsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $InspectionSessionRowsTable _sessionIdTable(_$AppDatabase db) => db
+      .inspectionSessionRows
+      .createAlias('report_rows__session_id__inspection_session_rows__id');
+
+  $$InspectionSessionRowsTableProcessedTableManager get sessionId {
+    final $_column = $_itemColumn<String>('session_id')!;
+
+    final manager = $$InspectionSessionRowsTableTableManager(
+      $_db,
+      $_db.inspectionSessionRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sessionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ReportRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReportRowsTable> {
+  $$ReportRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$InspectionSessionRowsTableFilterComposer get sessionId {
+    final $$InspectionSessionRowsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableFilterComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$ReportRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReportRowsTable> {
+  $$ReportRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$InspectionSessionRowsTableOrderingComposer get sessionId {
+    final $$InspectionSessionRowsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableOrderingComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$ReportRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReportRowsTable> {
+  $$ReportRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get filePath =>
+      $composableBuilder(column: $table.filePath, builder: (column) => column);
+
+  GeneratedColumn<String> get fileName =>
+      $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get sourceUpdatedAt => $composableBuilder(
+    column: $table.sourceUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => column,
+  );
+
+  $$InspectionSessionRowsTableAnnotationComposer get sessionId {
+    final $$InspectionSessionRowsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$ReportRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReportRowsTable,
+          ReportRow,
+          $$ReportRowsTableFilterComposer,
+          $$ReportRowsTableOrderingComposer,
+          $$ReportRowsTableAnnotationComposer,
+          $$ReportRowsTableCreateCompanionBuilder,
+          $$ReportRowsTableUpdateCompanionBuilder,
+          (ReportRow, $$ReportRowsTableReferences),
+          ReportRow,
+          PrefetchHooks Function({bool sessionId})
+        > {
+  $$ReportRowsTableTableManager(_$AppDatabase db, $ReportRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReportRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReportRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReportRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> filePath = const Value.absent(),
+                Value<String> fileName = const Value.absent(),
+                Value<DateTime> generatedAt = const Value.absent(),
+                Value<DateTime> sourceUpdatedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReportRowsCompanion(
+                id: id,
+                sessionId: sessionId,
+                filePath: filePath,
+                fileName: fileName,
+                generatedAt: generatedAt,
+                sourceUpdatedAt: sourceUpdatedAt,
+                syncStatus: syncStatus,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required String filePath,
+                required String fileName,
+                required DateTime generatedAt,
+                required DateTime sourceUpdatedAt,
+                Value<String> syncStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReportRowsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                filePath: filePath,
+                fileName: fileName,
+                generatedAt: generatedAt,
+                sourceUpdatedAt: sourceUpdatedAt,
+                syncStatus: syncStatus,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ReportRowsTable, ReportRow>(table),
+                  $$ReportRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({sessionId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (sessionId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.sessionId,
+                        referencedTable: $$ReportRowsTableReferences
+                            ._sessionIdTable(db),
+                        referencedColumn: $$ReportRowsTableReferences
+                            ._sessionIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ReportRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReportRowsTable,
+      ReportRow,
+      $$ReportRowsTableFilterComposer,
+      $$ReportRowsTableOrderingComposer,
+      $$ReportRowsTableAnnotationComposer,
+      $$ReportRowsTableCreateCompanionBuilder,
+      $$ReportRowsTableUpdateCompanionBuilder,
+      (ReportRow, $$ReportRowsTableReferences),
+      ReportRow,
+      PrefetchHooks Function({bool sessionId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6219,4 +7164,6 @@ class $AppDatabaseManager {
       $$EvidenceRowsTableTableManager(_db, _db.evidenceRows);
   $$AiSuggestionRowsTableTableManager get aiSuggestionRows =>
       $$AiSuggestionRowsTableTableManager(_db, _db.aiSuggestionRows);
+  $$ReportRowsTableTableManager get reportRows =>
+      $$ReportRowsTableTableManager(_db, _db.reportRows);
 }

@@ -114,6 +114,10 @@ class DriftInspectionRepository implements InspectionRepository {
       _db.aiSuggestionRows,
     )..where((t) => t.sessionId.equals(id))).get();
 
+    final reportRow = await (_db.select(
+      _db.reportRows,
+    )..where((t) => t.sessionId.equals(id))).getSingleOrNull();
+
     final sections = sectionRows
         .map(
           (row) => Section(
@@ -201,6 +205,17 @@ class DriftInspectionRepository implements InspectionRepository {
       ownerUid: sessionRow.ownerUid,
       aiReviewState: AiReviewState.values.byName(sessionRow.aiReviewState),
       aiSuggestions: aiSuggestions,
+      report: reportRow == null
+          ? null
+          : Report(
+              id: reportRow.id,
+              sessionId: reportRow.sessionId,
+              filePath: reportRow.filePath,
+              fileName: reportRow.fileName,
+              generatedAt: reportRow.generatedAt,
+              sourceUpdatedAt: reportRow.sourceUpdatedAt,
+              syncStatus: SyncStatus.values.byName(reportRow.syncStatus),
+            ),
     );
   }
 
@@ -436,6 +451,23 @@ class DriftInspectionRepository implements InspectionRepository {
             finalNotes: Value(suggestion.finalNotes),
             status: Value(suggestion.status.name),
             reviewedAt: Value(suggestion.reviewedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> saveReport(Report report) async {
+    await _db
+        .into(_db.reportRows)
+        .insertOnConflictUpdate(
+          ReportRowsCompanion.insert(
+            id: report.id,
+            sessionId: report.sessionId,
+            filePath: report.filePath,
+            fileName: report.fileName,
+            generatedAt: report.generatedAt,
+            sourceUpdatedAt: report.sourceUpdatedAt,
+            syncStatus: Value(report.syncStatus.name),
           ),
         );
   }

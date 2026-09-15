@@ -73,6 +73,11 @@ class DefaultSyncCoordinator implements SyncCoordinator {
         await _cloud.pushAiSuggestion(user.uid, session.id, suggestion);
       }
 
+      final report = session.report;
+      if (report != null) {
+        await _cloud.pushReportMetadata(user.uid, session.id, report);
+      }
+
       await _local.setSessionSyncStatus(session.id, SyncStatus.synced);
       return const SyncResult.success();
     } catch (error) {

@@ -2,6 +2,7 @@ import '../entities/ai_review.dart';
 import '../entities/evidence.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
+import '../entities/report.dart';
 import '../entities/section.dart';
 
 /// Remote mirror of a user's inspections, generic across industries.
@@ -67,5 +68,14 @@ abstract class CloudInspectionRepository {
     String ownerUid,
     String sessionId,
     AiSuggestion suggestion,
+  );
+
+  /// Mirrors report *metadata* (id, filename, timestamps) — never the
+  /// PDF bytes themselves; uploading the actual file to cloud storage is
+  /// optional and out of scope for now (see `docs/report.md`).
+  Future<void> pushReportMetadata(
+    String ownerUid,
+    String sessionId,
+    Report report,
   );
 }

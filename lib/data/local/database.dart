@@ -19,6 +19,8 @@ part 'database.g.dart';
 ///   in place rather than dropping/recreating the database.
 /// - v3: (Phase 6) added `aiReviewState` to sessions and the new
 ///   `AiSuggestionRows` table for AI review — see `docs/ai_review.md`.
+/// - v4: (Phase 7) added the new `ReportRows` table for generated PDF
+///   report metadata — see `docs/report.md`.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -26,6 +28,7 @@ part 'database.g.dart';
     FindingRows,
     EvidenceRows,
     AiSuggestionRows,
+    ReportRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -36,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +58,9 @@ class AppDatabase extends _$AppDatabase {
           inspectionSessionRows.aiReviewState,
         );
         await migrator.createTable(aiSuggestionRows);
+      }
+      if (from < 4) {
+        await migrator.createTable(reportRows);
       }
     },
   );

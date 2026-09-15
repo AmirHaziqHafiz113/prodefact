@@ -135,3 +135,30 @@ class AiSuggestionRows extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// Metadata for the generated PDF report of one session (added in
+/// schema v4). Keyed by [sessionId] rather than a separate report id —
+/// this directly encodes the "latest report per inspection" policy: a
+/// regenerated report replaces this row rather than accumulating
+/// history. Never stores raw PDF bytes — only the local file reference.
+class ReportRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text().references(
+    InspectionSessionRows,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  TextColumn get filePath => text()();
+  TextColumn get fileName => text()();
+  DateTimeColumn get generatedAt => dateTime()();
+
+  /// Snapshot of the session's `updatedAt` at generation time, used to
+  /// detect staleness — see `Report.isStaleRelativeTo`.
+  DateTimeColumn get sourceUpdatedAt => dateTime()();
+
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}

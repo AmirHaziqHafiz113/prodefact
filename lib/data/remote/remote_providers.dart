@@ -129,4 +129,11 @@ class _UnavailableCloudInspectionRepository
     String sessionId,
     AiSuggestion suggestion,
   ) => _unavailable();
+
+  @override
+  Future<void> pushReportMetadata(
+    String ownerUid,
+    String sessionId,
+    Report report,
+  ) => _unavailable();
 }

@@ -9,6 +9,8 @@ import '../../core/inspection/inspection_domain.dart';
 ///
 /// Firestore layout (see `docs/firebase.md` for the full model):
 ///   users/{uid}/inspections/{sessionId}
+///     report: { id, fileName, generatedAt, sourceUpdatedAt } — metadata
+///       only; the PDF file itself is not uploaded (see docs/report.md)
 ///     /sections/{sectionId}
 ///     /findings/{findingId}
 ///       /evidence/{evidenceId}
@@ -229,6 +231,24 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
       'reviewedAt': suggestion.reviewedAt == null
           ? null
           : fs.Timestamp.fromDate(suggestion.reviewedAt!),
+    }, fs.SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> pushReportMetadata(
+    String ownerUid,
+    String sessionId,
+    Report report,
+  ) {
+    // Metadata only — the PDF bytes themselves are not uploaded this
+    // phase (optional per the brief; see docs/report.md).
+    return _sessionDoc(ownerUid, sessionId).set({
+      'report': {
+        'id': report.id,
+        'fileName': report.fileName,
+        'generatedAt': fs.Timestamp.fromDate(report.generatedAt),
+        'sourceUpdatedAt': fs.Timestamp.fromDate(report.sourceUpdatedAt),
+      },
     }, fs.SetOptions(merge: true));
   }
 }

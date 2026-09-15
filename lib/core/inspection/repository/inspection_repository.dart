@@ -5,6 +5,7 @@ import '../entities/finding.dart';
 import '../entities/industry.dart';
 import '../entities/inspection.dart';
 import '../entities/inspection_session.dart';
+import '../entities/report.dart';
 import '../entities/section.dart';
 import '../entities/section_status.dart';
 import '../entities/sync_status.dart';
@@ -84,6 +85,11 @@ abstract class InspectionRepository {
   /// [AiSuggestion.id]) — used both to persist freshly-generated
   /// suggestions and to record the inspector's review of one.
   Future<void> saveAiSuggestion(AiSuggestion suggestion);
+
+  /// Replaces the session's report metadata (upsert, keyed by
+  /// [Report.sessionId] — "latest report per inspection"; see
+  /// `docs/report.md`).
+  Future<void> saveReport(Report report);
 
   Future<void> close();
 }

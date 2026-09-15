@@ -13,8 +13,10 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
   final List<String> deletedFindingIds = [];
   final List<String> deletedEvidenceIds = [];
   final Map<String, AiSuggestion> pushedAiSuggestions = {};
+  final Map<String, Report> pushedReports = {};
 
   int pushAiSuggestionCalls = 0;
+  int pushReportMetadataCalls = 0;
 
   int pushSessionCalls = 0;
   int pushSectionsCalls = 0;
@@ -119,5 +121,16 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
     _maybeThrow();
     pushAiSuggestionCalls++;
     pushedAiSuggestions[suggestion.id] = suggestion;
+  }
+
+  @override
+  Future<void> pushReportMetadata(
+    String ownerUid,
+    String sessionId,
+    Report report,
+  ) async {
+    _maybeThrow();
+    pushReportMetadataCalls++;
+    pushedReports[sessionId] = report;
   }
 }

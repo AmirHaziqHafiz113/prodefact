@@ -44,6 +44,14 @@ void main() {
       'package:openai',
       'package:google_generative_ai',
       'package:dart_openai',
+      // PDF construction (Phase 7) — only PdfReportRenderer may build
+      // PDF documents directly; UI/providers go through the
+      // ReportCoordinator/ReportRenderer abstractions instead.
+      // (report_screen.dart's use of package:printing's PdfPreview
+      // widget to *display* an already-generated PDF is a UI concern,
+      // not a domain leak, and is intentionally allowed.)
+      'package:pdf/pdf.dart',
+      'package:pdf/widgets.dart',
     ];
 
     const exemptPaths = {'main.dart', 'firebase_options.dart'};
