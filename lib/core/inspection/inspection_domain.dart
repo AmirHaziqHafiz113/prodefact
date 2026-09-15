@@ -1,0 +1,17 @@
+/// Generic inspection engine/domain, shared across all future industries.
+///
+/// Nothing in this library knows about Home Inspection specifically —
+/// industry-specific configuration lives under `lib/features/*` instead
+/// and is expressed in terms of these entities.
+library;
+
+export 'entities/ai_review.dart';
+export 'entities/asset_type.dart';
+export 'entities/component.dart';
+export 'entities/element.dart';
+export 'entities/evidence.dart';
+export 'entities/finding.dart';
+export 'entities/industry.dart';
+export 'entities/inspection.dart';
+export 'entities/report.dart';
+export 'entities/section.dart';
