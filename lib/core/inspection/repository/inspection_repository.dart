@@ -1,3 +1,5 @@
+import '../entities/ai_review.dart';
+import '../entities/ai_review_state.dart';
 import '../entities/evidence.dart';
 import '../entities/finding.dart';
 import '../entities/industry.dart';
@@ -74,6 +76,14 @@ abstract class InspectionRepository {
   /// Records the session's cloud sync state (informational — the local
   /// row remains the durable source of truth regardless of this value).
   Future<void> setSessionSyncStatus(String sessionId, SyncStatus syncStatus);
+
+  /// Records the state of the whole-session AI analysis run.
+  Future<void> setAiReviewState(String sessionId, AiReviewState state);
+
+  /// Creates or updates an AI suggestion (upsert, keyed by
+  /// [AiSuggestion.id]) — used both to persist freshly-generated
+  /// suggestions and to record the inspector's review of one.
+  Future<void> saveAiSuggestion(AiSuggestion suggestion);
 
   Future<void> close();
 }

@@ -1,3 +1,5 @@
+import 'ai_review.dart';
+import 'ai_review_state.dart';
 import 'finding.dart';
 import 'industry.dart';
 import 'inspection.dart';
@@ -25,6 +27,8 @@ class InspectionSession {
     this.status = InspectionStatus.inProgress,
     this.syncStatus = SyncStatus.localOnly,
     this.ownerUid,
+    this.aiReviewState = AiReviewState.notStarted,
+    this.aiSuggestions = const [],
   });
 
   final String id;
@@ -41,6 +45,16 @@ class InspectionSession {
   final DateTime createdAt;
   final DateTime updatedAt;
   final SyncStatus syncStatus;
+
+  /// The state of the whole-session AI analysis run — see
+  /// `docs/ai_review.md`. Gates whether analysis can run and whether
+  /// the inspection can proceed to reporting.
+  final AiReviewState aiReviewState;
+
+  /// Every AI suggestion generated for this session's findings, each
+  /// referencing a `Finding.id`. Populated only after physical
+  /// inspection completes and analysis has run.
+  final List<AiSuggestion> aiSuggestions;
 
   /// The authenticated user this session belongs to, if any. Null means
   /// a "guest" session created while signed out — see the ownership
@@ -61,6 +75,8 @@ class InspectionSession {
     DateTime? updatedAt,
     SyncStatus? syncStatus,
     String? ownerUid,
+    AiReviewState? aiReviewState,
+    List<AiSuggestion>? aiSuggestions,
   }) {
     return InspectionSession(
       id: id,
@@ -74,6 +90,8 @@ class InspectionSession {
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       ownerUid: ownerUid ?? this.ownerUid,
+      aiReviewState: aiReviewState ?? this.aiReviewState,
+      aiSuggestions: aiSuggestions ?? this.aiSuggestions,
     );
   }
 }

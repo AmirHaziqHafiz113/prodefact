@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
+import '../../../data/ai/ai_providers.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/remote/remote_providers.dart';
 import '../config/home_inspection_config.dart';
@@ -14,6 +15,15 @@ String? _orNull(String? value) {
   final trimmed = value?.trim();
   return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
 }
+
+/// The final/reviewed values an inspector approves for one suggestion.
+typedef _ReviewedFields = ({
+  String? elementId,
+  String? componentId,
+  String? defectType,
+  String? recommendation,
+  String? notes,
+});
 
 /// The single active inspection session, held fully in memory and
 /// written through to [InspectionRepository] on every change.
@@ -299,6 +309,147 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     state = await _repository.loadSession(session.id);
     ref.invalidate(sessionSummariesProvider);
     return result;
+  }
+
+  // ---- AI review (Phase 6) ----
+
+  /// Runs AI analysis for the active session, refusing to do anything
+  /// (via [AiReviewCoordinator]'s gate) unless physical inspection is
+  /// already complete. Refreshes in-memory state either way so the UI
+  /// reflects the resulting `aiReviewState` and any new suggestions.
+  Future<AiAnalysisResult> startAiAnalysis() async {
+    final session = state;
+    if (session == null) return const AiAnalysisResult.sessionNotFound();
+
+    final result = await ref
+        .read(aiReviewCoordinatorProvider)
+        .runAnalysis(session.id);
+    state = await _repository.loadSession(session.id);
+    ref.invalidate(sessionSummariesProvider);
+    return result;
+  }
+
+  void acceptSuggestion(String suggestionId) {
+    _reviewSuggestion(
+      suggestionId,
+      status: AiSuggestionStatus.accepted,
+      buildFinal: (suggestion) => (
+        elementId: suggestion.suggestedElementId,
+        componentId: suggestion.suggestedComponentId,
+        defectType: suggestion.suggestedDefectType,
+        recommendation: suggestion.suggestedRecommendation,
+        notes: suggestion.suggestedNotes,
+      ),
+    );
+  }
+
+  /// Inspector-modified values replace the AI's own suggestion in the
+  /// `final*` fields; the original `suggested*` values are untouched.
+  void editSuggestion(
+    String suggestionId, {
+    required String? elementId,
+    required String? componentId,
+    required String? defectType,
+    required String? recommendation,
+    required String? notes,
+  }) {
+    _reviewSuggestion(
+      suggestionId,
+      status: AiSuggestionStatus.edited,
+      buildFinal: (_) => (
+        elementId: elementId,
+        componentId: componentId,
+        defectType: defectType,
+        recommendation: recommendation,
+        notes: notes,
+      ),
+    );
+  }
+
+  /// The inspector disagrees with the AI entirely but still records
+  /// their own assessment, rather than the finding being left with no
+  /// resolution at all.
+  void rejectSuggestion(
+    String suggestionId, {
+    required String? elementId,
+    required String? componentId,
+    required String? defectType,
+    required String? recommendation,
+    required String? notes,
+  }) {
+    _reviewSuggestion(
+      suggestionId,
+      status: AiSuggestionStatus.rejected,
+      buildFinal: (_) => (
+        elementId: elementId,
+        componentId: componentId,
+        defectType: defectType,
+        recommendation: recommendation,
+        notes: notes,
+      ),
+    );
+  }
+
+  void _reviewSuggestion(
+    String suggestionId, {
+    required AiSuggestionStatus status,
+    required _ReviewedFields Function(AiSuggestion suggestion) buildFinal,
+  }) {
+    final session = state;
+    if (session == null) return;
+    final now = DateTime.now();
+
+    AiSuggestion? updated;
+    final suggestions = [
+      for (final suggestion in session.aiSuggestions)
+        if (suggestion.id == suggestionId)
+          (updated = _applyReview(suggestion, status, now, buildFinal))
+        else
+          suggestion,
+    ];
+    final finalUpdated = updated;
+    if (finalUpdated == null) return;
+
+    final allResolved = suggestions.every((s) => s.isResolved);
+    state = session.copyWith(
+      aiSuggestions: suggestions,
+      updatedAt: now,
+      aiReviewState: allResolved
+          ? AiReviewState.completed
+          : session.aiReviewState,
+      status: allResolved ? InspectionStatus.aiReviewComplete : session.status,
+    );
+    unawaited(_repository.saveAiSuggestion(finalUpdated));
+    if (allResolved) {
+      unawaited(
+        _repository.setAiReviewState(session.id, AiReviewState.completed),
+      );
+      unawaited(
+        _repository.setSessionStatus(
+          session.id,
+          InspectionStatus.aiReviewComplete,
+        ),
+      );
+    }
+    ref.invalidate(sessionSummariesProvider);
+  }
+
+  AiSuggestion _applyReview(
+    AiSuggestion suggestion,
+    AiSuggestionStatus status,
+    DateTime reviewedAt,
+    _ReviewedFields Function(AiSuggestion suggestion) buildFinal,
+  ) {
+    final finalValues = buildFinal(suggestion);
+    return suggestion.copyWith(
+      status: status,
+      reviewedAt: reviewedAt,
+      finalElementId: finalValues.elementId ?? '',
+      finalComponentId: finalValues.componentId ?? '',
+      finalDefectType: finalValues.defectType ?? '',
+      finalRecommendation: finalValues.recommendation ?? '',
+      finalNotes: finalValues.notes ?? '',
+    );
   }
 }
 

@@ -122,4 +122,11 @@ class _UnavailableCloudInspectionRepository
     String findingId,
     String evidenceId,
   ) => _unavailable();
+
+  @override
+  Future<void> pushAiSuggestion(
+    String ownerUid,
+    String sessionId,
+    AiSuggestion suggestion,
+  ) => _unavailable();
 }

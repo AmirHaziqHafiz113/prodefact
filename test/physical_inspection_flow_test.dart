@@ -197,7 +197,7 @@ void main() {
 
   testWidgets(
     'Complete Physical Inspection is enabled once every included area is '
-    'completed, and navigates to the next-stage placeholder',
+    'completed, and navigates to the AI review screen',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
 
@@ -222,7 +222,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Physical Inspection Complete'), findsOneWidget);
+      expect(find.text('AI Review'), findsOneWidget);
     },
   );
 }

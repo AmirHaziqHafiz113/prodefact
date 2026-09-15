@@ -94,6 +94,18 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _aiReviewStateMeta = const VerificationMeta(
+    'aiReviewState',
+  );
+  @override
+  late final GeneratedColumn<String> aiReviewState = GeneratedColumn<String>(
+    'ai_review_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('notStarted'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -104,6 +116,7 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     createdAt,
     updatedAt,
     ownerUid,
+    aiReviewState,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -177,6 +190,15 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         ownerUid.isAcceptableOrUnknown(data['owner_uid']!, _ownerUidMeta),
       );
     }
+    if (data.containsKey('ai_review_state')) {
+      context.handle(
+        _aiReviewStateMeta,
+        aiReviewState.isAcceptableOrUnknown(
+          data['ai_review_state']!,
+          _aiReviewStateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -218,6 +240,10 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         DriftSqlType.string,
         data['${effectivePrefix}owner_uid'],
       ),
+      aiReviewState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_review_state'],
+      )!,
     );
   }
 
@@ -240,6 +266,10 @@ class InspectionSessionRow extends DataClass
   /// The authenticated user this session belongs to. Null for a "guest"
   /// session created while signed out (added in schema v2).
   final String? ownerUid;
+
+  /// State of the whole-session AI analysis run (added in schema v3) —
+  /// see `AiReviewState`.
+  final String aiReviewState;
   const InspectionSessionRow({
     required this.id,
     required this.industry,
@@ -249,6 +279,7 @@ class InspectionSessionRow extends DataClass
     required this.createdAt,
     required this.updatedAt,
     this.ownerUid,
+    required this.aiReviewState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -263,6 +294,7 @@ class InspectionSessionRow extends DataClass
     if (!nullToAbsent || ownerUid != null) {
       map['owner_uid'] = Variable<String>(ownerUid);
     }
+    map['ai_review_state'] = Variable<String>(aiReviewState);
     return map;
   }
 
@@ -278,6 +310,7 @@ class InspectionSessionRow extends DataClass
       ownerUid: ownerUid == null && nullToAbsent
           ? const Value.absent()
           : Value(ownerUid),
+      aiReviewState: Value(aiReviewState),
     );
   }
 
@@ -295,6 +328,7 @@ class InspectionSessionRow extends DataClass
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       ownerUid: serializer.fromJson<String?>(json['ownerUid']),
+      aiReviewState: serializer.fromJson<String>(json['aiReviewState']),
     );
   }
   @override
@@ -309,6 +343,7 @@ class InspectionSessionRow extends DataClass
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'ownerUid': serializer.toJson<String?>(ownerUid),
+      'aiReviewState': serializer.toJson<String>(aiReviewState),
     };
   }
 
@@ -321,6 +356,7 @@ class InspectionSessionRow extends DataClass
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<String?> ownerUid = const Value.absent(),
+    String? aiReviewState,
   }) => InspectionSessionRow(
     id: id ?? this.id,
     industry: industry ?? this.industry,
@@ -330,6 +366,7 @@ class InspectionSessionRow extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     ownerUid: ownerUid.present ? ownerUid.value : this.ownerUid,
+    aiReviewState: aiReviewState ?? this.aiReviewState,
   );
   InspectionSessionRow copyWithCompanion(InspectionSessionRowsCompanion data) {
     return InspectionSessionRow(
@@ -345,6 +382,9 @@ class InspectionSessionRow extends DataClass
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       ownerUid: data.ownerUid.present ? data.ownerUid.value : this.ownerUid,
+      aiReviewState: data.aiReviewState.present
+          ? data.aiReviewState.value
+          : this.aiReviewState,
     );
   }
 
@@ -358,7 +398,8 @@ class InspectionSessionRow extends DataClass
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('ownerUid: $ownerUid')
+          ..write('ownerUid: $ownerUid, ')
+          ..write('aiReviewState: $aiReviewState')
           ..write(')'))
         .toString();
   }
@@ -373,6 +414,7 @@ class InspectionSessionRow extends DataClass
     createdAt,
     updatedAt,
     ownerUid,
+    aiReviewState,
   );
   @override
   bool operator ==(Object other) =>
@@ -385,7 +427,8 @@ class InspectionSessionRow extends DataClass
           other.syncStatus == this.syncStatus &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.ownerUid == this.ownerUid);
+          other.ownerUid == this.ownerUid &&
+          other.aiReviewState == this.aiReviewState);
 }
 
 class InspectionSessionRowsCompanion
@@ -398,6 +441,7 @@ class InspectionSessionRowsCompanion
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<String?> ownerUid;
+  final Value<String> aiReviewState;
   final Value<int> rowid;
   const InspectionSessionRowsCompanion({
     this.id = const Value.absent(),
@@ -408,6 +452,7 @@ class InspectionSessionRowsCompanion
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.ownerUid = const Value.absent(),
+    this.aiReviewState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InspectionSessionRowsCompanion.insert({
@@ -419,6 +464,7 @@ class InspectionSessionRowsCompanion
     required DateTime createdAt,
     required DateTime updatedAt,
     this.ownerUid = const Value.absent(),
+    this.aiReviewState = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        industry = Value(industry),
@@ -435,6 +481,7 @@ class InspectionSessionRowsCompanion
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<String>? ownerUid,
+    Expression<String>? aiReviewState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -446,6 +493,7 @@ class InspectionSessionRowsCompanion
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (ownerUid != null) 'owner_uid': ownerUid,
+      if (aiReviewState != null) 'ai_review_state': aiReviewState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -459,6 +507,7 @@ class InspectionSessionRowsCompanion
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<String?>? ownerUid,
+    Value<String>? aiReviewState,
     Value<int>? rowid,
   }) {
     return InspectionSessionRowsCompanion(
@@ -470,6 +519,7 @@ class InspectionSessionRowsCompanion
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       ownerUid: ownerUid ?? this.ownerUid,
+      aiReviewState: aiReviewState ?? this.aiReviewState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -501,6 +551,9 @@ class InspectionSessionRowsCompanion
     if (ownerUid.present) {
       map['owner_uid'] = Variable<String>(ownerUid.value);
     }
+    if (aiReviewState.present) {
+      map['ai_review_state'] = Variable<String>(aiReviewState.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -518,6 +571,7 @@ class InspectionSessionRowsCompanion
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('ownerUid: $ownerUid, ')
+          ..write('aiReviewState: $aiReviewState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2327,6 +2381,1063 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
   }
 }
 
+class $AiSuggestionRowsTable extends AiSuggestionRows
+    with TableInfo<$AiSuggestionRowsTable, AiSuggestionRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AiSuggestionRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES inspection_session_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _findingIdMeta = const VerificationMeta(
+    'findingId',
+  );
+  @override
+  late final GeneratedColumn<String> findingId = GeneratedColumn<String>(
+    'finding_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES finding_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _suggestedElementIdMeta =
+      const VerificationMeta('suggestedElementId');
+  @override
+  late final GeneratedColumn<String> suggestedElementId =
+      GeneratedColumn<String>(
+        'suggested_element_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _suggestedComponentIdMeta =
+      const VerificationMeta('suggestedComponentId');
+  @override
+  late final GeneratedColumn<String> suggestedComponentId =
+      GeneratedColumn<String>(
+        'suggested_component_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _suggestedDefectTypeMeta =
+      const VerificationMeta('suggestedDefectType');
+  @override
+  late final GeneratedColumn<String> suggestedDefectType =
+      GeneratedColumn<String>(
+        'suggested_defect_type',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _suggestedRecommendationMeta =
+      const VerificationMeta('suggestedRecommendation');
+  @override
+  late final GeneratedColumn<String> suggestedRecommendation =
+      GeneratedColumn<String>(
+        'suggested_recommendation',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _suggestedNotesMeta = const VerificationMeta(
+    'suggestedNotes',
+  );
+  @override
+  late final GeneratedColumn<String> suggestedNotes = GeneratedColumn<String>(
+    'suggested_notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _finalElementIdMeta = const VerificationMeta(
+    'finalElementId',
+  );
+  @override
+  late final GeneratedColumn<String> finalElementId = GeneratedColumn<String>(
+    'final_element_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _finalComponentIdMeta = const VerificationMeta(
+    'finalComponentId',
+  );
+  @override
+  late final GeneratedColumn<String> finalComponentId = GeneratedColumn<String>(
+    'final_component_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _finalDefectTypeMeta = const VerificationMeta(
+    'finalDefectType',
+  );
+  @override
+  late final GeneratedColumn<String> finalDefectType = GeneratedColumn<String>(
+    'final_defect_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _finalRecommendationMeta =
+      const VerificationMeta('finalRecommendation');
+  @override
+  late final GeneratedColumn<String> finalRecommendation =
+      GeneratedColumn<String>(
+        'final_recommendation',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _finalNotesMeta = const VerificationMeta(
+    'finalNotes',
+  );
+  @override
+  late final GeneratedColumn<String> finalNotes = GeneratedColumn<String>(
+    'final_notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _providerIdMeta = const VerificationMeta(
+    'providerId',
+  );
+  @override
+  late final GeneratedColumn<String> providerId = GeneratedColumn<String>(
+    'provider_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _generatedAtMeta = const VerificationMeta(
+    'generatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> generatedAt = GeneratedColumn<DateTime>(
+    'generated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reviewedAtMeta = const VerificationMeta(
+    'reviewedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reviewedAt = GeneratedColumn<DateTime>(
+    'reviewed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    findingId,
+    suggestedElementId,
+    suggestedComponentId,
+    suggestedDefectType,
+    suggestedRecommendation,
+    suggestedNotes,
+    finalElementId,
+    finalComponentId,
+    finalDefectType,
+    finalRecommendation,
+    finalNotes,
+    status,
+    providerId,
+    generatedAt,
+    reviewedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ai_suggestion_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AiSuggestionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('finding_id')) {
+      context.handle(
+        _findingIdMeta,
+        findingId.isAcceptableOrUnknown(data['finding_id']!, _findingIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_findingIdMeta);
+    }
+    if (data.containsKey('suggested_element_id')) {
+      context.handle(
+        _suggestedElementIdMeta,
+        suggestedElementId.isAcceptableOrUnknown(
+          data['suggested_element_id']!,
+          _suggestedElementIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('suggested_component_id')) {
+      context.handle(
+        _suggestedComponentIdMeta,
+        suggestedComponentId.isAcceptableOrUnknown(
+          data['suggested_component_id']!,
+          _suggestedComponentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('suggested_defect_type')) {
+      context.handle(
+        _suggestedDefectTypeMeta,
+        suggestedDefectType.isAcceptableOrUnknown(
+          data['suggested_defect_type']!,
+          _suggestedDefectTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('suggested_recommendation')) {
+      context.handle(
+        _suggestedRecommendationMeta,
+        suggestedRecommendation.isAcceptableOrUnknown(
+          data['suggested_recommendation']!,
+          _suggestedRecommendationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('suggested_notes')) {
+      context.handle(
+        _suggestedNotesMeta,
+        suggestedNotes.isAcceptableOrUnknown(
+          data['suggested_notes']!,
+          _suggestedNotesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('final_element_id')) {
+      context.handle(
+        _finalElementIdMeta,
+        finalElementId.isAcceptableOrUnknown(
+          data['final_element_id']!,
+          _finalElementIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('final_component_id')) {
+      context.handle(
+        _finalComponentIdMeta,
+        finalComponentId.isAcceptableOrUnknown(
+          data['final_component_id']!,
+          _finalComponentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('final_defect_type')) {
+      context.handle(
+        _finalDefectTypeMeta,
+        finalDefectType.isAcceptableOrUnknown(
+          data['final_defect_type']!,
+          _finalDefectTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('final_recommendation')) {
+      context.handle(
+        _finalRecommendationMeta,
+        finalRecommendation.isAcceptableOrUnknown(
+          data['final_recommendation']!,
+          _finalRecommendationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('final_notes')) {
+      context.handle(
+        _finalNotesMeta,
+        finalNotes.isAcceptableOrUnknown(data['final_notes']!, _finalNotesMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('provider_id')) {
+      context.handle(
+        _providerIdMeta,
+        providerId.isAcceptableOrUnknown(data['provider_id']!, _providerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_providerIdMeta);
+    }
+    if (data.containsKey('generated_at')) {
+      context.handle(
+        _generatedAtMeta,
+        generatedAt.isAcceptableOrUnknown(
+          data['generated_at']!,
+          _generatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_generatedAtMeta);
+    }
+    if (data.containsKey('reviewed_at')) {
+      context.handle(
+        _reviewedAtMeta,
+        reviewedAt.isAcceptableOrUnknown(data['reviewed_at']!, _reviewedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AiSuggestionRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AiSuggestionRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      findingId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}finding_id'],
+      )!,
+      suggestedElementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_element_id'],
+      ),
+      suggestedComponentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_component_id'],
+      ),
+      suggestedDefectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_defect_type'],
+      ),
+      suggestedRecommendation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_recommendation'],
+      ),
+      suggestedNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_notes'],
+      ),
+      finalElementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}final_element_id'],
+      ),
+      finalComponentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}final_component_id'],
+      ),
+      finalDefectType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}final_defect_type'],
+      ),
+      finalRecommendation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}final_recommendation'],
+      ),
+      finalNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}final_notes'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      providerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}provider_id'],
+      )!,
+      generatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}generated_at'],
+      )!,
+      reviewedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reviewed_at'],
+      ),
+    );
+  }
+
+  @override
+  $AiSuggestionRowsTable createAlias(String alias) {
+    return $AiSuggestionRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
+  final String id;
+  final String sessionId;
+  final String findingId;
+  final String? suggestedElementId;
+  final String? suggestedComponentId;
+  final String? suggestedDefectType;
+  final String? suggestedRecommendation;
+  final String? suggestedNotes;
+  final String? finalElementId;
+  final String? finalComponentId;
+  final String? finalDefectType;
+  final String? finalRecommendation;
+  final String? finalNotes;
+  final String status;
+  final String providerId;
+  final DateTime generatedAt;
+  final DateTime? reviewedAt;
+  const AiSuggestionRow({
+    required this.id,
+    required this.sessionId,
+    required this.findingId,
+    this.suggestedElementId,
+    this.suggestedComponentId,
+    this.suggestedDefectType,
+    this.suggestedRecommendation,
+    this.suggestedNotes,
+    this.finalElementId,
+    this.finalComponentId,
+    this.finalDefectType,
+    this.finalRecommendation,
+    this.finalNotes,
+    required this.status,
+    required this.providerId,
+    required this.generatedAt,
+    this.reviewedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['finding_id'] = Variable<String>(findingId);
+    if (!nullToAbsent || suggestedElementId != null) {
+      map['suggested_element_id'] = Variable<String>(suggestedElementId);
+    }
+    if (!nullToAbsent || suggestedComponentId != null) {
+      map['suggested_component_id'] = Variable<String>(suggestedComponentId);
+    }
+    if (!nullToAbsent || suggestedDefectType != null) {
+      map['suggested_defect_type'] = Variable<String>(suggestedDefectType);
+    }
+    if (!nullToAbsent || suggestedRecommendation != null) {
+      map['suggested_recommendation'] = Variable<String>(
+        suggestedRecommendation,
+      );
+    }
+    if (!nullToAbsent || suggestedNotes != null) {
+      map['suggested_notes'] = Variable<String>(suggestedNotes);
+    }
+    if (!nullToAbsent || finalElementId != null) {
+      map['final_element_id'] = Variable<String>(finalElementId);
+    }
+    if (!nullToAbsent || finalComponentId != null) {
+      map['final_component_id'] = Variable<String>(finalComponentId);
+    }
+    if (!nullToAbsent || finalDefectType != null) {
+      map['final_defect_type'] = Variable<String>(finalDefectType);
+    }
+    if (!nullToAbsent || finalRecommendation != null) {
+      map['final_recommendation'] = Variable<String>(finalRecommendation);
+    }
+    if (!nullToAbsent || finalNotes != null) {
+      map['final_notes'] = Variable<String>(finalNotes);
+    }
+    map['status'] = Variable<String>(status);
+    map['provider_id'] = Variable<String>(providerId);
+    map['generated_at'] = Variable<DateTime>(generatedAt);
+    if (!nullToAbsent || reviewedAt != null) {
+      map['reviewed_at'] = Variable<DateTime>(reviewedAt);
+    }
+    return map;
+  }
+
+  AiSuggestionRowsCompanion toCompanion(bool nullToAbsent) {
+    return AiSuggestionRowsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      findingId: Value(findingId),
+      suggestedElementId: suggestedElementId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedElementId),
+      suggestedComponentId: suggestedComponentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedComponentId),
+      suggestedDefectType: suggestedDefectType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedDefectType),
+      suggestedRecommendation: suggestedRecommendation == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedRecommendation),
+      suggestedNotes: suggestedNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedNotes),
+      finalElementId: finalElementId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finalElementId),
+      finalComponentId: finalComponentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finalComponentId),
+      finalDefectType: finalDefectType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finalDefectType),
+      finalRecommendation: finalRecommendation == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finalRecommendation),
+      finalNotes: finalNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finalNotes),
+      status: Value(status),
+      providerId: Value(providerId),
+      generatedAt: Value(generatedAt),
+      reviewedAt: reviewedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reviewedAt),
+    );
+  }
+
+  factory AiSuggestionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AiSuggestionRow(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      findingId: serializer.fromJson<String>(json['findingId']),
+      suggestedElementId: serializer.fromJson<String?>(
+        json['suggestedElementId'],
+      ),
+      suggestedComponentId: serializer.fromJson<String?>(
+        json['suggestedComponentId'],
+      ),
+      suggestedDefectType: serializer.fromJson<String?>(
+        json['suggestedDefectType'],
+      ),
+      suggestedRecommendation: serializer.fromJson<String?>(
+        json['suggestedRecommendation'],
+      ),
+      suggestedNotes: serializer.fromJson<String?>(json['suggestedNotes']),
+      finalElementId: serializer.fromJson<String?>(json['finalElementId']),
+      finalComponentId: serializer.fromJson<String?>(json['finalComponentId']),
+      finalDefectType: serializer.fromJson<String?>(json['finalDefectType']),
+      finalRecommendation: serializer.fromJson<String?>(
+        json['finalRecommendation'],
+      ),
+      finalNotes: serializer.fromJson<String?>(json['finalNotes']),
+      status: serializer.fromJson<String>(json['status']),
+      providerId: serializer.fromJson<String>(json['providerId']),
+      generatedAt: serializer.fromJson<DateTime>(json['generatedAt']),
+      reviewedAt: serializer.fromJson<DateTime?>(json['reviewedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'findingId': serializer.toJson<String>(findingId),
+      'suggestedElementId': serializer.toJson<String?>(suggestedElementId),
+      'suggestedComponentId': serializer.toJson<String?>(suggestedComponentId),
+      'suggestedDefectType': serializer.toJson<String?>(suggestedDefectType),
+      'suggestedRecommendation': serializer.toJson<String?>(
+        suggestedRecommendation,
+      ),
+      'suggestedNotes': serializer.toJson<String?>(suggestedNotes),
+      'finalElementId': serializer.toJson<String?>(finalElementId),
+      'finalComponentId': serializer.toJson<String?>(finalComponentId),
+      'finalDefectType': serializer.toJson<String?>(finalDefectType),
+      'finalRecommendation': serializer.toJson<String?>(finalRecommendation),
+      'finalNotes': serializer.toJson<String?>(finalNotes),
+      'status': serializer.toJson<String>(status),
+      'providerId': serializer.toJson<String>(providerId),
+      'generatedAt': serializer.toJson<DateTime>(generatedAt),
+      'reviewedAt': serializer.toJson<DateTime?>(reviewedAt),
+    };
+  }
+
+  AiSuggestionRow copyWith({
+    String? id,
+    String? sessionId,
+    String? findingId,
+    Value<String?> suggestedElementId = const Value.absent(),
+    Value<String?> suggestedComponentId = const Value.absent(),
+    Value<String?> suggestedDefectType = const Value.absent(),
+    Value<String?> suggestedRecommendation = const Value.absent(),
+    Value<String?> suggestedNotes = const Value.absent(),
+    Value<String?> finalElementId = const Value.absent(),
+    Value<String?> finalComponentId = const Value.absent(),
+    Value<String?> finalDefectType = const Value.absent(),
+    Value<String?> finalRecommendation = const Value.absent(),
+    Value<String?> finalNotes = const Value.absent(),
+    String? status,
+    String? providerId,
+    DateTime? generatedAt,
+    Value<DateTime?> reviewedAt = const Value.absent(),
+  }) => AiSuggestionRow(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    findingId: findingId ?? this.findingId,
+    suggestedElementId: suggestedElementId.present
+        ? suggestedElementId.value
+        : this.suggestedElementId,
+    suggestedComponentId: suggestedComponentId.present
+        ? suggestedComponentId.value
+        : this.suggestedComponentId,
+    suggestedDefectType: suggestedDefectType.present
+        ? suggestedDefectType.value
+        : this.suggestedDefectType,
+    suggestedRecommendation: suggestedRecommendation.present
+        ? suggestedRecommendation.value
+        : this.suggestedRecommendation,
+    suggestedNotes: suggestedNotes.present
+        ? suggestedNotes.value
+        : this.suggestedNotes,
+    finalElementId: finalElementId.present
+        ? finalElementId.value
+        : this.finalElementId,
+    finalComponentId: finalComponentId.present
+        ? finalComponentId.value
+        : this.finalComponentId,
+    finalDefectType: finalDefectType.present
+        ? finalDefectType.value
+        : this.finalDefectType,
+    finalRecommendation: finalRecommendation.present
+        ? finalRecommendation.value
+        : this.finalRecommendation,
+    finalNotes: finalNotes.present ? finalNotes.value : this.finalNotes,
+    status: status ?? this.status,
+    providerId: providerId ?? this.providerId,
+    generatedAt: generatedAt ?? this.generatedAt,
+    reviewedAt: reviewedAt.present ? reviewedAt.value : this.reviewedAt,
+  );
+  AiSuggestionRow copyWithCompanion(AiSuggestionRowsCompanion data) {
+    return AiSuggestionRow(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      findingId: data.findingId.present ? data.findingId.value : this.findingId,
+      suggestedElementId: data.suggestedElementId.present
+          ? data.suggestedElementId.value
+          : this.suggestedElementId,
+      suggestedComponentId: data.suggestedComponentId.present
+          ? data.suggestedComponentId.value
+          : this.suggestedComponentId,
+      suggestedDefectType: data.suggestedDefectType.present
+          ? data.suggestedDefectType.value
+          : this.suggestedDefectType,
+      suggestedRecommendation: data.suggestedRecommendation.present
+          ? data.suggestedRecommendation.value
+          : this.suggestedRecommendation,
+      suggestedNotes: data.suggestedNotes.present
+          ? data.suggestedNotes.value
+          : this.suggestedNotes,
+      finalElementId: data.finalElementId.present
+          ? data.finalElementId.value
+          : this.finalElementId,
+      finalComponentId: data.finalComponentId.present
+          ? data.finalComponentId.value
+          : this.finalComponentId,
+      finalDefectType: data.finalDefectType.present
+          ? data.finalDefectType.value
+          : this.finalDefectType,
+      finalRecommendation: data.finalRecommendation.present
+          ? data.finalRecommendation.value
+          : this.finalRecommendation,
+      finalNotes: data.finalNotes.present
+          ? data.finalNotes.value
+          : this.finalNotes,
+      status: data.status.present ? data.status.value : this.status,
+      providerId: data.providerId.present
+          ? data.providerId.value
+          : this.providerId,
+      generatedAt: data.generatedAt.present
+          ? data.generatedAt.value
+          : this.generatedAt,
+      reviewedAt: data.reviewedAt.present
+          ? data.reviewedAt.value
+          : this.reviewedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AiSuggestionRow(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('findingId: $findingId, ')
+          ..write('suggestedElementId: $suggestedElementId, ')
+          ..write('suggestedComponentId: $suggestedComponentId, ')
+          ..write('suggestedDefectType: $suggestedDefectType, ')
+          ..write('suggestedRecommendation: $suggestedRecommendation, ')
+          ..write('suggestedNotes: $suggestedNotes, ')
+          ..write('finalElementId: $finalElementId, ')
+          ..write('finalComponentId: $finalComponentId, ')
+          ..write('finalDefectType: $finalDefectType, ')
+          ..write('finalRecommendation: $finalRecommendation, ')
+          ..write('finalNotes: $finalNotes, ')
+          ..write('status: $status, ')
+          ..write('providerId: $providerId, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('reviewedAt: $reviewedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    findingId,
+    suggestedElementId,
+    suggestedComponentId,
+    suggestedDefectType,
+    suggestedRecommendation,
+    suggestedNotes,
+    finalElementId,
+    finalComponentId,
+    finalDefectType,
+    finalRecommendation,
+    finalNotes,
+    status,
+    providerId,
+    generatedAt,
+    reviewedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AiSuggestionRow &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.findingId == this.findingId &&
+          other.suggestedElementId == this.suggestedElementId &&
+          other.suggestedComponentId == this.suggestedComponentId &&
+          other.suggestedDefectType == this.suggestedDefectType &&
+          other.suggestedRecommendation == this.suggestedRecommendation &&
+          other.suggestedNotes == this.suggestedNotes &&
+          other.finalElementId == this.finalElementId &&
+          other.finalComponentId == this.finalComponentId &&
+          other.finalDefectType == this.finalDefectType &&
+          other.finalRecommendation == this.finalRecommendation &&
+          other.finalNotes == this.finalNotes &&
+          other.status == this.status &&
+          other.providerId == this.providerId &&
+          other.generatedAt == this.generatedAt &&
+          other.reviewedAt == this.reviewedAt);
+}
+
+class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String> findingId;
+  final Value<String?> suggestedElementId;
+  final Value<String?> suggestedComponentId;
+  final Value<String?> suggestedDefectType;
+  final Value<String?> suggestedRecommendation;
+  final Value<String?> suggestedNotes;
+  final Value<String?> finalElementId;
+  final Value<String?> finalComponentId;
+  final Value<String?> finalDefectType;
+  final Value<String?> finalRecommendation;
+  final Value<String?> finalNotes;
+  final Value<String> status;
+  final Value<String> providerId;
+  final Value<DateTime> generatedAt;
+  final Value<DateTime?> reviewedAt;
+  final Value<int> rowid;
+  const AiSuggestionRowsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.findingId = const Value.absent(),
+    this.suggestedElementId = const Value.absent(),
+    this.suggestedComponentId = const Value.absent(),
+    this.suggestedDefectType = const Value.absent(),
+    this.suggestedRecommendation = const Value.absent(),
+    this.suggestedNotes = const Value.absent(),
+    this.finalElementId = const Value.absent(),
+    this.finalComponentId = const Value.absent(),
+    this.finalDefectType = const Value.absent(),
+    this.finalRecommendation = const Value.absent(),
+    this.finalNotes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.providerId = const Value.absent(),
+    this.generatedAt = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AiSuggestionRowsCompanion.insert({
+    required String id,
+    required String sessionId,
+    required String findingId,
+    this.suggestedElementId = const Value.absent(),
+    this.suggestedComponentId = const Value.absent(),
+    this.suggestedDefectType = const Value.absent(),
+    this.suggestedRecommendation = const Value.absent(),
+    this.suggestedNotes = const Value.absent(),
+    this.finalElementId = const Value.absent(),
+    this.finalComponentId = const Value.absent(),
+    this.finalDefectType = const Value.absent(),
+    this.finalRecommendation = const Value.absent(),
+    this.finalNotes = const Value.absent(),
+    this.status = const Value.absent(),
+    required String providerId,
+    required DateTime generatedAt,
+    this.reviewedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       findingId = Value(findingId),
+       providerId = Value(providerId),
+       generatedAt = Value(generatedAt);
+  static Insertable<AiSuggestionRow> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? findingId,
+    Expression<String>? suggestedElementId,
+    Expression<String>? suggestedComponentId,
+    Expression<String>? suggestedDefectType,
+    Expression<String>? suggestedRecommendation,
+    Expression<String>? suggestedNotes,
+    Expression<String>? finalElementId,
+    Expression<String>? finalComponentId,
+    Expression<String>? finalDefectType,
+    Expression<String>? finalRecommendation,
+    Expression<String>? finalNotes,
+    Expression<String>? status,
+    Expression<String>? providerId,
+    Expression<DateTime>? generatedAt,
+    Expression<DateTime>? reviewedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (findingId != null) 'finding_id': findingId,
+      if (suggestedElementId != null)
+        'suggested_element_id': suggestedElementId,
+      if (suggestedComponentId != null)
+        'suggested_component_id': suggestedComponentId,
+      if (suggestedDefectType != null)
+        'suggested_defect_type': suggestedDefectType,
+      if (suggestedRecommendation != null)
+        'suggested_recommendation': suggestedRecommendation,
+      if (suggestedNotes != null) 'suggested_notes': suggestedNotes,
+      if (finalElementId != null) 'final_element_id': finalElementId,
+      if (finalComponentId != null) 'final_component_id': finalComponentId,
+      if (finalDefectType != null) 'final_defect_type': finalDefectType,
+      if (finalRecommendation != null)
+        'final_recommendation': finalRecommendation,
+      if (finalNotes != null) 'final_notes': finalNotes,
+      if (status != null) 'status': status,
+      if (providerId != null) 'provider_id': providerId,
+      if (generatedAt != null) 'generated_at': generatedAt,
+      if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AiSuggestionRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String>? findingId,
+    Value<String?>? suggestedElementId,
+    Value<String?>? suggestedComponentId,
+    Value<String?>? suggestedDefectType,
+    Value<String?>? suggestedRecommendation,
+    Value<String?>? suggestedNotes,
+    Value<String?>? finalElementId,
+    Value<String?>? finalComponentId,
+    Value<String?>? finalDefectType,
+    Value<String?>? finalRecommendation,
+    Value<String?>? finalNotes,
+    Value<String>? status,
+    Value<String>? providerId,
+    Value<DateTime>? generatedAt,
+    Value<DateTime?>? reviewedAt,
+    Value<int>? rowid,
+  }) {
+    return AiSuggestionRowsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      findingId: findingId ?? this.findingId,
+      suggestedElementId: suggestedElementId ?? this.suggestedElementId,
+      suggestedComponentId: suggestedComponentId ?? this.suggestedComponentId,
+      suggestedDefectType: suggestedDefectType ?? this.suggestedDefectType,
+      suggestedRecommendation:
+          suggestedRecommendation ?? this.suggestedRecommendation,
+      suggestedNotes: suggestedNotes ?? this.suggestedNotes,
+      finalElementId: finalElementId ?? this.finalElementId,
+      finalComponentId: finalComponentId ?? this.finalComponentId,
+      finalDefectType: finalDefectType ?? this.finalDefectType,
+      finalRecommendation: finalRecommendation ?? this.finalRecommendation,
+      finalNotes: finalNotes ?? this.finalNotes,
+      status: status ?? this.status,
+      providerId: providerId ?? this.providerId,
+      generatedAt: generatedAt ?? this.generatedAt,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (findingId.present) {
+      map['finding_id'] = Variable<String>(findingId.value);
+    }
+    if (suggestedElementId.present) {
+      map['suggested_element_id'] = Variable<String>(suggestedElementId.value);
+    }
+    if (suggestedComponentId.present) {
+      map['suggested_component_id'] = Variable<String>(
+        suggestedComponentId.value,
+      );
+    }
+    if (suggestedDefectType.present) {
+      map['suggested_defect_type'] = Variable<String>(
+        suggestedDefectType.value,
+      );
+    }
+    if (suggestedRecommendation.present) {
+      map['suggested_recommendation'] = Variable<String>(
+        suggestedRecommendation.value,
+      );
+    }
+    if (suggestedNotes.present) {
+      map['suggested_notes'] = Variable<String>(suggestedNotes.value);
+    }
+    if (finalElementId.present) {
+      map['final_element_id'] = Variable<String>(finalElementId.value);
+    }
+    if (finalComponentId.present) {
+      map['final_component_id'] = Variable<String>(finalComponentId.value);
+    }
+    if (finalDefectType.present) {
+      map['final_defect_type'] = Variable<String>(finalDefectType.value);
+    }
+    if (finalRecommendation.present) {
+      map['final_recommendation'] = Variable<String>(finalRecommendation.value);
+    }
+    if (finalNotes.present) {
+      map['final_notes'] = Variable<String>(finalNotes.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (providerId.present) {
+      map['provider_id'] = Variable<String>(providerId.value);
+    }
+    if (generatedAt.present) {
+      map['generated_at'] = Variable<DateTime>(generatedAt.value);
+    }
+    if (reviewedAt.present) {
+      map['reviewed_at'] = Variable<DateTime>(reviewedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AiSuggestionRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('findingId: $findingId, ')
+          ..write('suggestedElementId: $suggestedElementId, ')
+          ..write('suggestedComponentId: $suggestedComponentId, ')
+          ..write('suggestedDefectType: $suggestedDefectType, ')
+          ..write('suggestedRecommendation: $suggestedRecommendation, ')
+          ..write('suggestedNotes: $suggestedNotes, ')
+          ..write('finalElementId: $finalElementId, ')
+          ..write('finalComponentId: $finalComponentId, ')
+          ..write('finalDefectType: $finalDefectType, ')
+          ..write('finalRecommendation: $finalRecommendation, ')
+          ..write('finalNotes: $finalNotes, ')
+          ..write('status: $status, ')
+          ..write('providerId: $providerId, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2335,6 +3446,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SectionRowsTable sectionRows = $SectionRowsTable(this);
   late final $FindingRowsTable findingRows = $FindingRowsTable(this);
   late final $EvidenceRowsTable evidenceRows = $EvidenceRowsTable(this);
+  late final $AiSuggestionRowsTable aiSuggestionRows = $AiSuggestionRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2344,6 +3458,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     sectionRows,
     findingRows,
     evidenceRows,
+    aiSuggestionRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2368,6 +3483,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ),
       result: [TableUpdate('evidence_rows', kind: UpdateKind.delete)],
     ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'inspection_session_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('ai_suggestion_rows', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'finding_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('ai_suggestion_rows', kind: UpdateKind.delete)],
+    ),
   ]);
 }
 
@@ -2381,6 +3510,7 @@ typedef $$InspectionSessionRowsTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<String?> ownerUid,
+      Value<String> aiReviewState,
       Value<int> rowid,
     });
 typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
@@ -2393,6 +3523,7 @@ typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<String?> ownerUid,
+      Value<String> aiReviewState,
       Value<int> rowid,
     });
 
@@ -2440,6 +3571,26 @@ final class $$InspectionSessionRowsTableReferences
     ).filter((f) => f.sessionId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_findingRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$AiSuggestionRowsTable, List<AiSuggestionRow>>
+  _aiSuggestionRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.aiSuggestionRows,
+    aliasName: 'inspection_session_rows__id__ai_suggestion_rows__session_id',
+  );
+
+  $$AiSuggestionRowsTableProcessedTableManager get aiSuggestionRowsRefs {
+    final manager = $$AiSuggestionRowsTableTableManager(
+      $_db,
+      $_db.aiSuggestionRows,
+    ).filter((f) => f.sessionId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _aiSuggestionRowsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -2495,6 +3646,11 @@ class $$InspectionSessionRowsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get aiReviewState => $composableBuilder(
+    column: $table.aiReviewState,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> sectionRowsRefs(
     Expression<bool> Function($$SectionRowsTableFilterComposer f) f,
   ) {
@@ -2536,6 +3692,31 @@ class $$InspectionSessionRowsTableFilterComposer
           }) => $$FindingRowsTableFilterComposer(
             $db: $db,
             $table: $db.findingRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> aiSuggestionRowsRefs(
+    Expression<bool> Function($$AiSuggestionRowsTableFilterComposer f) f,
+  ) {
+    final $$AiSuggestionRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.aiSuggestionRows,
+      getReferencedColumn: (t) => t.sessionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AiSuggestionRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.aiSuggestionRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2594,6 +3775,11 @@ class $$InspectionSessionRowsTableOrderingComposer
     column: $table.ownerUid,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get aiReviewState => $composableBuilder(
+    column: $table.aiReviewState,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InspectionSessionRowsTableAnnotationComposer
@@ -2632,6 +3818,11 @@ class $$InspectionSessionRowsTableAnnotationComposer
 
   GeneratedColumn<String> get ownerUid =>
       $composableBuilder(column: $table.ownerUid, builder: (column) => column);
+
+  GeneratedColumn<String> get aiReviewState => $composableBuilder(
+    column: $table.aiReviewState,
+    builder: (column) => column,
+  );
 
   Expression<T> sectionRowsRefs<T extends Object>(
     Expression<T> Function($$SectionRowsTableAnnotationComposer a) f,
@@ -2682,6 +3873,31 @@ class $$InspectionSessionRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> aiSuggestionRowsRefs<T extends Object>(
+    Expression<T> Function($$AiSuggestionRowsTableAnnotationComposer a) f,
+  ) {
+    final $$AiSuggestionRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.aiSuggestionRows,
+      getReferencedColumn: (t) => t.sessionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AiSuggestionRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.aiSuggestionRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$InspectionSessionRowsTableTableManager
@@ -2697,7 +3913,11 @@ class $$InspectionSessionRowsTableTableManager
           $$InspectionSessionRowsTableUpdateCompanionBuilder,
           (InspectionSessionRow, $$InspectionSessionRowsTableReferences),
           InspectionSessionRow,
-          PrefetchHooks Function({bool sectionRowsRefs, bool findingRowsRefs})
+          PrefetchHooks Function({
+            bool sectionRowsRefs,
+            bool findingRowsRefs,
+            bool aiSuggestionRowsRefs,
+          })
         > {
   $$InspectionSessionRowsTableTableManager(
     _$AppDatabase db,
@@ -2731,6 +3951,7 @@ class $$InspectionSessionRowsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<String?> ownerUid = const Value.absent(),
+                Value<String> aiReviewState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion(
                 id: id,
@@ -2741,6 +3962,7 @@ class $$InspectionSessionRowsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 ownerUid: ownerUid,
+                aiReviewState: aiReviewState,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2753,6 +3975,7 @@ class $$InspectionSessionRowsTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<String?> ownerUid = const Value.absent(),
+                Value<String> aiReviewState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion.insert(
                 id: id,
@@ -2763,6 +3986,7 @@ class $$InspectionSessionRowsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 ownerUid: ownerUid,
+                aiReviewState: aiReviewState,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2777,12 +4001,17 @@ class $$InspectionSessionRowsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({sectionRowsRefs = false, findingRowsRefs = false}) {
+              ({
+                sectionRowsRefs = false,
+                findingRowsRefs = false,
+                aiSuggestionRowsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (sectionRowsRefs) db.sectionRows,
                     if (findingRowsRefs) db.findingRows,
+                    if (aiSuggestionRowsRefs) db.aiSuggestionRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -2831,6 +4060,28 @@ class $$InspectionSessionRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (aiSuggestionRowsRefs)
+                        await $_getPrefetchedData<
+                          InspectionSessionRow,
+                          $InspectionSessionRowsTable,
+                          AiSuggestionRow
+                        >(
+                          currentTable: table,
+                          referencedTable:
+                              $$InspectionSessionRowsTableReferences
+                                  ._aiSuggestionRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InspectionSessionRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).aiSuggestionRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.sessionId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -2851,7 +4102,11 @@ typedef $$InspectionSessionRowsTableProcessedTableManager =
       $$InspectionSessionRowsTableUpdateCompanionBuilder,
       (InspectionSessionRow, $$InspectionSessionRowsTableReferences),
       InspectionSessionRow,
-      PrefetchHooks Function({bool sectionRowsRefs, bool findingRowsRefs})
+      PrefetchHooks Function({
+        bool sectionRowsRefs,
+        bool findingRowsRefs,
+        bool aiSuggestionRowsRefs,
+      })
     >;
 typedef $$SectionRowsTableCreateCompanionBuilder =
     SectionRowsCompanion Function({
@@ -3343,6 +4598,26 @@ final class $$FindingRowsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$AiSuggestionRowsTable, List<AiSuggestionRow>>
+  _aiSuggestionRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.aiSuggestionRows,
+    aliasName: 'finding_rows__id__ai_suggestion_rows__finding_id',
+  );
+
+  $$AiSuggestionRowsTableProcessedTableManager get aiSuggestionRowsRefs {
+    final manager = $$AiSuggestionRowsTableTableManager(
+      $_db,
+      $_db.aiSuggestionRows,
+    ).filter((f) => f.findingId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _aiSuggestionRowsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$FindingRowsTableFilterComposer
@@ -3439,6 +4714,31 @@ class $$FindingRowsTableFilterComposer
           }) => $$EvidenceRowsTableFilterComposer(
             $db: $db,
             $table: $db.evidenceRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> aiSuggestionRowsRefs(
+    Expression<bool> Function($$AiSuggestionRowsTableFilterComposer f) f,
+  ) {
+    final $$AiSuggestionRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.aiSuggestionRows,
+      getReferencedColumn: (t) => t.findingId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AiSuggestionRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.aiSuggestionRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3616,6 +4916,31 @@ class $$FindingRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> aiSuggestionRowsRefs<T extends Object>(
+    Expression<T> Function($$AiSuggestionRowsTableAnnotationComposer a) f,
+  ) {
+    final $$AiSuggestionRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.aiSuggestionRows,
+      getReferencedColumn: (t) => t.findingId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AiSuggestionRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.aiSuggestionRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$FindingRowsTableTableManager
@@ -3631,7 +4956,11 @@ class $$FindingRowsTableTableManager
           $$FindingRowsTableUpdateCompanionBuilder,
           (FindingRow, $$FindingRowsTableReferences),
           FindingRow,
-          PrefetchHooks Function({bool sessionId, bool evidenceRowsRefs})
+          PrefetchHooks Function({
+            bool sessionId,
+            bool evidenceRowsRefs,
+            bool aiSuggestionRowsRefs,
+          })
         > {
   $$FindingRowsTableTableManager(_$AppDatabase db, $FindingRowsTable table)
     : super(
@@ -3705,11 +5034,16 @@ class $$FindingRowsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({sessionId = false, evidenceRowsRefs = false}) {
+              ({
+                sessionId = false,
+                evidenceRowsRefs = false,
+                aiSuggestionRowsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (evidenceRowsRefs) db.evidenceRows,
+                    if (aiSuggestionRowsRefs) db.aiSuggestionRows,
                   ],
                   addJoins:
                       <
@@ -3764,6 +5098,27 @@ class $$FindingRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (aiSuggestionRowsRefs)
+                        await $_getPrefetchedData<
+                          FindingRow,
+                          $FindingRowsTable,
+                          AiSuggestionRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FindingRowsTableReferences
+                              ._aiSuggestionRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FindingRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).aiSuggestionRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.findingId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -3784,7 +5139,11 @@ typedef $$FindingRowsTableProcessedTableManager =
       $$FindingRowsTableUpdateCompanionBuilder,
       (FindingRow, $$FindingRowsTableReferences),
       FindingRow,
-      PrefetchHooks Function({bool sessionId, bool evidenceRowsRefs})
+      PrefetchHooks Function({
+        bool sessionId,
+        bool evidenceRowsRefs,
+        bool aiSuggestionRowsRefs,
+      })
     >;
 typedef $$EvidenceRowsTableCreateCompanionBuilder =
     EvidenceRowsCompanion Function({
@@ -4181,6 +5540,671 @@ typedef $$EvidenceRowsTableProcessedTableManager =
       EvidenceRow,
       PrefetchHooks Function({bool findingId})
     >;
+typedef $$AiSuggestionRowsTableCreateCompanionBuilder =
+    AiSuggestionRowsCompanion Function({
+      required String id,
+      required String sessionId,
+      required String findingId,
+      Value<String?> suggestedElementId,
+      Value<String?> suggestedComponentId,
+      Value<String?> suggestedDefectType,
+      Value<String?> suggestedRecommendation,
+      Value<String?> suggestedNotes,
+      Value<String?> finalElementId,
+      Value<String?> finalComponentId,
+      Value<String?> finalDefectType,
+      Value<String?> finalRecommendation,
+      Value<String?> finalNotes,
+      Value<String> status,
+      required String providerId,
+      required DateTime generatedAt,
+      Value<DateTime?> reviewedAt,
+      Value<int> rowid,
+    });
+typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
+    AiSuggestionRowsCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<String> findingId,
+      Value<String?> suggestedElementId,
+      Value<String?> suggestedComponentId,
+      Value<String?> suggestedDefectType,
+      Value<String?> suggestedRecommendation,
+      Value<String?> suggestedNotes,
+      Value<String?> finalElementId,
+      Value<String?> finalComponentId,
+      Value<String?> finalDefectType,
+      Value<String?> finalRecommendation,
+      Value<String?> finalNotes,
+      Value<String> status,
+      Value<String> providerId,
+      Value<DateTime> generatedAt,
+      Value<DateTime?> reviewedAt,
+      Value<int> rowid,
+    });
+
+final class $$AiSuggestionRowsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $AiSuggestionRowsTable, AiSuggestionRow> {
+  $$AiSuggestionRowsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $InspectionSessionRowsTable _sessionIdTable(_$AppDatabase db) =>
+      db.inspectionSessionRows.createAlias(
+        'ai_suggestion_rows__session_id__inspection_session_rows__id',
+      );
+
+  $$InspectionSessionRowsTableProcessedTableManager get sessionId {
+    final $_column = $_itemColumn<String>('session_id')!;
+
+    final manager = $$InspectionSessionRowsTableTableManager(
+      $_db,
+      $_db.inspectionSessionRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sessionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $FindingRowsTable _findingIdTable(_$AppDatabase db) => db.findingRows
+      .createAlias('ai_suggestion_rows__finding_id__finding_rows__id');
+
+  $$FindingRowsTableProcessedTableManager get findingId {
+    final $_column = $_itemColumn<String>('finding_id')!;
+
+    final manager = $$FindingRowsTableTableManager(
+      $_db,
+      $_db.findingRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_findingIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$AiSuggestionRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AiSuggestionRowsTable> {
+  $$AiSuggestionRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedElementId => $composableBuilder(
+    column: $table.suggestedElementId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedComponentId => $composableBuilder(
+    column: $table.suggestedComponentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedDefectType => $composableBuilder(
+    column: $table.suggestedDefectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedRecommendation => $composableBuilder(
+    column: $table.suggestedRecommendation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedNotes => $composableBuilder(
+    column: $table.suggestedNotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get finalElementId => $composableBuilder(
+    column: $table.finalElementId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get finalComponentId => $composableBuilder(
+    column: $table.finalComponentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get finalDefectType => $composableBuilder(
+    column: $table.finalDefectType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get finalRecommendation => $composableBuilder(
+    column: $table.finalRecommendation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get finalNotes => $composableBuilder(
+    column: $table.finalNotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$InspectionSessionRowsTableFilterComposer get sessionId {
+    final $$InspectionSessionRowsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableFilterComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$FindingRowsTableFilterComposer get findingId {
+    final $$FindingRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.findingId,
+      referencedTable: $db.findingRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FindingRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.findingRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$AiSuggestionRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AiSuggestionRowsTable> {
+  $$AiSuggestionRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedElementId => $composableBuilder(
+    column: $table.suggestedElementId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedComponentId => $composableBuilder(
+    column: $table.suggestedComponentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedDefectType => $composableBuilder(
+    column: $table.suggestedDefectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedRecommendation => $composableBuilder(
+    column: $table.suggestedRecommendation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get suggestedNotes => $composableBuilder(
+    column: $table.suggestedNotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get finalElementId => $composableBuilder(
+    column: $table.finalElementId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get finalComponentId => $composableBuilder(
+    column: $table.finalComponentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get finalDefectType => $composableBuilder(
+    column: $table.finalDefectType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get finalRecommendation => $composableBuilder(
+    column: $table.finalRecommendation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get finalNotes => $composableBuilder(
+    column: $table.finalNotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$InspectionSessionRowsTableOrderingComposer get sessionId {
+    final $$InspectionSessionRowsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableOrderingComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$FindingRowsTableOrderingComposer get findingId {
+    final $$FindingRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.findingId,
+      referencedTable: $db.findingRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FindingRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.findingRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$AiSuggestionRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AiSuggestionRowsTable> {
+  $$AiSuggestionRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get suggestedElementId => $composableBuilder(
+    column: $table.suggestedElementId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get suggestedComponentId => $composableBuilder(
+    column: $table.suggestedComponentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get suggestedDefectType => $composableBuilder(
+    column: $table.suggestedDefectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get suggestedRecommendation => $composableBuilder(
+    column: $table.suggestedRecommendation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get suggestedNotes => $composableBuilder(
+    column: $table.suggestedNotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get finalElementId => $composableBuilder(
+    column: $table.finalElementId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get finalComponentId => $composableBuilder(
+    column: $table.finalComponentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get finalDefectType => $composableBuilder(
+    column: $table.finalDefectType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get finalRecommendation => $composableBuilder(
+    column: $table.finalRecommendation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get finalNotes => $composableBuilder(
+    column: $table.finalNotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get providerId => $composableBuilder(
+    column: $table.providerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => column,
+  );
+
+  $$InspectionSessionRowsTableAnnotationComposer get sessionId {
+    final $$InspectionSessionRowsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.sessionId,
+          referencedTable: $db.inspectionSessionRows,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InspectionSessionRowsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.inspectionSessionRows,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$FindingRowsTableAnnotationComposer get findingId {
+    final $$FindingRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.findingId,
+      referencedTable: $db.findingRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FindingRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.findingRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$AiSuggestionRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AiSuggestionRowsTable,
+          AiSuggestionRow,
+          $$AiSuggestionRowsTableFilterComposer,
+          $$AiSuggestionRowsTableOrderingComposer,
+          $$AiSuggestionRowsTableAnnotationComposer,
+          $$AiSuggestionRowsTableCreateCompanionBuilder,
+          $$AiSuggestionRowsTableUpdateCompanionBuilder,
+          (AiSuggestionRow, $$AiSuggestionRowsTableReferences),
+          AiSuggestionRow,
+          PrefetchHooks Function({bool sessionId, bool findingId})
+        > {
+  $$AiSuggestionRowsTableTableManager(
+    _$AppDatabase db,
+    $AiSuggestionRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AiSuggestionRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AiSuggestionRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AiSuggestionRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> findingId = const Value.absent(),
+                Value<String?> suggestedElementId = const Value.absent(),
+                Value<String?> suggestedComponentId = const Value.absent(),
+                Value<String?> suggestedDefectType = const Value.absent(),
+                Value<String?> suggestedRecommendation = const Value.absent(),
+                Value<String?> suggestedNotes = const Value.absent(),
+                Value<String?> finalElementId = const Value.absent(),
+                Value<String?> finalComponentId = const Value.absent(),
+                Value<String?> finalDefectType = const Value.absent(),
+                Value<String?> finalRecommendation = const Value.absent(),
+                Value<String?> finalNotes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String> providerId = const Value.absent(),
+                Value<DateTime> generatedAt = const Value.absent(),
+                Value<DateTime?> reviewedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AiSuggestionRowsCompanion(
+                id: id,
+                sessionId: sessionId,
+                findingId: findingId,
+                suggestedElementId: suggestedElementId,
+                suggestedComponentId: suggestedComponentId,
+                suggestedDefectType: suggestedDefectType,
+                suggestedRecommendation: suggestedRecommendation,
+                suggestedNotes: suggestedNotes,
+                finalElementId: finalElementId,
+                finalComponentId: finalComponentId,
+                finalDefectType: finalDefectType,
+                finalRecommendation: finalRecommendation,
+                finalNotes: finalNotes,
+                status: status,
+                providerId: providerId,
+                generatedAt: generatedAt,
+                reviewedAt: reviewedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required String findingId,
+                Value<String?> suggestedElementId = const Value.absent(),
+                Value<String?> suggestedComponentId = const Value.absent(),
+                Value<String?> suggestedDefectType = const Value.absent(),
+                Value<String?> suggestedRecommendation = const Value.absent(),
+                Value<String?> suggestedNotes = const Value.absent(),
+                Value<String?> finalElementId = const Value.absent(),
+                Value<String?> finalComponentId = const Value.absent(),
+                Value<String?> finalDefectType = const Value.absent(),
+                Value<String?> finalRecommendation = const Value.absent(),
+                Value<String?> finalNotes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                required String providerId,
+                required DateTime generatedAt,
+                Value<DateTime?> reviewedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AiSuggestionRowsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                findingId: findingId,
+                suggestedElementId: suggestedElementId,
+                suggestedComponentId: suggestedComponentId,
+                suggestedDefectType: suggestedDefectType,
+                suggestedRecommendation: suggestedRecommendation,
+                suggestedNotes: suggestedNotes,
+                finalElementId: finalElementId,
+                finalComponentId: finalComponentId,
+                finalDefectType: finalDefectType,
+                finalRecommendation: finalRecommendation,
+                finalNotes: finalNotes,
+                status: status,
+                providerId: providerId,
+                generatedAt: generatedAt,
+                reviewedAt: reviewedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AiSuggestionRowsTable, AiSuggestionRow>(table),
+                  $$AiSuggestionRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({sessionId = false, findingId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (sessionId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.sessionId,
+                        referencedTable: $$AiSuggestionRowsTableReferences
+                            ._sessionIdTable(db),
+                        referencedColumn: $$AiSuggestionRowsTableReferences
+                            ._sessionIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+                    if (findingId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.findingId,
+                        referencedTable: $$AiSuggestionRowsTableReferences
+                            ._findingIdTable(db),
+                        referencedColumn: $$AiSuggestionRowsTableReferences
+                            ._findingIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$AiSuggestionRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AiSuggestionRowsTable,
+      AiSuggestionRow,
+      $$AiSuggestionRowsTableFilterComposer,
+      $$AiSuggestionRowsTableOrderingComposer,
+      $$AiSuggestionRowsTableAnnotationComposer,
+      $$AiSuggestionRowsTableCreateCompanionBuilder,
+      $$AiSuggestionRowsTableUpdateCompanionBuilder,
+      (AiSuggestionRow, $$AiSuggestionRowsTableReferences),
+      AiSuggestionRow,
+      PrefetchHooks Function({bool sessionId, bool findingId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4193,4 +6217,6 @@ class $AppDatabaseManager {
       $$FindingRowsTableTableManager(_db, _db.findingRows);
   $$EvidenceRowsTableTableManager get evidenceRows =>
       $$EvidenceRowsTableTableManager(_db, _db.evidenceRows);
+  $$AiSuggestionRowsTableTableManager get aiSuggestionRows =>
+      $$AiSuggestionRowsTableTableManager(_db, _db.aiSuggestionRows);
 }

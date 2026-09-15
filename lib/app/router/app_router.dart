@@ -1,13 +1,14 @@
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/sign_in_screen.dart';
+import '../../features/home_inspection/presentation/screens/ai_review_overview_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_configuration_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/element_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
-import '../../features/home_inspection/presentation/screens/next_stage_placeholder_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
+import '../../features/home_inspection/presentation/screens/report_placeholder_screen.dart';
 import '../presentation/home_shell_screen.dart';
 
 /// Builds a fresh router. Each [ProDefactApp] instance owns its own router
@@ -54,8 +55,12 @@ GoRouter buildAppRouter() {
         ),
       ),
       GoRoute(
-        path: NextStagePlaceholderScreen.routePath,
-        builder: (context, state) => const NextStagePlaceholderScreen(),
+        path: AiReviewOverviewScreen.routePath,
+        builder: (context, state) => const AiReviewOverviewScreen(),
+      ),
+      GoRoute(
+        path: ReportPlaceholderScreen.routePath,
+        builder: (context, state) => const ReportPlaceholderScreen(),
       ),
     ],
   );

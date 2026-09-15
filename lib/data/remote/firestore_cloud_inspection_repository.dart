@@ -12,6 +12,7 @@ import '../../core/inspection/inspection_domain.dart';
 ///     /sections/{sectionId}
 ///     /findings/{findingId}
 ///       /evidence/{evidenceId}
+///     /aiSuggestions/{suggestionId}
 ///
 /// Storage layout:
 ///   users/{uid}/inspections/{sessionId}/findings/{findingId}/{evidenceId}.jpg
@@ -199,5 +200,35 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
           // Nothing to remove remotely — not an error worth failing sync
           // over (e.g. it was never uploaded in the first place).
         });
+  }
+
+  @override
+  Future<void> pushAiSuggestion(
+    String ownerUid,
+    String sessionId,
+    AiSuggestion suggestion,
+  ) {
+    return _sessionDoc(
+      ownerUid,
+      sessionId,
+    ).collection('aiSuggestions').doc(suggestion.id).set({
+      'findingId': suggestion.findingId,
+      'providerId': suggestion.providerId,
+      'generatedAt': fs.Timestamp.fromDate(suggestion.generatedAt),
+      'suggestedElementId': suggestion.suggestedElementId,
+      'suggestedComponentId': suggestion.suggestedComponentId,
+      'suggestedDefectType': suggestion.suggestedDefectType,
+      'suggestedRecommendation': suggestion.suggestedRecommendation,
+      'suggestedNotes': suggestion.suggestedNotes,
+      'finalElementId': suggestion.finalElementId,
+      'finalComponentId': suggestion.finalComponentId,
+      'finalDefectType': suggestion.finalDefectType,
+      'finalRecommendation': suggestion.finalRecommendation,
+      'finalNotes': suggestion.finalNotes,
+      'status': suggestion.status.name,
+      'reviewedAt': suggestion.reviewedAt == null
+          ? null
+          : fs.Timestamp.fromDate(suggestion.reviewedAt!),
+    }, fs.SetOptions(merge: true));
   }
 }

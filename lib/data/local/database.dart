@@ -17,8 +17,16 @@ part 'database.g.dart';
 ///   ownership — see `docs/firebase.md`) and `storagePath` to evidence
 ///   (cloud Storage location once uploaded). Both are nullable, added
 ///   in place rather than dropping/recreating the database.
+/// - v3: (Phase 6) added `aiReviewState` to sessions and the new
+///   `AiSuggestionRows` table for AI review — see `docs/ai_review.md`.
 @DriftDatabase(
-  tables: [InspectionSessionRows, SectionRows, FindingRows, EvidenceRows],
+  tables: [
+    InspectionSessionRows,
+    SectionRows,
+    FindingRows,
+    EvidenceRows,
+    AiSuggestionRows,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
@@ -28,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -40,6 +48,13 @@ class AppDatabase extends _$AppDatabase {
           inspectionSessionRows.ownerUid,
         );
         await migrator.addColumn(evidenceRows, evidenceRows.storagePath);
+      }
+      if (from < 3) {
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.aiReviewState,
+        );
+        await migrator.createTable(aiSuggestionRows);
       }
     },
   );

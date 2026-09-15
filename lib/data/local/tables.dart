@@ -17,6 +17,11 @@ class InspectionSessionRows extends Table {
   /// session created while signed out (added in schema v2).
   TextColumn get ownerUid => text().nullable()();
 
+  /// State of the whole-session AI analysis run (added in schema v3) —
+  /// see `AiReviewState`.
+  TextColumn get aiReviewState =>
+      text().withDefault(const Constant('notStarted'))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -90,6 +95,42 @@ class EvidenceRows extends Table {
   /// Where this file lives in cloud storage once uploaded (added in
   /// schema v2). Null until the first successful upload.
   TextColumn get storagePath => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One AI suggestion for one finding (added in schema v3). The
+/// `suggested*` columns are the original AI output and are never
+/// updated after insertion; the `final*` columns hold whatever the
+/// inspector ultimately approved/corrected — see `AiSuggestion` for why
+/// these are kept separate.
+class AiSuggestionRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text().references(
+    InspectionSessionRows,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  TextColumn get findingId =>
+      text().references(FindingRows, #id, onDelete: KeyAction.cascade)();
+
+  TextColumn get suggestedElementId => text().nullable()();
+  TextColumn get suggestedComponentId => text().nullable()();
+  TextColumn get suggestedDefectType => text().nullable()();
+  TextColumn get suggestedRecommendation => text().nullable()();
+  TextColumn get suggestedNotes => text().nullable()();
+
+  TextColumn get finalElementId => text().nullable()();
+  TextColumn get finalComponentId => text().nullable()();
+  TextColumn get finalDefectType => text().nullable()();
+  TextColumn get finalRecommendation => text().nullable()();
+  TextColumn get finalNotes => text().nullable()();
+
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  TextColumn get providerId => text()();
+  DateTimeColumn get generatedAt => dateTime()();
+  DateTimeColumn get reviewedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

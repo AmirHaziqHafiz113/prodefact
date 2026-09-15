@@ -1,4 +1,3 @@
-import 'ai_review.dart';
 import 'evidence.dart';
 import 'finding_status.dart';
 
@@ -6,8 +5,11 @@ import 'finding_status.dart';
 /// optionally, a specific component) within a [Section], saved as a
 /// draft during physical inspection.
 ///
-/// [aiSuggestion] is populated later, once the full inspection is
-/// complete and AI review runs across all findings.
+/// AI review (Phase 6) is modeled separately as `AiSuggestion` records
+/// referencing this finding's [id] — see `InspectionSession.aiSuggestions`
+/// — rather than embedded here, since a finding's suggestion has its own
+/// identity, lifecycle, and persistence independent of the finding text
+/// itself.
 class Finding {
   const Finding({
     required this.id,
@@ -20,7 +22,6 @@ class Finding {
     this.notes,
     this.status = FindingStatus.draft,
     this.evidence = const [],
-    this.aiSuggestion,
   });
 
   final String id;
@@ -42,8 +43,6 @@ class Finding {
   /// Photos/other evidence attached to this finding.
   final List<Evidence> evidence;
 
-  final AiSuggestion? aiSuggestion;
-
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -52,7 +51,6 @@ class Finding {
     String? notes,
     FindingStatus? status,
     List<Evidence>? evidence,
-    AiSuggestion? aiSuggestion,
     DateTime? updatedAt,
   }) {
     return Finding(
@@ -64,7 +62,6 @@ class Finding {
       notes: notes ?? this.notes,
       status: status ?? this.status,
       evidence: evidence ?? this.evidence,
-      aiSuggestion: aiSuggestion ?? this.aiSuggestion,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

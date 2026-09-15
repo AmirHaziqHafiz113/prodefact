@@ -1,3 +1,4 @@
+import '../entities/ai_review.dart';
 import '../entities/evidence.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
@@ -56,5 +57,15 @@ abstract class CloudInspectionRepository {
     String sessionId,
     String findingId,
     String evidenceId,
+  );
+
+  /// Creates or updates one AI suggestion document, keyed by
+  /// [AiSuggestion.id] — including whatever the inspector has reviewed
+  /// so far, so the cloud record always mirrors local review state once
+  /// synced.
+  Future<void> pushAiSuggestion(
+    String ownerUid,
+    String sessionId,
+    AiSuggestion suggestion,
   );
 }

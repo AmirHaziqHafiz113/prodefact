@@ -12,6 +12,9 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
   final Map<String, String> uploadedFiles = {}; // evidenceId -> storagePath
   final List<String> deletedFindingIds = [];
   final List<String> deletedEvidenceIds = [];
+  final Map<String, AiSuggestion> pushedAiSuggestions = {};
+
+  int pushAiSuggestionCalls = 0;
 
   int pushSessionCalls = 0;
   int pushSectionsCalls = 0;
@@ -105,5 +108,16 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
     _maybeThrow();
     pushedEvidenceMetadata.remove(evidenceId);
     deletedEvidenceIds.add(evidenceId);
+  }
+
+  @override
+  Future<void> pushAiSuggestion(
+    String ownerUid,
+    String sessionId,
+    AiSuggestion suggestion,
+  ) async {
+    _maybeThrow();
+    pushAiSuggestionCalls++;
+    pushedAiSuggestions[suggestion.id] = suggestion;
   }
 }

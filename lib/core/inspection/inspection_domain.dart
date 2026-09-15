@@ -5,7 +5,13 @@
 /// and is expressed in terms of these entities.
 library;
 
+export 'ai/ai_analysis_request.dart';
+export 'ai/ai_analysis_response.dart';
+export 'ai/ai_analysis_result.dart';
+export 'ai/ai_inspection_service.dart';
+export 'ai/ai_review_coordinator.dart';
 export 'entities/ai_review.dart';
+export 'entities/ai_review_state.dart';
 export 'entities/asset_type.dart';
 export 'entities/auth_user.dart';
 export 'entities/component.dart';

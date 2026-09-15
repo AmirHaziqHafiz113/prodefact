@@ -1,6 +1,7 @@
 /// The lifecycle state of a [Finding] during physical inspection.
 ///
-/// AI review (a later phase) will introduce further states as suggestions
-/// are accepted/edited/rejected — see [AiSuggestion]. For now, every
-/// finding recorded during physical inspection is a draft.
+/// Every finding recorded during physical inspection is a draft. AI
+/// review (Phase 6) tracks its own accepted/edited/rejected states
+/// separately, on `AiSuggestion.status` — a finding itself doesn't
+/// change status just because its suggestion was reviewed.
 enum FindingStatus { draft }

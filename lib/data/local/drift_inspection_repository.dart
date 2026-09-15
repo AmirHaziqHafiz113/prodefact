@@ -110,6 +110,10 @@ class DriftInspectionRepository implements InspectionRepository {
             _db.evidenceRows,
           )..where((t) => t.findingId.isIn(findingIds))).get();
 
+    final aiSuggestionRows = await (_db.select(
+      _db.aiSuggestionRows,
+    )..where((t) => t.sessionId.equals(id))).get();
+
     final sections = sectionRows
         .map(
           (row) => Section(
@@ -159,6 +163,30 @@ class DriftInspectionRepository implements InspectionRepository {
       );
     }).toList();
 
+    final aiSuggestions = aiSuggestionRows
+        .map(
+          (row) => AiSuggestion(
+            id: row.id,
+            sessionId: row.sessionId,
+            findingId: row.findingId,
+            providerId: row.providerId,
+            generatedAt: row.generatedAt,
+            suggestedElementId: row.suggestedElementId,
+            suggestedComponentId: row.suggestedComponentId,
+            suggestedDefectType: row.suggestedDefectType,
+            suggestedRecommendation: row.suggestedRecommendation,
+            suggestedNotes: row.suggestedNotes,
+            finalElementId: row.finalElementId,
+            finalComponentId: row.finalComponentId,
+            finalDefectType: row.finalDefectType,
+            finalRecommendation: row.finalRecommendation,
+            finalNotes: row.finalNotes,
+            status: AiSuggestionStatus.values.byName(row.status),
+            reviewedAt: row.reviewedAt,
+          ),
+        )
+        .toList();
+
     return InspectionSession(
       id: sessionRow.id,
       industry: Industry.values.byName(sessionRow.industry),
@@ -171,6 +199,8 @@ class DriftInspectionRepository implements InspectionRepository {
       updatedAt: sessionRow.updatedAt,
       syncStatus: SyncStatus.values.byName(sessionRow.syncStatus),
       ownerUid: sessionRow.ownerUid,
+      aiReviewState: AiReviewState.values.byName(sessionRow.aiReviewState),
+      aiSuggestions: aiSuggestions,
     );
   }
 
@@ -372,6 +402,42 @@ class DriftInspectionRepository implements InspectionRepository {
     )..where((t) => t.id.equals(sessionId))).write(
       InspectionSessionRowsCompanion(syncStatus: Value(syncStatus.name)),
     );
+  }
+
+  @override
+  Future<void> setAiReviewState(String sessionId, AiReviewState state) async {
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(aiReviewState: Value(state.name)),
+    );
+  }
+
+  @override
+  Future<void> saveAiSuggestion(AiSuggestion suggestion) async {
+    await _db
+        .into(_db.aiSuggestionRows)
+        .insertOnConflictUpdate(
+          AiSuggestionRowsCompanion.insert(
+            id: suggestion.id,
+            sessionId: suggestion.sessionId,
+            findingId: suggestion.findingId,
+            providerId: suggestion.providerId,
+            generatedAt: suggestion.generatedAt,
+            suggestedElementId: Value(suggestion.suggestedElementId),
+            suggestedComponentId: Value(suggestion.suggestedComponentId),
+            suggestedDefectType: Value(suggestion.suggestedDefectType),
+            suggestedRecommendation: Value(suggestion.suggestedRecommendation),
+            suggestedNotes: Value(suggestion.suggestedNotes),
+            finalElementId: Value(suggestion.finalElementId),
+            finalComponentId: Value(suggestion.finalComponentId),
+            finalDefectType: Value(suggestion.finalDefectType),
+            finalRecommendation: Value(suggestion.finalRecommendation),
+            finalNotes: Value(suggestion.finalNotes),
+            status: Value(suggestion.status.name),
+            reviewedAt: Value(suggestion.reviewedAt),
+          ),
+        );
   }
 
   Future<void> _touchSession(String sessionId, DateTime timestamp) {
