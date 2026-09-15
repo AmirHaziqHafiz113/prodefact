@@ -1,11 +1,16 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:prodefact/core/inspection/entities/auth_user.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
+import 'package:prodefact/data/remote/remote_providers.dart';
+
+import 'fake_auth_service.dart';
+import 'fake_cloud_inspection_repository.dart';
 
 /// An in-memory-backed [DriftInspectionRepository] for tests — same
 /// behavior as production, no real device filesystem involved.
@@ -54,3 +59,24 @@ List<Override> testOverrides({EvidenceCaptureService? captureService}) {
     ),
   ];
 }
+
+/// Provider overrides for tests that also exercise auth/sync: a fake,
+/// already-"configured" Firebase (`firebaseReadyProvider` true) backed
+/// entirely by [FakeAuthService]/[FakeCloudInspectionRepository] — no
+/// real Firebase project is ever touched.
+List<Override> testOverridesWithSync({
+  EvidenceCaptureService? captureService,
+  FakeAuthService? authService,
+  FakeCloudInspectionRepository? cloudRepository,
+}) {
+  return [
+    ...testOverrides(captureService: captureService),
+    firebaseReadyProvider.overrideWithValue(true),
+    authServiceProvider.overrideWithValue(authService ?? FakeAuthService()),
+    cloudInspectionRepositoryProvider.overrideWithValue(
+      cloudRepository ?? FakeCloudInspectionRepository(),
+    ),
+  ];
+}
+
+const testAuthUser = AuthUser(uid: 'test-uid', email: 'inspector@example.com');

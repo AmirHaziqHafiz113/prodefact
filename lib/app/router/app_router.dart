@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/sign_in_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_configuration_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/element_inspection_screen.dart';
@@ -19,6 +20,10 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: HomeShellScreen.routePath,
         builder: (context, state) => const HomeShellScreen(),
+      ),
+      GoRoute(
+        path: SignInScreen.routePath,
+        builder: (context, state) => const SignInScreen(),
       ),
       GoRoute(
         path: InspectionSessionsScreen.routePath,

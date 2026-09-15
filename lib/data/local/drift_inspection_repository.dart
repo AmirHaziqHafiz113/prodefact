@@ -20,6 +20,7 @@ class DriftInspectionRepository implements InspectionRepository {
     required Industry industry,
     required String assetTypeId,
     required List<Section> initialSections,
+    String? ownerUid,
   }) async {
     final now = DateTime.now();
     final id = _newId('session');
@@ -35,6 +36,7 @@ class DriftInspectionRepository implements InspectionRepository {
               status: InspectionStatus.inProgress.name,
               createdAt: now,
               updatedAt: now,
+              ownerUid: Value(ownerUid),
             ),
           );
 
@@ -57,6 +59,7 @@ class DriftInspectionRepository implements InspectionRepository {
       findings: const [],
       createdAt: now,
       updatedAt: now,
+      ownerUid: ownerUid,
     );
   }
 
@@ -137,6 +140,7 @@ class DriftInspectionRepository implements InspectionRepository {
               source: EvidenceSource.values.byName(e.source),
               caption: e.caption,
               syncStatus: SyncStatus.values.byName(e.syncStatus),
+              storagePath: e.storagePath,
             ),
           )
           .toList();
@@ -166,14 +170,26 @@ class DriftInspectionRepository implements InspectionRepository {
       createdAt: sessionRow.createdAt,
       updatedAt: sessionRow.updatedAt,
       syncStatus: SyncStatus.values.byName(sessionRow.syncStatus),
+      ownerUid: sessionRow.ownerUid,
     );
   }
 
   @override
-  Future<List<InspectionSessionSummary>> listSessions() async {
-    final rows = await (_db.select(
-      _db.inspectionSessionRows,
-    )..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
+  Future<List<InspectionSessionSummary>> listSessions({
+    String? ownerUid,
+  }) async {
+    // Signed out (ownerUid == null): only still-unclaimed guest
+    // sessions. Signed in: that user's own sessions *plus* any
+    // still-unclaimed guest sessions on this device — never another
+    // user's already-claimed sessions. See docs/firebase.md.
+    final query = _db.select(_db.inspectionSessionRows)
+      ..where(
+        (t) => ownerUid == null
+            ? t.ownerUid.isNull()
+            : (t.ownerUid.equals(ownerUid) | t.ownerUid.isNull()),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
+    final rows = await query.get();
 
     return rows
         .map(
@@ -184,9 +200,20 @@ class DriftInspectionRepository implements InspectionRepository {
             status: InspectionStatus.values.byName(row.status),
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
+            syncStatus: SyncStatus.values.byName(row.syncStatus),
+            ownerUid: row.ownerUid,
           ),
         )
         .toList();
+  }
+
+  @override
+  Future<void> setSessionOwner(String sessionId, String ownerUid) async {
+    // Only claims a session that has no owner yet — never reassigns a
+    // session that already belongs to a (possibly different) user.
+    await (_db.update(_db.inspectionSessionRows)
+          ..where((t) => t.id.equals(sessionId) & t.ownerUid.isNull()))
+        .write(InspectionSessionRowsCompanion(ownerUid: Value(ownerUid)));
   }
 
   @override
@@ -283,6 +310,7 @@ class DriftInspectionRepository implements InspectionRepository {
               caption: Value(evidence.caption),
               syncStatus: Value(evidence.syncStatus.name),
               createdAt: evidence.createdAt,
+              storagePath: Value(evidence.storagePath),
             ),
           );
       await _touchSession(sessionId, now);
@@ -301,6 +329,24 @@ class DriftInspectionRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> updateEvidenceSyncState(
+    String evidenceId, {
+    required SyncStatus syncStatus,
+    String? storagePath,
+  }) async {
+    await (_db.update(
+      _db.evidenceRows,
+    )..where((t) => t.id.equals(evidenceId))).write(
+      EvidenceRowsCompanion(
+        syncStatus: Value(syncStatus.name),
+        storagePath: storagePath == null
+            ? const Value.absent()
+            : Value(storagePath),
+      ),
+    );
+  }
+
+  @override
   Future<void> setSessionStatus(
     String sessionId,
     InspectionStatus status,
@@ -313,6 +359,18 @@ class DriftInspectionRepository implements InspectionRepository {
         status: Value(status.name),
         updatedAt: Value(now),
       ),
+    );
+  }
+
+  @override
+  Future<void> setSessionSyncStatus(
+    String sessionId,
+    SyncStatus syncStatus,
+  ) async {
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(syncStatus: Value(syncStatus.name)),
     );
   }
 

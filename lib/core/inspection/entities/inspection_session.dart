@@ -24,6 +24,7 @@ class InspectionSession {
     required this.updatedAt,
     this.status = InspectionStatus.inProgress,
     this.syncStatus = SyncStatus.localOnly,
+    this.ownerUid,
   });
 
   final String id;
@@ -41,6 +42,12 @@ class InspectionSession {
   final DateTime updatedAt;
   final SyncStatus syncStatus;
 
+  /// The authenticated user this session belongs to, if any. Null means
+  /// a "guest" session created while signed out — see the ownership
+  /// policy in `docs/firebase.md`. Cloud sync only ever touches sessions
+  /// owned by the currently signed-in user.
+  final String? ownerUid;
+
   /// Whether physical inspection (and beyond) has finished — i.e. this
   /// is no longer an inspection the inspector needs to resume working
   /// physical areas on.
@@ -53,6 +60,7 @@ class InspectionSession {
     InspectionStatus? status,
     DateTime? updatedAt,
     SyncStatus? syncStatus,
+    String? ownerUid,
   }) {
     return InspectionSession(
       id: id,
@@ -65,6 +73,7 @@ class InspectionSession {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
+      ownerUid: ownerUid ?? this.ownerUid,
     );
   }
 }
@@ -79,6 +88,8 @@ class InspectionSessionSummary {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.syncStatus = SyncStatus.localOnly,
+    this.ownerUid,
   });
 
   final String id;
@@ -87,6 +98,8 @@ class InspectionSessionSummary {
   final InspectionStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final SyncStatus syncStatus;
+  final String? ownerUid;
 
   bool get isComplete => status != InspectionStatus.inProgress;
 }

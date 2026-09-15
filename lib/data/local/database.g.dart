@@ -83,6 +83,17 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _ownerUidMeta = const VerificationMeta(
+    'ownerUid',
+  );
+  @override
+  late final GeneratedColumn<String> ownerUid = GeneratedColumn<String>(
+    'owner_uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -92,6 +103,7 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     syncStatus,
     createdAt,
     updatedAt,
+    ownerUid,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -159,6 +171,12 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('owner_uid')) {
+      context.handle(
+        _ownerUidMeta,
+        ownerUid.isAcceptableOrUnknown(data['owner_uid']!, _ownerUidMeta),
+      );
+    }
     return context;
   }
 
@@ -196,6 +214,10 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      ownerUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_uid'],
+      ),
     );
   }
 
@@ -214,6 +236,10 @@ class InspectionSessionRow extends DataClass
   final String syncStatus;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// The authenticated user this session belongs to. Null for a "guest"
+  /// session created while signed out (added in schema v2).
+  final String? ownerUid;
   const InspectionSessionRow({
     required this.id,
     required this.industry,
@@ -222,6 +248,7 @@ class InspectionSessionRow extends DataClass
     required this.syncStatus,
     required this.createdAt,
     required this.updatedAt,
+    this.ownerUid,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -233,6 +260,9 @@ class InspectionSessionRow extends DataClass
     map['sync_status'] = Variable<String>(syncStatus);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || ownerUid != null) {
+      map['owner_uid'] = Variable<String>(ownerUid);
+    }
     return map;
   }
 
@@ -245,6 +275,9 @@ class InspectionSessionRow extends DataClass
       syncStatus: Value(syncStatus),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      ownerUid: ownerUid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerUid),
     );
   }
 
@@ -261,6 +294,7 @@ class InspectionSessionRow extends DataClass
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      ownerUid: serializer.fromJson<String?>(json['ownerUid']),
     );
   }
   @override
@@ -274,6 +308,7 @@ class InspectionSessionRow extends DataClass
       'syncStatus': serializer.toJson<String>(syncStatus),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'ownerUid': serializer.toJson<String?>(ownerUid),
     };
   }
 
@@ -285,6 +320,7 @@ class InspectionSessionRow extends DataClass
     String? syncStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Value<String?> ownerUid = const Value.absent(),
   }) => InspectionSessionRow(
     id: id ?? this.id,
     industry: industry ?? this.industry,
@@ -293,6 +329,7 @@ class InspectionSessionRow extends DataClass
     syncStatus: syncStatus ?? this.syncStatus,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    ownerUid: ownerUid.present ? ownerUid.value : this.ownerUid,
   );
   InspectionSessionRow copyWithCompanion(InspectionSessionRowsCompanion data) {
     return InspectionSessionRow(
@@ -307,6 +344,7 @@ class InspectionSessionRow extends DataClass
           : this.syncStatus,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      ownerUid: data.ownerUid.present ? data.ownerUid.value : this.ownerUid,
     );
   }
 
@@ -319,7 +357,8 @@ class InspectionSessionRow extends DataClass
           ..write('status: $status, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('ownerUid: $ownerUid')
           ..write(')'))
         .toString();
   }
@@ -333,6 +372,7 @@ class InspectionSessionRow extends DataClass
     syncStatus,
     createdAt,
     updatedAt,
+    ownerUid,
   );
   @override
   bool operator ==(Object other) =>
@@ -344,7 +384,8 @@ class InspectionSessionRow extends DataClass
           other.status == this.status &&
           other.syncStatus == this.syncStatus &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.ownerUid == this.ownerUid);
 }
 
 class InspectionSessionRowsCompanion
@@ -356,6 +397,7 @@ class InspectionSessionRowsCompanion
   final Value<String> syncStatus;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<String?> ownerUid;
   final Value<int> rowid;
   const InspectionSessionRowsCompanion({
     this.id = const Value.absent(),
@@ -365,6 +407,7 @@ class InspectionSessionRowsCompanion
     this.syncStatus = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.ownerUid = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InspectionSessionRowsCompanion.insert({
@@ -375,6 +418,7 @@ class InspectionSessionRowsCompanion
     this.syncStatus = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.ownerUid = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        industry = Value(industry),
@@ -390,6 +434,7 @@ class InspectionSessionRowsCompanion
     Expression<String>? syncStatus,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? ownerUid,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -400,6 +445,7 @@ class InspectionSessionRowsCompanion
       if (syncStatus != null) 'sync_status': syncStatus,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (ownerUid != null) 'owner_uid': ownerUid,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -412,6 +458,7 @@ class InspectionSessionRowsCompanion
     Value<String>? syncStatus,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<String?>? ownerUid,
     Value<int>? rowid,
   }) {
     return InspectionSessionRowsCompanion(
@@ -422,6 +469,7 @@ class InspectionSessionRowsCompanion
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      ownerUid: ownerUid ?? this.ownerUid,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -450,6 +498,9 @@ class InspectionSessionRowsCompanion
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (ownerUid.present) {
+      map['owner_uid'] = Variable<String>(ownerUid.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -466,6 +517,7 @@ class InspectionSessionRowsCompanion
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('ownerUid: $ownerUid, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1804,6 +1856,17 @@ class $EvidenceRowsTable extends EvidenceRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _storagePathMeta = const VerificationMeta(
+    'storagePath',
+  );
+  @override
+  late final GeneratedColumn<String> storagePath = GeneratedColumn<String>(
+    'storage_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1814,6 +1877,7 @@ class $EvidenceRowsTable extends EvidenceRows
     caption,
     syncStatus,
     createdAt,
+    storagePath,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1880,6 +1944,15 @@ class $EvidenceRowsTable extends EvidenceRows
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('storage_path')) {
+      context.handle(
+        _storagePathMeta,
+        storagePath.isAcceptableOrUnknown(
+          data['storage_path']!,
+          _storagePathMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1921,6 +1994,10 @@ class $EvidenceRowsTable extends EvidenceRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      storagePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}storage_path'],
+      ),
     );
   }
 
@@ -1939,6 +2016,10 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
   final String? caption;
   final String syncStatus;
   final DateTime createdAt;
+
+  /// Where this file lives in cloud storage once uploaded (added in
+  /// schema v2). Null until the first successful upload.
+  final String? storagePath;
   const EvidenceRow({
     required this.id,
     required this.findingId,
@@ -1948,6 +2029,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     this.caption,
     required this.syncStatus,
     required this.createdAt,
+    this.storagePath,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1962,6 +2044,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     }
     map['sync_status'] = Variable<String>(syncStatus);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || storagePath != null) {
+      map['storage_path'] = Variable<String>(storagePath);
+    }
     return map;
   }
 
@@ -1977,6 +2062,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           : Value(caption),
       syncStatus: Value(syncStatus),
       createdAt: Value(createdAt),
+      storagePath: storagePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storagePath),
     );
   }
 
@@ -1994,6 +2082,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       caption: serializer.fromJson<String?>(json['caption']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      storagePath: serializer.fromJson<String?>(json['storagePath']),
     );
   }
   @override
@@ -2008,6 +2097,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       'caption': serializer.toJson<String?>(caption),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'storagePath': serializer.toJson<String?>(storagePath),
     };
   }
 
@@ -2020,6 +2110,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     Value<String?> caption = const Value.absent(),
     String? syncStatus,
     DateTime? createdAt,
+    Value<String?> storagePath = const Value.absent(),
   }) => EvidenceRow(
     id: id ?? this.id,
     findingId: findingId ?? this.findingId,
@@ -2029,6 +2120,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     caption: caption.present ? caption.value : this.caption,
     syncStatus: syncStatus ?? this.syncStatus,
     createdAt: createdAt ?? this.createdAt,
+    storagePath: storagePath.present ? storagePath.value : this.storagePath,
   );
   EvidenceRow copyWithCompanion(EvidenceRowsCompanion data) {
     return EvidenceRow(
@@ -2042,6 +2134,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ? data.syncStatus.value
           : this.syncStatus,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      storagePath: data.storagePath.present
+          ? data.storagePath.value
+          : this.storagePath,
     );
   }
 
@@ -2055,7 +2150,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ..write('source: $source, ')
           ..write('caption: $caption, ')
           ..write('syncStatus: $syncStatus, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('storagePath: $storagePath')
           ..write(')'))
         .toString();
   }
@@ -2070,6 +2166,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     caption,
     syncStatus,
     createdAt,
+    storagePath,
   );
   @override
   bool operator ==(Object other) =>
@@ -2082,7 +2179,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           other.source == this.source &&
           other.caption == this.caption &&
           other.syncStatus == this.syncStatus &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.storagePath == this.storagePath);
 }
 
 class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
@@ -2094,6 +2192,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
   final Value<String?> caption;
   final Value<String> syncStatus;
   final Value<DateTime> createdAt;
+  final Value<String?> storagePath;
   final Value<int> rowid;
   const EvidenceRowsCompanion({
     this.id = const Value.absent(),
@@ -2104,6 +2203,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     this.caption = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.storagePath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EvidenceRowsCompanion.insert({
@@ -2115,6 +2215,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     this.caption = const Value.absent(),
     this.syncStatus = const Value.absent(),
     required DateTime createdAt,
+    this.storagePath = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        findingId = Value(findingId),
@@ -2129,6 +2230,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     Expression<String>? caption,
     Expression<String>? syncStatus,
     Expression<DateTime>? createdAt,
+    Expression<String>? storagePath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2140,6 +2242,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
       if (caption != null) 'caption': caption,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (createdAt != null) 'created_at': createdAt,
+      if (storagePath != null) 'storage_path': storagePath,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2153,6 +2256,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     Value<String?>? caption,
     Value<String>? syncStatus,
     Value<DateTime>? createdAt,
+    Value<String?>? storagePath,
     Value<int>? rowid,
   }) {
     return EvidenceRowsCompanion(
@@ -2164,6 +2268,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
       caption: caption ?? this.caption,
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt ?? this.createdAt,
+      storagePath: storagePath ?? this.storagePath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2195,6 +2300,9 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (storagePath.present) {
+      map['storage_path'] = Variable<String>(storagePath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2212,6 +2320,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
           ..write('caption: $caption, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
+          ..write('storagePath: $storagePath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2271,6 +2380,7 @@ typedef $$InspectionSessionRowsTableCreateCompanionBuilder =
       Value<String> syncStatus,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<String?> ownerUid,
       Value<int> rowid,
     });
 typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
@@ -2282,6 +2392,7 @@ typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
       Value<String> syncStatus,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<String?> ownerUid,
       Value<int> rowid,
     });
 
@@ -2379,6 +2490,11 @@ class $$InspectionSessionRowsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get ownerUid => $composableBuilder(
+    column: $table.ownerUid,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> sectionRowsRefs(
     Expression<bool> Function($$SectionRowsTableFilterComposer f) f,
   ) {
@@ -2473,6 +2589,11 @@ class $$InspectionSessionRowsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get ownerUid => $composableBuilder(
+    column: $table.ownerUid,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InspectionSessionRowsTableAnnotationComposer
@@ -2508,6 +2629,9 @@ class $$InspectionSessionRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerUid =>
+      $composableBuilder(column: $table.ownerUid, builder: (column) => column);
 
   Expression<T> sectionRowsRefs<T extends Object>(
     Expression<T> Function($$SectionRowsTableAnnotationComposer a) f,
@@ -2606,6 +2730,7 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> ownerUid = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion(
                 id: id,
@@ -2615,6 +2740,7 @@ class $$InspectionSessionRowsTableTableManager
                 syncStatus: syncStatus,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                ownerUid: ownerUid,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2626,6 +2752,7 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<String?> ownerUid = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion.insert(
                 id: id,
@@ -2635,6 +2762,7 @@ class $$InspectionSessionRowsTableTableManager
                 syncStatus: syncStatus,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                ownerUid: ownerUid,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3668,6 +3796,7 @@ typedef $$EvidenceRowsTableCreateCompanionBuilder =
       Value<String?> caption,
       Value<String> syncStatus,
       required DateTime createdAt,
+      Value<String?> storagePath,
       Value<int> rowid,
     });
 typedef $$EvidenceRowsTableUpdateCompanionBuilder =
@@ -3680,6 +3809,7 @@ typedef $$EvidenceRowsTableUpdateCompanionBuilder =
       Value<String?> caption,
       Value<String> syncStatus,
       Value<DateTime> createdAt,
+      Value<String?> storagePath,
       Value<int> rowid,
     });
 
@@ -3746,6 +3876,11 @@ class $$EvidenceRowsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storagePath => $composableBuilder(
+    column: $table.storagePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3817,6 +3952,11 @@ class $$EvidenceRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get storagePath => $composableBuilder(
+    column: $table.storagePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$FindingRowsTableOrderingComposer get findingId {
     final $$FindingRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3872,6 +4012,11 @@ class $$EvidenceRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get storagePath => $composableBuilder(
+    column: $table.storagePath,
+    builder: (column) => column,
+  );
 
   $$FindingRowsTableAnnotationComposer get findingId {
     final $$FindingRowsTableAnnotationComposer composer = $composerBuilder(
@@ -3933,6 +4078,7 @@ class $$EvidenceRowsTableTableManager
                 Value<String?> caption = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> storagePath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EvidenceRowsCompanion(
                 id: id,
@@ -3943,6 +4089,7 @@ class $$EvidenceRowsTableTableManager
                 caption: caption,
                 syncStatus: syncStatus,
                 createdAt: createdAt,
+                storagePath: storagePath,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3955,6 +4102,7 @@ class $$EvidenceRowsTableTableManager
                 Value<String?> caption = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 required DateTime createdAt,
+                Value<String?> storagePath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EvidenceRowsCompanion.insert(
                 id: id,
@@ -3965,6 +4113,7 @@ class $$EvidenceRowsTableTableManager
                 caption: caption,
                 syncStatus: syncStatus,
                 createdAt: createdAt,
+                storagePath: storagePath,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

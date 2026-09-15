@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../data/local/database_providers.dart';
+import '../../../data/remote/remote_providers.dart';
 import '../config/home_inspection_config.dart';
 import '../config/property_type.dart';
 import 'session_list_providers.dart';
@@ -38,13 +39,24 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       industry: Industry.homeInspection,
       assetTypeId: propertyType.name,
       initialSections: sections,
+      ownerUid: ref.read(authServiceProvider).currentUser?.uid,
     );
     state = session;
     ref.invalidate(sessionSummariesProvider);
   }
 
+  /// Loads a session for the resume screen. If it's an unclaimed
+  /// "guest" session and the inspector is now signed in, it becomes
+  /// owned by that user from this point on — see the ownership policy
+  /// in `docs/firebase.md`.
   Future<void> resume(String sessionId) async {
-    state = await _repository.loadSession(sessionId);
+    final uid = ref.read(authServiceProvider).currentUser?.uid;
+    var session = await _repository.loadSession(sessionId);
+    if (session != null && session.ownerUid == null && uid != null) {
+      await _repository.setSessionOwner(sessionId, uid);
+      session = await _repository.loadSession(sessionId);
+    }
+    state = session;
   }
 
   void clear() => state = null;
@@ -270,6 +282,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     ];
     state = session.copyWith(findings: findings, updatedAt: now);
     unawaited(_repository.removeEvidence(session.id, evidenceId));
+  }
+
+  // ---- cloud sync (Phase 5) ----
+
+  /// Pushes the active session to the cloud and refreshes in-memory
+  /// state (sync status, claimed ownership, per-evidence storage paths)
+  /// from whatever the coordinator actually persisted locally.
+  Future<SyncResult> syncNow() async {
+    final session = state;
+    if (session == null) return const SyncResult.sessionNotFound();
+
+    final result = await ref
+        .read(syncCoordinatorProvider)
+        .syncSession(session.id);
+    state = await _repository.loadSession(session.id);
+    ref.invalidate(sessionSummariesProvider);
+    return result;
   }
 }
 

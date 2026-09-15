@@ -9,10 +9,14 @@ import 'tables.dart';
 
 part 'database.g.dart';
 
-/// ProDefact's local database. This is the first schema — schema
-/// version 1 establishes the baseline via [MigrationStrategy.onCreate].
-/// Future schema changes bump [schemaVersion] and add explicit
-/// `onUpgrade` steps here rather than dropping/recreating the database.
+/// ProDefact's local database.
+///
+/// Schema history:
+/// - v1: baseline (Phase 4) — sessions, sections, findings, evidence.
+/// - v2: (Phase 5) added `ownerUid` to sessions (Firebase-user
+///   ownership — see `docs/firebase.md`) and `storagePath` to evidence
+///   (cloud Storage location once uploaded). Both are nullable, added
+///   in place rather than dropping/recreating the database.
 @DriftDatabase(
   tables: [InspectionSessionRows, SectionRows, FindingRows, EvidenceRows],
 )
@@ -24,11 +28,21 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
-  MigrationStrategy get migration =>
-      MigrationStrategy(onCreate: (migrator) => migrator.createAll());
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (migrator) => migrator.createAll(),
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.ownerUid,
+        );
+        await migrator.addColumn(evidenceRows, evidenceRows.storagePath);
+      }
+    },
+  );
 }
 
 LazyDatabase _openConnection() {

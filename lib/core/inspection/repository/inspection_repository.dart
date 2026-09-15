@@ -5,6 +5,7 @@ import '../entities/inspection.dart';
 import '../entities/inspection_session.dart';
 import '../entities/section.dart';
 import '../entities/section_status.dart';
+import '../entities/sync_status.dart';
 
 /// Durable storage for [InspectionSession]s, generic across industries.
 ///
@@ -14,20 +15,30 @@ import '../entities/section_status.dart';
 /// wrap or replace without changing callers.
 abstract class InspectionRepository {
   /// Creates and persists a new session with a stable, freshly-generated
-  /// id and the given starting sections.
+  /// id and the given starting sections. [ownerUid] is null for a
+  /// "guest" session started while signed out — see the ownership
+  /// policy in `docs/firebase.md`.
   Future<InspectionSession> createSession({
     required Industry industry,
     required String assetTypeId,
     required List<Section> initialSections,
+    String? ownerUid,
   });
 
   /// Loads a previously-created session by id, or null if it doesn't
   /// exist (e.g. it was never created, or storage was cleared).
   Future<InspectionSession?> loadSession(String id);
 
-  /// Lightweight summaries of every stored session, most recently
-  /// updated first — enough to power a resume/list screen.
-  Future<List<InspectionSessionSummary>> listSessions();
+  /// Lightweight summaries of stored sessions, most recently updated
+  /// first. Pass [ownerUid] to scope the list to sessions owned by that
+  /// user, or leave it null to list only unowned ("guest") sessions —
+  /// callers never get another user's sessions this way.
+  Future<List<InspectionSessionSummary>> listSessions({String? ownerUid});
+
+  /// Assigns an owner to a previously-unowned ("guest") session — used
+  /// when a guest session is claimed by a newly signed-in user. Never
+  /// reassigns a session that already has a different owner.
+  Future<void> setSessionOwner(String sessionId, String ownerUid);
 
   /// Replaces a session's configured sections (include/exclude, renames,
   /// custom additions/removals).
@@ -51,7 +62,18 @@ abstract class InspectionRepository {
 
   Future<void> removeEvidence(String sessionId, String evidenceId);
 
+  /// Records the outcome of a cloud upload for one piece of evidence.
+  Future<void> updateEvidenceSyncState(
+    String evidenceId, {
+    required SyncStatus syncStatus,
+    String? storagePath,
+  });
+
   Future<void> setSessionStatus(String sessionId, InspectionStatus status);
+
+  /// Records the session's cloud sync state (informational — the local
+  /// row remains the durable source of truth regardless of this value).
+  Future<void> setSessionSyncStatus(String sessionId, SyncStatus syncStatus);
 
   Future<void> close();
 }

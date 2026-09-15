@@ -13,6 +13,10 @@ class InspectionSessionRows extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
+  /// The authenticated user this session belongs to. Null for a "guest"
+  /// session created while signed out (added in schema v2).
+  TextColumn get ownerUid => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -82,6 +86,10 @@ class EvidenceRows extends Table {
   TextColumn get syncStatus =>
       text().withDefault(const Constant('localOnly'))();
   DateTimeColumn get createdAt => dateTime()();
+
+  /// Where this file lives in cloud storage once uploaded (added in
+  /// schema v2). Null until the first successful upload.
+  TextColumn get storagePath => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

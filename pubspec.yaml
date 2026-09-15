@@ -7,8 +7,12 @@ environment:
   sdk: ^3.13.3
 
 dependencies:
+  cloud_firestore: ^6.10.0
   collection: ^1.19.1
   drift: ^2.35.0
+  firebase_auth: ^6.7.0
+  firebase_core: ^4.15.0
+  firebase_storage: ^13.6.0
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.4.3
