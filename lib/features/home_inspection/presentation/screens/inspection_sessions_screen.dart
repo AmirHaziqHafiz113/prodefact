@@ -176,6 +176,10 @@ class _SessionCard extends StatelessWidget {
                         SyncStatusPill(status: summary.syncStatus, dense: true),
                       ],
                     ),
+                    if (summary.aiEligibleFindingsCount > 0) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      _AiProgressLine(summary: summary),
+                    ],
                   ],
                 ),
               ),
@@ -269,6 +273,58 @@ class _SessionCard extends StatelessWidget {
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     return 'Last updated ${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
         '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
+}
+
+/// "AI analysing inspection · 12 of 19 findings analysed · 63%" — real,
+/// count-based progress (never a fake timer/animation), computed from
+/// `InspectionSessionSummary`'s cheap AI counts. See
+/// `docs/ai_provider_architecture.md` ("AI progress on the dashboard").
+class _AiProgressLine extends StatelessWidget {
+  const _AiProgressLine({required this.summary});
+
+  final InspectionSessionSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = summary.aiEligibleFindingsCount;
+    final processed = summary.aiProcessedFindingsCount;
+    final pendingReview = summary.aiPendingReviewCount;
+    final inFlight = total - processed;
+
+    final String label;
+    final IconData icon;
+    final Color color;
+    if (inFlight > 0) {
+      final percent = total == 0 ? 0 : (processed / total * 100).round();
+      label = 'AI analysing · $processed of $total findings · $percent%';
+      icon = Icons.smart_toy_outlined;
+      color = AppColors.info;
+    } else if (pendingReview > 0) {
+      label = 'AI needs review · $pendingReview pending';
+      icon = Icons.help_outline;
+      color = AppColors.warning;
+    } else {
+      label = 'AI analysis complete';
+      icon = Icons.check_circle_outline;
+      color = AppColors.success;
+    }
+
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
   }
 }
 

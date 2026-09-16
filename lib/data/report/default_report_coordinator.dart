@@ -60,12 +60,21 @@ class DefaultReportCoordinator implements ReportCoordinator {
     if (session == null) return const ReportGenerationResult.sessionNotFound();
 
     // ---- the report gate: enforced here, not just by hiding a button ----
+    //
+    // Physical inspection progress, AI processing progress, and
+    // inspector review progress are three independent axes (see
+    // `AiProcessingProgress`/`AiReviewProgress`/`PhysicalProgress`) —
+    // all three must be settled before a report can be generated:
     if (session.status == InspectionStatus.inProgress) {
       return const ReportGenerationResult.physicalInspectionIncomplete();
     }
-    final aiReviewIncomplete =
-        session.aiReviewState != AiReviewState.completed ||
-        session.aiSuggestions.any((s) => !s.isResolved);
+    final processing = AiProcessingProgress.of(session);
+    final review = AiReviewProgress.of(session);
+    // `processing.inFlight` catches a finding still queued/uploading/
+    // analyzing (including one that was never even queued at all);
+    // `review.pending` catches one that finished processing but has an
+    // unreviewed (or needs-review, still-unresolved) suggestion.
+    final aiReviewIncomplete = processing.inFlight > 0 || review.pending > 0;
     if (aiReviewIncomplete) {
       return const ReportGenerationResult.aiReviewIncomplete();
     }

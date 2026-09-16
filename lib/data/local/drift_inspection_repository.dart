@@ -1,8 +1,26 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../core/inspection/inspection_domain.dart';
 import 'database.dart';
 import 'element_serialization.dart';
+
+/// [FindingRows.elementId] stays a NOT NULL SQL column (see its doc
+/// comment) — this sentinel round-trips "not classified" through it
+/// without a schema change.
+String? _elementIdFromRow(String raw) => raw.isEmpty ? null : raw;
+String _elementIdToRow(String? value) => value ?? '';
+
+List<String> _decodeCandidateIds(String? json) {
+  if (json == null || json.isEmpty) return const [];
+  final decoded = jsonDecode(json);
+  if (decoded is! List) return const [];
+  return decoded.whereType<String>().toList();
+}
+
+String? _encodeCandidateIds(List<String> ids) =>
+    ids.isEmpty ? null : jsonEncode(ids);
 
 /// Drift-backed implementation of [InspectionRepository]. This is the
 /// only place that touches [AppDatabase]/generated row types directly —
@@ -156,12 +174,13 @@ class DriftInspectionRepository implements InspectionRepository {
       return Finding(
         id: row.id,
         sectionId: row.sectionId,
-        elementId: row.elementId,
+        elementId: _elementIdFromRow(row.elementId),
         componentId: row.componentId,
         description: row.description,
         notes: row.notes,
         status: FindingStatus.values.byName(row.status),
         evidence: evidence,
+        aiStatus: AiFindingStatus.values.byName(row.aiStatus),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       );
@@ -175,18 +194,20 @@ class DriftInspectionRepository implements InspectionRepository {
             findingId: row.findingId,
             providerId: row.providerId,
             generatedAt: row.generatedAt,
-            suggestedElementId: row.suggestedElementId,
-            suggestedComponentId: row.suggestedComponentId,
-            suggestedDefectType: row.suggestedDefectType,
-            suggestedRecommendation: row.suggestedRecommendation,
-            suggestedNotes: row.suggestedNotes,
-            finalElementId: row.finalElementId,
-            finalComponentId: row.finalComponentId,
-            finalDefectType: row.finalDefectType,
-            finalRecommendation: row.finalRecommendation,
-            finalNotes: row.finalNotes,
+            suggestedCatalogueEntryId: row.suggestedCatalogueEntryId,
+            suggestedConfidence: row.suggestedConfidence,
+            suggestedShortReason: row.suggestedShortReason,
+            suggestedCandidateEntryIds: _decodeCandidateIds(
+              row.suggestedCandidateEntryIds,
+            ),
+            finalCatalogueEntryId: row.finalCatalogueEntryId,
             status: AiSuggestionStatus.values.byName(row.status),
             reviewedAt: row.reviewedAt,
+            legacyFinalElementId: row.finalElementId,
+            legacyFinalComponentId: row.finalComponentId,
+            legacyFinalDefectType: row.finalDefectType,
+            legacyFinalRecommendation: row.finalRecommendation,
+            legacyFinalNotes: row.finalNotes,
           ),
         )
         .toList();
@@ -235,6 +256,31 @@ class DriftInspectionRepository implements InspectionRepository {
       )
       ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
     final rows = await query.get();
+    if (rows.isEmpty) return const [];
+
+    final sessionIds = rows.map((r) => r.id).toList();
+    final eligible = await _countPerSession(
+      "SELECT session_id, COUNT(*) as c FROM finding_rows f "
+      'WHERE f.session_id IN (${_placeholders(sessionIds.length)}) '
+      'AND EXISTS (SELECT 1 FROM evidence_rows e WHERE e.finding_id = f.id) '
+      'GROUP BY session_id',
+      sessionIds,
+    );
+    final processed = await _countPerSession(
+      "SELECT session_id, COUNT(*) as c FROM finding_rows f "
+      'WHERE f.session_id IN (${_placeholders(sessionIds.length)}) '
+      "AND f.ai_status IN ('completed', 'needsReview', 'failed') "
+      'AND EXISTS (SELECT 1 FROM evidence_rows e WHERE e.finding_id = f.id) '
+      'GROUP BY session_id',
+      sessionIds,
+    );
+    final pendingReview = await _countPerSession(
+      'SELECT session_id, COUNT(*) as c FROM ai_suggestion_rows '
+      'WHERE session_id IN (${_placeholders(sessionIds.length)}) '
+      "AND status = 'pending' "
+      'GROUP BY session_id',
+      sessionIds,
+    );
 
     return rows
         .map(
@@ -247,9 +293,30 @@ class DriftInspectionRepository implements InspectionRepository {
             updatedAt: row.updatedAt,
             syncStatus: SyncStatus.values.byName(row.syncStatus),
             ownerUid: row.ownerUid,
+            aiEligibleFindingsCount: eligible[row.id] ?? 0,
+            aiProcessedFindingsCount: processed[row.id] ?? 0,
+            aiPendingReviewCount: pendingReview[row.id] ?? 0,
           ),
         )
         .toList();
+  }
+
+  String _placeholders(int count) => List.filled(count, '?').join(', ');
+
+  Future<Map<String, int>> _countPerSession(
+    String sql,
+    List<String> sessionIds,
+  ) async {
+    final rows = await _db
+        .customSelect(
+          sql,
+          variables: [for (final id in sessionIds) Variable.withString(id)],
+        )
+        .get();
+    return {
+      for (final row in rows)
+        row.read<String>('session_id'): row.read<int>('c'),
+    };
   }
 
   @override
@@ -312,15 +379,36 @@ class DriftInspectionRepository implements InspectionRepository {
               id: finding.id,
               sessionId: sessionId,
               sectionId: finding.sectionId,
-              elementId: finding.elementId,
+              elementId: _elementIdToRow(finding.elementId),
               componentId: Value(finding.componentId),
               description: Value(finding.description),
               notes: Value(finding.notes),
               status: Value(finding.status.name),
+              aiStatus: Value(finding.aiStatus.name),
               createdAt: finding.createdAt,
               updatedAt: finding.updatedAt,
             ),
           );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> setFindingAiStatus(
+    String sessionId,
+    String findingId,
+    AiFindingStatus status,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.findingRows,
+      )..where((t) => t.id.equals(findingId))).write(
+        FindingRowsCompanion(
+          aiStatus: Value(status.name),
+          updatedAt: Value(now),
+        ),
+      );
       await _touchSession(sessionId, now);
     });
   }
@@ -446,18 +534,17 @@ class DriftInspectionRepository implements InspectionRepository {
             findingId: suggestion.findingId,
             providerId: suggestion.providerId,
             generatedAt: suggestion.generatedAt,
-            suggestedElementId: Value(suggestion.suggestedElementId),
-            suggestedComponentId: Value(suggestion.suggestedComponentId),
-            suggestedDefectType: Value(suggestion.suggestedDefectType),
-            suggestedRecommendation: Value(suggestion.suggestedRecommendation),
-            suggestedNotes: Value(suggestion.suggestedNotes),
-            finalElementId: Value(suggestion.finalElementId),
-            finalComponentId: Value(suggestion.finalComponentId),
-            finalDefectType: Value(suggestion.finalDefectType),
-            finalRecommendation: Value(suggestion.finalRecommendation),
-            finalNotes: Value(suggestion.finalNotes),
             status: Value(suggestion.status.name),
             reviewedAt: Value(suggestion.reviewedAt),
+            suggestedCatalogueEntryId: Value(
+              suggestion.suggestedCatalogueEntryId,
+            ),
+            suggestedConfidence: Value(suggestion.suggestedConfidence),
+            suggestedShortReason: Value(suggestion.suggestedShortReason),
+            suggestedCandidateEntryIds: Value(
+              _encodeCandidateIds(suggestion.suggestedCandidateEntryIds),
+            ),
+            finalCatalogueEntryId: Value(suggestion.finalCatalogueEntryId),
           ),
         );
   }

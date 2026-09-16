@@ -10,7 +10,9 @@ import '../support/test_repository.dart';
 /// access.
 class _ThrowingAiInspectionService implements AiInspectionService {
   @override
-  Future<AiAnalysisResponse> analyze(AiAnalysisRequest request) {
+  Future<AiFindingClassification> classifyFinding(
+    AiFindingClassificationRequest request,
+  ) {
     throw Exception('simulated AI backend failure');
   }
 }
@@ -30,6 +32,8 @@ Section _bathroomSection() {
   );
 }
 
+/// A camera-first finding with one photo — the only kind of finding
+/// progressive AI classification ever acts on (`Finding.isAiEligible`).
 Future<Finding> _addFinding(
   DriftInspectionRepository repository,
   String sessionId, {
@@ -40,13 +44,20 @@ Future<Finding> _addFinding(
   final finding = Finding(
     id: id,
     sectionId: 'master_bathroom',
-    elementId: 'floor',
-    componentId: 'floor_tile',
     description: description,
     createdAt: now,
     updatedAt: now,
   );
   await repository.saveFinding(sessionId, finding);
+  await repository.addEvidence(
+    sessionId,
+    Evidence(
+      id: '${id}_evidence',
+      findingId: id,
+      filePath: '/fake/$id.jpg',
+      createdAt: now,
+    ),
+  );
   return finding;
 }
 
@@ -59,184 +70,200 @@ void main() {
 
   tearDown(() => local.close());
 
+  test('classifying a finding with no evidence reports noEvidence', () async {
+    final session = await local.createSession(
+      industry: Industry.homeInspection,
+      assetTypeId: 'highRise',
+      initialSections: [_bathroomSection()],
+    );
+    final now = DateTime.now();
+    await local.saveFinding(
+      session.id,
+      Finding(
+        id: 'finding_1',
+        sectionId: 'master_bathroom',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    final coordinator = DefaultAiClassificationCoordinator(
+      localRepository: local,
+      aiService: FakeAiInspectionService(),
+    );
+
+    final result = await coordinator.classifyFinding(session.id, 'finding_1');
+
+    expect(result.outcome, AiClassificationOutcome.noEvidence);
+    final reloaded = await local.loadSession(session.id);
+    expect(reloaded!.aiSuggestions, isEmpty);
+  });
+
+  test('classifying an eligible finding succeeds and persists a '
+      'suggestion', () async {
+    final session = await local.createSession(
+      industry: Industry.homeInspection,
+      assetTypeId: 'highRise',
+      initialSections: [_bathroomSection()],
+    );
+    await _addFinding(local, session.id);
+    final coordinator = DefaultAiClassificationCoordinator(
+      localRepository: local,
+      aiService: FakeAiInspectionService(),
+    );
+
+    final result = await coordinator.classifyFinding(session.id, 'finding_1');
+
+    expect(result.isSuccess, isTrue);
+    final reloaded = await local.loadSession(session.id);
+    expect(reloaded!.aiSuggestions, hasLength(1));
+    expect(
+      reloaded.findings.single.aiStatus,
+      anyOf(AiFindingStatus.completed, AiFindingStatus.needsReview),
+    );
+  });
+
   test(
-    'AI cannot run before physical inspection completion (the gate)',
+    'the fake AI produces a suggestion referencing the correct '
+    'session/finding, resolved against the real controlled catalogue',
     () async {
       final session = await local.createSession(
         industry: Industry.homeInspection,
         assetTypeId: 'highRise',
         initialSections: [_bathroomSection()],
       );
-      await _addFinding(local, session.id);
-      final coordinator = DefaultAiReviewCoordinator(
+      final finding = await _addFinding(local, session.id);
+      final coordinator = DefaultAiClassificationCoordinator(
         localRepository: local,
         aiService: FakeAiInspectionService(),
       );
 
-      final result = await coordinator.runAnalysis(session.id);
+      await coordinator.classifyFinding(session.id, finding.id);
 
-      expect(result.outcome, AiAnalysisOutcome.notReady);
       final reloaded = await local.loadSession(session.id);
-      expect(reloaded!.aiSuggestions, isEmpty);
-      expect(reloaded.aiReviewState, AiReviewState.notStarted);
+      final suggestion = reloaded!.aiSuggestions.single;
+      expect(suggestion.sessionId, session.id);
+      expect(suggestion.findingId, finding.id);
+      expect(suggestion.providerId, isNotEmpty);
+      expect(suggestion.status, AiSuggestionStatus.pending);
+      // "Master Bathroom" (a plumbing area) deterministically matches the
+      // fake AI's sanitary_fitting keyword — a genuinely valid catalogue
+      // entry, never a fabricated one.
+      expect(suggestion.suggestedCatalogueEntryId, isNotNull);
+      expect(
+        DefectCatalogue.instance.isValidEntryId(
+          suggestion.suggestedCatalogueEntryId!,
+        ),
+        isTrue,
+      );
     },
   );
 
-  test('AI can run once physical inspection is complete', () async {
-    final session = await local.createSession(
-      industry: Industry.homeInspection,
-      assetTypeId: 'highRise',
-      initialSections: [_bathroomSection()],
-    );
-    await _addFinding(local, session.id);
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
-    );
-    final coordinator = DefaultAiReviewCoordinator(
-      localRepository: local,
-      aiService: FakeAiInspectionService(),
-    );
-
-    final result = await coordinator.runAnalysis(session.id);
-
-    expect(result.isSuccess, isTrue);
-    final reloaded = await local.loadSession(session.id);
-    expect(reloaded!.aiReviewState, AiReviewState.readyForReview);
-    expect(reloaded.aiSuggestions, hasLength(1));
-  });
-
-  test('the fake AI produces a structured suggestion referencing the '
-      'correct session/finding, with original output persisted', () async {
-    final session = await local.createSession(
-      industry: Industry.homeInspection,
-      assetTypeId: 'highRise',
-      initialSections: [_bathroomSection()],
-    );
-    final finding = await _addFinding(local, session.id);
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
-    );
-    final coordinator = DefaultAiReviewCoordinator(
-      localRepository: local,
-      aiService: FakeAiInspectionService(),
-    );
-
-    await coordinator.runAnalysis(session.id);
-
-    final reloaded = await local.loadSession(session.id);
-    final suggestion = reloaded!.aiSuggestions.single;
-    expect(suggestion.sessionId, session.id);
-    expect(suggestion.findingId, finding.id);
-    expect(suggestion.providerId, FakeAiInspectionService.providerId);
-    expect(suggestion.suggestedDefectType, 'Cracked/loose floor tile');
-    expect(
-      suggestion.suggestedRecommendation,
-      'Replace the affected tile(s) and reseal grout lines.',
-    );
-    expect(suggestion.status, AiSuggestionStatus.pending);
-    // Notes mention the plumbing area, since Master Bathroom is one.
-    expect(suggestion.suggestedNotes, contains('Plumbing-related area'));
-  });
-
   test('a missing session reports sessionNotFound', () async {
-    final coordinator = DefaultAiReviewCoordinator(
+    final coordinator = DefaultAiClassificationCoordinator(
       localRepository: local,
       aiService: FakeAiInspectionService(),
     );
-    final result = await coordinator.runAnalysis('does-not-exist');
-    expect(result.outcome, AiAnalysisOutcome.sessionNotFound);
+    final result = await coordinator.classifyFinding(
+      'does-not-exist',
+      'finding_1',
+    );
+    expect(result.outcome, AiClassificationOutcome.sessionNotFound);
   });
 
-  test('a failed analysis preserves all physical inspection data and marks '
-      'the session failed', () async {
+  test('a missing finding reports findingNotFound', () async {
+    final session = await local.createSession(
+      industry: Industry.homeInspection,
+      assetTypeId: 'highRise',
+      initialSections: [_bathroomSection()],
+    );
+    final coordinator = DefaultAiClassificationCoordinator(
+      localRepository: local,
+      aiService: FakeAiInspectionService(),
+    );
+    final result = await coordinator.classifyFinding(
+      session.id,
+      'does-not-exist',
+    );
+    expect(result.outcome, AiClassificationOutcome.findingNotFound);
+  });
+
+  test('a failed classification preserves all physical inspection data '
+      'and marks the finding failed', () async {
     final session = await local.createSession(
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
     );
     await _addFinding(local, session.id, description: 'Original finding');
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
-    );
-    final coordinator = DefaultAiReviewCoordinator(
+    final coordinator = DefaultAiClassificationCoordinator(
       localRepository: local,
       aiService: _ThrowingAiInspectionService(),
     );
 
-    final result = await coordinator.runAnalysis(session.id);
+    final result = await coordinator.classifyFinding(session.id, 'finding_1');
 
-    expect(result.outcome, AiAnalysisOutcome.failure);
+    expect(result.outcome, AiClassificationOutcome.failure);
     final reloaded = await local.loadSession(session.id);
-    expect(reloaded!.aiReviewState, AiReviewState.failed);
-    expect(reloaded.aiSuggestions, isEmpty);
+    expect(reloaded!.aiSuggestions, isEmpty);
+    expect(reloaded.findings.single.aiStatus, AiFindingStatus.failed);
     // Physical inspection data itself is completely untouched.
     expect(reloaded.findings, hasLength(1));
     expect(reloaded.findings.single.description, 'Original finding');
   });
 
-  test('a failed analysis can be retried and then succeeds, without '
-      'duplicating suggestions', () async {
-    final session = await local.createSession(
-      industry: Industry.homeInspection,
-      assetTypeId: 'highRise',
-      initialSections: [_bathroomSection()],
-    );
-    await _addFinding(local, session.id, id: 'finding_1');
-    await _addFinding(local, session.id, id: 'finding_2');
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
-    );
-
-    final failingCoordinator = DefaultAiReviewCoordinator(
-      localRepository: local,
-      aiService: _ThrowingAiInspectionService(),
-    );
-    final firstAttempt = await failingCoordinator.runAnalysis(session.id);
-    expect(firstAttempt.isSuccess, isFalse);
-
-    final workingCoordinator = DefaultAiReviewCoordinator(
-      localRepository: local,
-      aiService: FakeAiInspectionService(),
-    );
-    final secondAttempt = await workingCoordinator.runAnalysis(session.id);
-    expect(secondAttempt.isSuccess, isTrue);
-
-    final reloaded = await local.loadSession(session.id);
-    expect(reloaded!.aiReviewState, AiReviewState.readyForReview);
-    // Exactly one suggestion per finding — the failed attempt saved
-    // nothing, so the retry has nothing to duplicate.
-    expect(reloaded.aiSuggestions, hasLength(2));
-    expect(reloaded.aiSuggestions.map((s) => s.findingId).toSet(), {
-      'finding_1',
-      'finding_2',
-    });
-  });
-
-  test('calling runAnalysis again once review is underway does not '
-      'regenerate suggestions (idempotent, no duplicates)', () async {
+  test('a failed classification can be retried and then succeeds, '
+      'without duplicating suggestions (idempotent retry)', () async {
     final session = await local.createSession(
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
     );
     await _addFinding(local, session.id);
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
+
+    final failingCoordinator = DefaultAiClassificationCoordinator(
+      localRepository: local,
+      aiService: _ThrowingAiInspectionService(),
     );
-    final coordinator = DefaultAiReviewCoordinator(
+    final firstAttempt = await failingCoordinator.classifyFinding(
+      session.id,
+      'finding_1',
+    );
+    expect(firstAttempt.isSuccess, isFalse);
+
+    final workingCoordinator = DefaultAiClassificationCoordinator(
+      localRepository: local,
+      aiService: FakeAiInspectionService(),
+    );
+    final secondAttempt = await workingCoordinator.classifyFinding(
+      session.id,
+      'finding_1',
+    );
+    expect(secondAttempt.isSuccess, isTrue);
+
+    final reloaded = await local.loadSession(session.id);
+    // Exactly one suggestion — the failed attempt saved nothing, and
+    // the suggestion id is deterministic (keyed by findingId), so the
+    // retry upserts rather than duplicating.
+    expect(reloaded!.aiSuggestions, hasLength(1));
+  });
+
+  test('classifying an already-completed finding again does not '
+      'duplicate/re-run (idempotent, no duplicates)', () async {
+    final session = await local.createSession(
+      industry: Industry.homeInspection,
+      assetTypeId: 'highRise',
+      initialSections: [_bathroomSection()],
+    );
+    await _addFinding(local, session.id);
+    final coordinator = DefaultAiClassificationCoordinator(
       localRepository: local,
       aiService: FakeAiInspectionService(),
     );
 
-    final first = await coordinator.runAnalysis(session.id);
+    final first = await coordinator.classifyFinding(session.id, 'finding_1');
     expect(first.isSuccess, isTrue);
-    final second = await coordinator.runAnalysis(session.id);
-    expect(second.outcome, AiAnalysisOutcome.alreadyReviewed);
+    final second = await coordinator.classifyFinding(session.id, 'finding_1');
+    expect(second.outcome, AiClassificationOutcome.alreadyInFlight);
 
     final reloaded = await local.loadSession(session.id);
     expect(reloaded!.aiSuggestions, hasLength(1));

@@ -1,66 +1,91 @@
 import {AiProvider, AiProviderError} from "./provider";
+import {defectCatalogue} from "./defect_catalogue";
 import {
-  AnalyzeInspectionInput,
-  AnalyzeInspectionResult,
+  ClassificationResult,
+  ClassifyFindingInput,
   FindingImages,
-  FindingInput,
 } from "./types";
 
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 
 // deepseek-flash is DeepSeek's current multimodal (text + image) chat
 // model — see docs/ai_provider_architecture.md ("Active provider:
-// DeepSeek") for the API reference this was verified against. It
-// replaces the earlier text-only `deepseek-chat` integration now that
-// evidence photos are resolved and sent alongside each finding's
-// structured context.
+// DeepSeek") for the API reference this was verified against.
 const DEEPSEEK_MODEL = "deepseek-flash";
 
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 1;
 
 /**
- * Builds the system prompt: the JSON contract, plus explicit
- * instructions to distinguish what's actually visible in a photo from
- * inference, and to say so rather than invent a defect when evidence
- * is unclear, irrelevant, or insufficient.
+ * Builds the compact catalogue listing embedded in the system prompt —
+ * id, main element, component, and defect description only. The
+ * corrective action is deliberately never sent to the model: it's
+ * resolved server-side from whichever id the model returns, so a
+ * hallucinated or altered corrective action can never reach the
+ * inspector. Sending the *entire* catalogue every request (rather than
+ * a deterministic subset keyed off the area name) is a deliberate
+ * choice — this is one small request per finding now, not one huge
+ * per-session batch, so the absolute per-request cost stays bounded,
+ * and a partial/guessed subset risks the model being unable to find
+ * the actually-correct entry for an area whose defects don't map
+ * cleanly to its name (see docs/ai_provider_architecture.md, "Why the
+ * full catalogue").
+ * @return {string} the catalogue listing, one line per defect entry.
+ */
+function buildCatalogueListing(): string {
+  return defectCatalogue.entries
+    .map(
+      (e) =>
+        `${e.id} | ${e.mainElementName} | ${e.componentName} | ` +
+        e.defectDescription
+    )
+    .join("\n");
+}
+
+/**
+ * Builds the system prompt: the controlled catalogue, the JSON
+ * contract, and explicit instructions to select only from the given
+ * ids, to say so when uncertain, and to distinguish what's visible in
+ * a photo from what's inferred.
  * @return {string} the system prompt.
  */
 function buildSystemPrompt(): string {
-  const jsonShape = "{\"suggestions\": [{\"findingId\": string, " +
-    "\"suggestedElement\": string, \"suggestedComponent\": string, " +
-    "\"defectType\": string, \"recommendation\": string, " +
-    "\"notes\": string}]}";
+  const jsonShape = "{\"catalogueEntryId\": string | null, " +
+    "\"confidence\": number, \"shortReason\": string, " +
+    "\"candidateEntryIds\": string[], \"needsReview\": boolean}";
   return [
-    "You are ProDefact's professional home inspection analysis",
-    "engine. You can see photos as well as read the inspector's text.",
+    "You are ProDefact's professional home inspection defect",
+    "classification engine. You can see a photo of one defect plus",
+    "the inspector's own optional note and the area it was found in.",
     "",
-    "Analyze completed physical inspection findings, using both the",
-    "inspector's own observations/notes AND any attached photos.",
+    "You must classify this finding by choosing exactly ONE entry",
+    "from the CONTROLLED DEFECT CATALOGUE below, identified by its",
+    "id. You are NEVER allowed to invent a main element, component,",
+    "defect, or corrective action that is not one of the ids listed.",
+    "The catalogue format is: id | main element | component | defect",
+    "description.",
+    "",
+    "CONTROLLED DEFECT CATALOGUE:",
+    buildCatalogueListing(),
     "",
     "You are advisory only. The human inspector is the final",
-    "authority — never state or imply otherwise.",
+    "authority and reviews every classification — never state or",
+    "imply otherwise.",
     "",
-    "When a photo is attached, clearly distinguish in your notes:",
-    "what is directly visible in the photo, what is inference from",
-    "context (not literally shown), and where the evidence is",
-    "unclear, irrelevant, corrupted, or insufficient to support a",
-    "conclusion. If a photo does not clearly show a defect, say so —",
-    "never invent a defect the photo doesn't actually support. If a",
-    "finding has no usable photo, rely on the inspector's text alone",
-    "and note that no visual evidence was available.",
-    "",
-    "Use only the inspector's own observations, notes, area/element",
-    "context, and attached photos. Do not invent facts not present",
-    "in the input. If uncertain, give a conservative recommendation",
-    "and say so in the notes.",
+    "In your notes/reason, clearly distinguish what is directly",
+    "visible in the photo from what is inference from context. If",
+    "the photo is unclear, irrelevant, or does not clearly match any",
+    "catalogue entry, or if multiple entries are similarly plausible,",
+    "set needsReview to true and catalogueEntryId to null — do NOT",
+    "guess an entry just to have an answer. You may still list up to",
+    "3 plausible catalogueEntryIds in candidateEntryIds even when",
+    "needsReview is true, so the inspector has a shortlist.",
     "",
     "Respond with JSON only, shaped exactly as:",
     jsonShape,
     "",
-    "Return exactly one suggestion per findingId given to you, using",
-    "the same findingId values — never invent, omit, or duplicate a",
-    "findingId.",
+    "catalogueEntryId must be exactly one of the ids from the",
+    "catalogue above, or null. Never invent a new id.",
   ].join("\n");
 }
 
@@ -69,50 +94,42 @@ type DeepSeekContentBlock =
   | {type: "image_url"; image_url: {url: string; detail: "auto"}};
 
 /**
- * Builds one finding's multimodal user-message content: its
- * structured text context first, followed by any resolved photos —
- * see docs/ai_provider_architecture.md ("Vision request format").
- * @param {FindingInput} finding the finding's structured context.
- * @param {FindingImages | undefined} images that finding's resolved
- *   images, if any.
+ * Builds the finding's multimodal user-message content: its structured
+ * text context first, followed by any resolved photos.
+ * @param {ClassifyFindingInput} input the finding's structured context.
+ * @param {FindingImages} images that finding's resolved images.
  * @return {DeepSeekContentBlock[]} the content blocks for this finding.
  */
 function buildFindingContent(
-  finding: FindingInput,
-  images: FindingImages | undefined
+  input: ClassifyFindingInput,
+  images: FindingImages
 ): DeepSeekContentBlock[] {
   const lines = [
-    `findingId: ${finding.findingId}`,
-    `area: ${finding.area}${finding.isPlumbingArea ? " (plumbing area)" : ""}`,
-    `element: ${finding.element}`,
+    `findingId: ${input.findingId}`,
+    `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`,
   ];
-  if (finding.component) lines.push(`component: ${finding.component}`);
-  if (finding.description) {
-    lines.push(`inspector description: ${finding.description}`);
-  }
-  if (finding.notes) lines.push(`inspector notes: ${finding.notes}`);
+  if (input.note) lines.push(`inspector note: ${input.note}`);
 
-  const photoCount = images?.images.length ?? 0;
-  const unavailable = images?.unavailableCount ?? 0;
+  const photoCount = images.images.length;
   if (photoCount > 0) {
     lines.push(`attached photos: ${photoCount}`);
-  } else if (finding.evidenceCount > 0) {
-    lines.push(
-      "attached photos: none usable for this finding " +
-        "(missing, not yet synced, or unreadable) — rely on the " +
-        "text above only"
-    );
   } else {
-    lines.push("attached photos: none");
+    lines.push(
+      "attached photos: none usable (missing, not yet synced, or " +
+        "unreadable) — rely on the area/note above only"
+    );
   }
-  if (unavailable > 0) {
-    lines.push(`(${unavailable} additional photo(s) could not be processed)`);
+  if (images.unavailableCount > 0) {
+    lines.push(
+      `(${images.unavailableCount} additional photo(s) could not be ` +
+        "processed)"
+    );
   }
 
   const blocks: DeepSeekContentBlock[] = [
     {type: "text", text: lines.join("\n")},
   ];
-  for (const image of images?.images ?? []) {
+  for (const image of images.images) {
     blocks.push({
       type: "image_url",
       image_url: {
@@ -130,30 +147,33 @@ interface DeepSeekChatResponse {
 
 /**
  * Structurally validates the raw parsed JSON before it's trusted at
- * all.
+ * all — `gateway.validateAndNormalize` performs the real, catalogue-
+ * aware validation before this data is used for anything.
  * @param {unknown} raw the parsed JSON body from the model.
- * @return {unknown[]} the raw suggestion entries, filtered to ones
- *   that at least have a string findingId — still untrusted beyond
- *   that; `gateway.validateAndNormalize` performs the real field-level
- *   validation before this data is used.
+ * @param {string} findingId the finding this response is for.
+ * @return {ClassificationResult} the raw (not yet catalogue-validated)
+ *   classification.
  */
-function parseSuggestionsPayload(
-  raw: unknown
-): AnalyzeInspectionResult["suggestions"] {
+function parseClassificationPayload(
+  raw: unknown,
+  findingId: string
+): ClassificationResult {
   if (typeof raw !== "object" || raw === null) {
     throw new AiProviderError("DeepSeek response was not a JSON object.");
   }
-  const suggestions = (raw as { suggestions?: unknown }).suggestions;
-  if (!Array.isArray(suggestions)) {
-    throw new AiProviderError("DeepSeek response had no suggestions array.");
-  }
-  const withFindingId = suggestions.filter(
-    (s): s is Record<string, unknown> => {
-      if (typeof s !== "object" || s === null) return false;
-      return typeof (s as { findingId?: unknown }).findingId === "string";
-    }
-  );
-  return withFindingId as unknown as AnalyzeInspectionResult["suggestions"];
+  const r = raw as Record<string, unknown>;
+  return {
+    findingId,
+    catalogueEntryId:
+      typeof r.catalogueEntryId === "string" ? r.catalogueEntryId : undefined,
+    confidence: typeof r.confidence === "number" ? r.confidence : undefined,
+    shortReason:
+      typeof r.shortReason === "string" ? r.shortReason : undefined,
+    candidateEntryIds: Array.isArray(r.candidateEntryIds) ?
+      r.candidateEntryIds.filter((x): x is string => typeof x === "string") :
+      [],
+    needsReview: r.needsReview === true,
+  };
 }
 
 /**
@@ -179,10 +199,11 @@ async function fetchWithTimeout(
 
 /**
  * Real, production DeepSeek adapter — the only file that knows the
- * DeepSeek request/response shape. Multimodal: sends each finding's
+ * DeepSeek request/response shape. Multimodal: sends the finding's
  * structured context plus any resolved evidence photos (already
  * downloaded/validated/normalized by `ai/evidence.ts` before this
- * class ever sees them).
+ * class ever sees them), and classifies against the controlled defect
+ * catalogue rather than freely inventing a defect/recommendation.
  */
 export class DeepSeekProvider implements AiProvider {
   readonly id = "deepseek";
@@ -194,40 +215,24 @@ export class DeepSeekProvider implements AiProvider {
   constructor(private readonly apiKey: string) {}
 
   /** @inheritdoc */
-  async analyzeInspection(
-    input: AnalyzeInspectionInput,
-    images: FindingImages[]
-  ): Promise<AnalyzeInspectionResult> {
-    const imagesByFinding = new Map(images.map((i) => [i.findingId, i]));
-
+  async classifyFinding(
+    input: ClassifyFindingInput,
+    images: FindingImages
+  ): Promise<ClassificationResult> {
     const requestBody = {
       model: DEEPSEEK_MODEL,
       temperature: 0.2,
       response_format: {type: "json_object"},
       messages: [
         {role: "system", content: buildSystemPrompt()},
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `propertyType: ${input.propertyType}\n` +
-                `inspectionId: ${input.inspectionId}\n` +
-                "findings follow, each with any attached photos:",
-            },
-            ...input.findings.flatMap((finding) => {
-              const findingImages = imagesByFinding.get(finding.findingId);
-              return buildFindingContent(finding, findingImages);
-            }),
-          ],
-        },
+        {role: "user", content: buildFindingContent(input, images)},
       ],
     };
 
     let lastError: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await this.callOnce(requestBody);
+        return await this.callOnce(requestBody, input.findingId);
       } catch (error) {
         lastError = error;
         // Only retry a transient failure (timeout/network/5xx) —
@@ -249,11 +254,13 @@ export class DeepSeekProvider implements AiProvider {
    * Performs one DeepSeek chat-completion call and validates the
    * response shape.
    * @param {Record<string, unknown>} requestBody the request body.
-   * @return {Promise<AnalyzeInspectionResult>} the validated result.
+   * @param {string} findingId the finding this request is for.
+   * @return {Promise<ClassificationResult>} the validated result.
    */
   private async callOnce(
-    requestBody: Record<string, unknown>
-  ): Promise<AnalyzeInspectionResult> {
+    requestBody: Record<string, unknown>,
+    findingId: string
+  ): Promise<ClassificationResult> {
     let response: Response;
     try {
       response = await fetchWithTimeout(
@@ -297,9 +304,6 @@ export class DeepSeekProvider implements AiProvider {
       throw new AiProviderError("DeepSeek returned invalid JSON.", error);
     }
 
-    return {
-      providerId: this.id,
-      suggestions: parseSuggestionsPayload(parsedContent),
-    };
+    return parseClassificationPayload(parsedContent, findingId);
   }
 }

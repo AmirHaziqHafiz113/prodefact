@@ -9,24 +9,20 @@ import '../support/fake_report_services.dart';
 import '../support/test_repository.dart';
 
 /// A fake AI backend with an artificial delay, so two concurrent
-/// `runAnalysis` calls have a real window in which to race each other —
-/// a plain synchronous fake wouldn't reliably exercise the race, since
-/// the first call could complete before the second even starts.
+/// `classifyFinding` calls have a real window in which to race each
+/// other — a plain synchronous fake wouldn't reliably exercise the
+/// race, since the first call could complete before the second even
+/// starts.
 class _SlowAiInspectionService implements AiInspectionService {
   @override
-  Future<AiAnalysisResponse> analyze(AiAnalysisRequest request) async {
+  Future<AiFindingClassification> classifyFinding(
+    AiFindingClassificationRequest request,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    return AiAnalysisResponse(
-      providerId: 'slow-fake-v1',
-      suggestions: request.findings
-          .map(
-            (finding) => AiFindingSuggestion(
-              findingId: finding.findingId,
-              defectType: 'Detected defect',
-              recommendation: 'Recommended action',
-            ),
-          )
-          .toList(),
+    return AiFindingClassification(
+      findingId: request.findingId,
+      catalogueEntryId: DefectCatalogue.instance.entries.first.id,
+      needsReview: false,
     );
   }
 }
@@ -56,53 +52,64 @@ Section _bathroomSection() {
 }
 
 void main() {
-  test('double-tapping "Start AI Analysis" (two concurrent runAnalysis '
-      'calls) never duplicates suggestions', () async {
-    final local = createInMemoryRepository();
-    addTearDown(local.close);
-    final session = await local.createSession(
-      industry: Industry.homeInspection,
-      assetTypeId: 'highRise',
-      initialSections: [_bathroomSection()],
-    );
-    await local.saveFinding(
-      session.id,
-      Finding(
-        id: 'finding_1',
-        sectionId: 'master_bathroom',
-        elementId: 'floor',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
-    await local.setSessionStatus(
-      session.id,
-      InspectionStatus.physicalInspectionComplete,
-    );
-    final coordinator = DefaultAiReviewCoordinator(
-      localRepository: local,
-      aiService: _SlowAiInspectionService(),
-    );
+  test(
+    'double-triggering AI classification for the same finding (two '
+    'concurrent classifyFinding calls) never duplicates suggestions',
+    () async {
+      final local = createInMemoryRepository();
+      addTearDown(local.close);
+      final session = await local.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: [_bathroomSection()],
+      );
+      final now = DateTime.now();
+      await local.saveFinding(
+        session.id,
+        Finding(
+          id: 'finding_1',
+          sectionId: 'master_bathroom',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await local.addEvidence(
+        session.id,
+        Evidence(
+          id: 'evidence_1',
+          findingId: 'finding_1',
+          filePath: '/fake/finding_1.jpg',
+          createdAt: now,
+        ),
+      );
+      final coordinator = DefaultAiClassificationCoordinator(
+        localRepository: local,
+        aiService: _SlowAiInspectionService(),
+      );
 
-    // Fired concurrently — neither awaited before the other starts,
-    // exactly like two taps of the same button in quick succession.
-    final results = await Future.wait([
-      coordinator.runAnalysis(session.id),
-      coordinator.runAnalysis(session.id),
-    ]);
+      // Fired concurrently — neither awaited before the other starts,
+      // exactly like a retry triggered while the first call is still in
+      // flight.
+      final results = await Future.wait([
+        coordinator.classifyFinding(session.id, 'finding_1'),
+        coordinator.classifyFinding(session.id, 'finding_1'),
+      ]);
 
-    // Exactly one of the two actually ran analysis; the other was
-    // rejected by the in-flight guard rather than racing it.
-    expect(results.where((r) => r.isSuccess).length, 1);
-    expect(
-      results.where((r) => r.outcome == AiAnalysisOutcome.alreadyReviewed),
-      hasLength(1),
-    );
+      // Exactly one of the two actually ran classification; the other was
+      // rejected by the in-flight guard rather than racing it.
+      expect(results.where((r) => r.isSuccess).length, 1);
+      expect(
+        results.where(
+          (r) => r.outcome == AiClassificationOutcome.alreadyInFlight,
+        ),
+        hasLength(1),
+      );
 
-    final reloaded = await local.loadSession(session.id);
-    // Exactly one suggestion for the one finding — never duplicated.
-    expect(reloaded!.aiSuggestions, hasLength(1));
-  });
+      final reloaded = await local.loadSession(session.id);
+      // Exactly one suggestion for the one finding — never duplicated.
+      expect(reloaded!.aiSuggestions, hasLength(1));
+    },
+  );
 
   test('double-tapping "Generate Report" (two concurrent generateReport '
       'calls) never corrupts report metadata', () async {
@@ -119,11 +126,11 @@ void main() {
       Finding(
         id: 'finding_1',
         sectionId: 'master_bathroom',
-        elementId: 'floor',
         createdAt: now,
         updatedAt: now,
       ),
     );
+    final entryId = DefectCatalogue.instance.entries.first.id;
     await local.saveAiSuggestion(
       AiSuggestion(
         id: 'suggestion_1',
@@ -131,7 +138,8 @@ void main() {
         findingId: 'finding_1',
         providerId: 'fake-demo-v1',
         generatedAt: now,
-        finalDefectType: 'Cracked tile',
+        suggestedCatalogueEntryId: entryId,
+        finalCatalogueEntryId: entryId,
         status: AiSuggestionStatus.accepted,
         reviewedAt: now,
       ),

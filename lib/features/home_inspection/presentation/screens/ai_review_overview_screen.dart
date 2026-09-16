@@ -8,10 +8,12 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
 
-/// Reached once the inspector completes the physical inspection. Runs
-/// (or retries) AI analysis, then lets the inspector accept/edit/reject
-/// every suggestion before "Continue to Report" unlocks — see
-/// `docs/ai_review.md` for the full lifecycle this screen drives.
+/// Overview of AI's progressive classification work across every
+/// finding in the inspection, and where the inspector reviews each
+/// result (Accept / Change / Reject). AI has already been running in
+/// the background per finding — see `docs/ai_provider_architecture.md`
+/// — so there is no "Start AI Analysis" button here any more; this
+/// screen only surfaces progress and review actions.
 class AiReviewOverviewScreen extends ConsumerWidget {
   const AiReviewOverviewScreen({super.key});
 
@@ -31,21 +33,10 @@ class AiReviewOverviewScreen extends ConsumerWidget {
       );
     }
 
+    final processing = AiProcessingProgress.of(session);
+    final review = AiReviewProgress.of(session);
+    final canContinue = processing.inFlight == 0 && review.pending == 0;
     final suggestions = session.aiSuggestions;
-    final pendingCount = suggestions
-        .where((s) => s.status == AiSuggestionStatus.pending)
-        .length;
-    final acceptedCount = suggestions
-        .where((s) => s.status == AiSuggestionStatus.accepted)
-        .length;
-    final editedCount = suggestions
-        .where((s) => s.status == AiSuggestionStatus.edited)
-        .length;
-    final rejectedCount = suggestions
-        .where((s) => s.status == AiSuggestionStatus.rejected)
-        .length;
-    final reviewedCount = suggestions.length - pendingCount;
-    final canContinue = session.aiReviewState == AiReviewState.completed;
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Review')),
@@ -60,63 +51,18 @@ class AiReviewOverviewScreen extends ConsumerWidget {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
-              child: _StatusPanel(session: session),
+              child: _StatusPanel(processing: processing, review: review),
             ),
           ),
-          if (suggestions.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.lg),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppProgressBar(
-                      value: suggestions.isEmpty
-                          ? 0
-                          : reviewedCount / suggestions.length,
-                      label: 'Review progress',
-                      valueLabel: '$reviewedCount of ${suggestions.length}',
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        StatusPill(
-                          label: '$pendingCount pending',
-                          icon: Icons.hourglass_empty,
-                          foreground: AppColors.warning,
-                          background: AppColors.warningBg,
-                          dense: true,
-                        ),
-                        StatusPill(
-                          label: '$acceptedCount accepted',
-                          icon: Icons.check_circle_outline,
-                          foreground: AppColors.success,
-                          background: AppColors.successBg,
-                          dense: true,
-                        ),
-                        StatusPill(
-                          label: '$editedCount edited',
-                          icon: Icons.edit_outlined,
-                          foreground: AppColors.info,
-                          background: AppColors.infoBg,
-                          dense: true,
-                        ),
-                        StatusPill(
-                          label: '$rejectedCount rejected',
-                          icon: Icons.cancel_outlined,
-                          foreground: AppColors.danger,
-                          background: AppColors.dangerBg,
-                          dense: true,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+          if (suggestions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.lg),
+              child: Text(
+                'No findings have photos yet, so there is nothing for AI '
+                'to review.',
               ),
-            ),
+            )
+          else ...[
             const SizedBox(height: AppSpacing.lg),
             for (final suggestion in suggestions)
               Padding(
@@ -144,104 +90,65 @@ class AiReviewOverviewScreen extends ConsumerWidget {
   }
 }
 
-class _StatusPanel extends ConsumerWidget {
-  const _StatusPanel({required this.session});
+class _StatusPanel extends StatelessWidget {
+  const _StatusPanel({required this.processing, required this.review});
 
-  final InspectionSession session;
+  final AiProcessingProgress processing;
+  final AiReviewProgress review;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    switch (session.aiReviewState) {
-      case AiReviewState.notStarted:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.smart_toy_outlined, color: AppColors.primary),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    'Physical inspection is complete. Findings and photos '
-                    'can now be analyzed — AI never looks at photos before '
-                    'this point.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ],
+  Widget build(BuildContext context) {
+    if (processing.totalEligible == 0) {
+      return const Row(
+        children: [
+          Icon(Icons.smart_toy_outlined, color: AppColors.primary),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Take a photo of a defect in any area to start getting AI '
+              'suggestions.',
             ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton(
-              onPressed: () => _runAnalysis(context, ref),
-              child: const Text('Start AI Analysis'),
-            ),
-          ],
-        );
-      case AiReviewState.analyzing:
-        return const Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Text('Analyzing findings…'),
-          ],
-        );
-      case AiReviewState.failed:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.error_outline, color: AppColors.danger),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    'AI analysis failed. Your physical inspection data is '
-                    'safe and unaffected — you can retry.',
-                    style: const TextStyle(color: AppColors.danger),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton(
-              onPressed: () => _runAnalysis(context, ref),
-              child: const Text('Retry AI Analysis'),
-            ),
-          ],
-        );
-      case AiReviewState.readyForReview:
-        return const Text('Review each AI suggestion below.');
-      case AiReviewState.completed:
-        return Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: AppColors.success),
-            const SizedBox(width: AppSpacing.sm),
-            const Expanded(
-              child: Text(
-                'AI review is complete. You may continue to the report.',
-              ),
-            ),
-          ],
-        );
+          ),
+        ],
+      );
     }
-  }
 
-  Future<void> _runAnalysis(BuildContext context, WidgetRef ref) async {
-    final result = await ref
-        .read(activeSessionProvider.notifier)
-        .startAiAnalysis();
-    if (!context.mounted || result.isSuccess) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.message ??
-              'AI analysis could not run (${result.outcome.name}).',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppProgressBar(
+          value: processing.fraction,
+          label: 'AI analysing findings',
+          valueLabel:
+              '${processing.processed} of ${processing.totalEligible} '
+              '(${processing.percent}%)',
         ),
-      ),
+        if (review.total > 0) ...[
+          const SizedBox(height: AppSpacing.md),
+          AppProgressBar(
+            value: review.fraction,
+            label: 'Reviewed by you',
+            valueLabel: '${review.resolved} of ${review.total}',
+          ),
+        ],
+        if (processing.failed > 0) ...[
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.danger),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '${processing.failed} finding(s) could not be analyzed. '
+                  'Your photos and notes are safe — retry from the area '
+                  'screen.',
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
@@ -260,12 +167,13 @@ class _SuggestionCard extends ConsumerWidget {
     final section = finding == null
         ? null
         : session.sections.firstWhereOrNull((s) => s.id == finding.sectionId);
-    final element = (finding == null || section == null)
+    final catalogue = DefectCatalogue.instance;
+    final suggestedEntry = suggestion.suggestedCatalogueEntryId == null
         ? null
-        : section.elements.firstWhereOrNull((e) => e.id == finding.elementId);
-    final component = element?.components.firstWhereOrNull(
-      (c) => c.id == finding?.componentId,
-    );
+        : catalogue.byId(suggestion.suggestedCatalogueEntryId!);
+    final finalEntry = suggestion.hasFinalEntry
+        ? catalogue.byId(suggestion.finalCatalogueEntryId!)
+        : null;
 
     return Card(
       child: Padding(
@@ -277,11 +185,7 @@ class _SuggestionCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    [
-                      section?.name,
-                      element?.name,
-                      component?.name,
-                    ].whereType<String>().join(' / '),
+                    section?.name ?? 'Area',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -290,7 +194,7 @@ class _SuggestionCard extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             _AttributedBlock(
-              label: 'Inspector finding',
+              label: 'Your note',
               icon: Icons.person_outline,
               color: AppColors.textSecondary,
               child: Column(
@@ -299,7 +203,7 @@ class _SuggestionCard extends ConsumerWidget {
                   Text(
                     finding?.description?.isNotEmpty == true
                         ? finding!.description!
-                        : '(No description)',
+                        : '(No note)',
                   ),
                   if (finding != null && finding.evidence.isNotEmpty)
                     Padding(
@@ -317,30 +221,38 @@ class _SuggestionCard extends ConsumerWidget {
               label: 'AI suggestion (advisory)',
               icon: Icons.smart_toy_outlined,
               color: AppColors.info,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(suggestion.suggestedDefectType ?? '(no defect type)'),
-                  if (suggestion.suggestedRecommendation != null)
-                    Text(suggestion.suggestedRecommendation!),
-                  if (suggestion.suggestedNotes != null)
-                    Text(
-                      suggestion.suggestedNotes!,
-                      style: Theme.of(context).textTheme.bodySmall,
+              child: suggestedEntry == null
+                  ? const Text(
+                      'Not confident enough to suggest a match — please '
+                      'classify this one yourself.',
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Finding: ${suggestedEntry.defectDescription}'),
+                        if (suggestedEntry.correctiveAction != null)
+                          Text(
+                            'Recommendation: '
+                            '${suggestedEntry.correctiveAction}',
+                          ),
+                        if (suggestion.suggestedShortReason != null)
+                          Text(
+                            suggestion.suggestedShortReason!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
                     ),
-                ],
-              ),
             ),
             if (suggestion.isResolved) ...[
               const SizedBox(height: AppSpacing.sm),
               _AttributedBlock(
-                label: 'Inspector final decision',
+                label: 'Your final decision',
                 icon: Icons.fact_check_outlined,
                 color: AppColors.success,
                 child: Text(
-                  suggestion.finalDefectType?.isNotEmpty == true
-                      ? suggestion.finalDefectType!
-                      : '(none)',
+                  finalEntry != null
+                      ? finalEntry.defectDescription
+                      : 'Unresolved — pending manual classification',
                 ),
               ),
             ],
@@ -350,35 +262,26 @@ class _SuggestionCard extends ConsumerWidget {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: [
-                  FilledButton(
+                  if (suggestedEntry != null)
+                    FilledButton(
+                      onPressed: () => ref
+                          .read(activeSessionProvider.notifier)
+                          .acceptSuggestion(suggestion.id),
+                      child: const Text('Accept'),
+                    ),
+                  OutlinedButton(
+                    onPressed: () => showAiSuggestionReviewDialog(
+                      context: context,
+                      ref: ref,
+                      suggestion: suggestion,
+                    ),
+                    child: const Text('Change'),
+                  ),
+                  OutlinedButton(
                     onPressed: () => ref
                         .read(activeSessionProvider.notifier)
-                        .acceptSuggestion(suggestion.id),
-                    child: const Text('Accept'),
-                  ),
-                  OutlinedButton(
-                    onPressed: section == null
-                        ? null
-                        : () => showAiSuggestionReviewDialog(
-                            context: context,
-                            ref: ref,
-                            section: section,
-                            suggestion: suggestion,
-                            isReject: false,
-                          ),
-                    child: const Text('Edit'),
-                  ),
-                  OutlinedButton(
-                    onPressed: section == null
-                        ? null
-                        : () => showAiSuggestionReviewDialog(
-                            context: context,
-                            ref: ref,
-                            section: section,
-                            suggestion: suggestion,
-                            isReject: true,
-                          ),
-                    child: const Text('Reject / Correct'),
+                        .rejectSuggestion(suggestion.id),
+                    child: const Text('Reject / Unresolved'),
                   ),
                 ],
               ),
@@ -463,13 +366,13 @@ class _StatusChip extends StatelessWidget {
         AppColors.successBg,
       ),
       AiSuggestionStatus.edited => (
-        'Edited',
+        'Changed',
         Icons.edit_outlined,
         AppColors.info,
         AppColors.infoBg,
       ),
       AiSuggestionStatus.rejected => (
-        'Rejected',
+        'Unresolved',
         Icons.cancel_outlined,
         AppColors.danger,
         AppColors.dangerBg,

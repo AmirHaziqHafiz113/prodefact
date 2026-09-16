@@ -113,5 +113,14 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on fb.FirebaseAuthException catch (e) {
+      throw AuthException(friendlyMessageForAuthError(e.code));
+    }
+  }
+
+  @override
   Future<void> signOut() => _auth.signOut();
 }

@@ -56,8 +56,15 @@ class SectionRows extends Table {
   Set<Column> get primaryKey => {sessionId, id};
 }
 
-/// A defect/observation recorded against an element (and, optionally, a
-/// component) within a section.
+/// A defect/observation recorded against a section ("area"). Camera-
+/// first (schema v6+): the inspector doesn't pick an element/component
+/// up front any more, so [elementId] is stored as `''` (never SQL
+/// NULL — see the class doc comment) to mean "not classified by the
+/// inspector"; classification instead comes from AI, tracked via
+/// [aiStatus] and the linked `AiSuggestionRows` row.
+///
+/// A pre-v6 (legacy, component-first) finding still has a real,
+/// non-empty [elementId] here — nothing about existing rows changes.
 class FindingRows extends Table {
   TextColumn get id => text()();
   TextColumn get sessionId => text().references(
@@ -66,11 +73,27 @@ class FindingRows extends Table {
     onDelete: KeyAction.cascade,
   )();
   TextColumn get sectionId => text()();
+
+  /// `''` means "not set" (camera-first finding) — see the class doc
+  /// comment for why this is an empty string rather than SQL NULL:
+  /// relaxing an existing NOT NULL column's constraint isn't something
+  /// Drift/SQLite's `ALTER TABLE` supports without a full table
+  /// rebuild, so nullability is handled at the application layer
+  /// instead (`DriftInspectionRepository` maps `''` <-> `null`) — zero
+  /// schema risk to the column that already holds every legacy
+  /// finding's real element id.
   TextColumn get elementId => text()();
   TextColumn get componentId => text().nullable()();
   TextColumn get description => text().nullable()();
   TextColumn get notes => text().nullable()();
   TextColumn get status => text().withDefault(const Constant('draft'))();
+
+  /// The per-finding AI processing pipeline state (added in schema v6)
+  /// — see `AiFindingStatus`. Defaults to `notQueued`, which is also
+  /// the correct value for every finding that existed before this
+  /// column did.
+  TextColumn get aiStatus => text().withDefault(const Constant('notQueued'))();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -105,6 +128,13 @@ class EvidenceRows extends Table {
 /// updated after insertion; the `final*` columns hold whatever the
 /// inspector ultimately approved/corrected — see `AiSuggestion` for why
 /// these are kept separate.
+///
+/// `suggestedElementId`/`suggestedComponentId`/`suggestedDefectType`/
+/// `suggestedRecommendation`/`suggestedNotes`/`finalElementId`/
+/// `finalComponentId`/`finalDefectType`/`finalRecommendation`/
+/// `finalNotes` are legacy (pre-v6, free-text) columns — still read
+/// for a pre-existing suggestion row, never written by new code, which
+/// instead uses the catalogue-id columns added in v6 below.
 class AiSuggestionRows extends Table {
   TextColumn get id => text()();
   TextColumn get sessionId => text().references(
@@ -131,6 +161,23 @@ class AiSuggestionRows extends Table {
   TextColumn get providerId => text()();
   DateTimeColumn get generatedAt => dateTime()();
   DateTimeColumn get reviewedAt => dateTime().nullable()();
+
+  /// The controlled catalogue entry id AI selected (added in schema
+  /// v6) — null if AI could not confidently classify. See
+  /// `DefectCatalogue`/`AiSuggestion.suggestedCatalogueEntryId`.
+  TextColumn get suggestedCatalogueEntryId => text().nullable()();
+  RealColumn get suggestedConfidence => real().nullable()();
+  TextColumn get suggestedShortReason => text().nullable()();
+
+  /// JSON-encoded `List<String>` of ranked alternative catalogue entry
+  /// ids (added in schema v6) — empty/absent means no alternates.
+  TextColumn get suggestedCandidateEntryIds => text().nullable()();
+
+  /// The inspector-approved/corrected catalogue entry id (added in
+  /// schema v6) — see `AiSuggestion.finalCatalogueEntryId` for why an
+  /// empty string (not SQL NULL) means "reviewed, explicitly left
+  /// unresolved".
+  TextColumn get finalCatalogueEntryId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

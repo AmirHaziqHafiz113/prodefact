@@ -1,38 +1,24 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
-import 'finding_dialog.dart';
 
-/// Icon per common element name — falls back to a generic icon for a
-/// custom element name that doesn't match one of these.
-IconData _iconForElement(String name) {
-  switch (name) {
-    case 'Floor':
-      return Icons.texture_outlined;
-    case 'Wall':
-      return Icons.vertical_split_outlined;
-    case 'Ceiling':
-      return Icons.expand_less_outlined;
-    case 'Door':
-      return Icons.door_front_door_outlined;
-    case 'Window':
-      return Icons.window_outlined;
-    case 'M&E':
-      return Icons.bolt_outlined;
-    default:
-      return Icons.category_outlined;
-  }
-}
-
-/// Physical inspection of a single area: its elements (opened for
-/// component-level findings) plus a running list of findings already
-/// recorded directly against the area.
+/// Camera-first physical inspection of a single area: "Take Defect
+/// Photo" is the primary, most prominent action — no element/component
+/// selection is ever required before capturing evidence. See
+/// `docs/ai_provider_architecture.md` ("Camera-first workflow").
+///
+/// Flow: Take Photo -> Preview -> optional side note -> Save. AI
+/// classification is queued the moment a finding is saved and runs in
+/// the background — the inspector can immediately take the next photo
+/// without waiting for it.
 class AreaInspectionScreen extends ConsumerStatefulWidget {
   const AreaInspectionScreen({required this.sectionId, super.key});
 
@@ -44,6 +30,8 @@ class AreaInspectionScreen extends ConsumerStatefulWidget {
 }
 
 class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
+  bool _isCapturing = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,10 +65,6 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
         .watch(inspectionFindingsProvider)
         .where((f) => f.sectionId == section.id)
         .toList();
-    final evidenceCount = areaFindings.fold<int>(
-      0,
-      (sum, f) => sum + f.evidence.length,
-    );
 
     return Scaffold(
       appBar: AppBar(title: Text(section.name)),
@@ -89,7 +73,7 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
           AppSpacing.lg,
           AppSpacing.md,
           AppSpacing.lg,
-          AppSpacing.xl,
+          120,
         ),
         children: [
           if (section.isPlumbing)
@@ -102,22 +86,11 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 background: AppColors.plumbingBg,
               ),
             ),
-          Row(
-            children: [
-              _MiniStat(
-                icon: Icons.report_gmailerrorred_outlined,
-                value: '${areaFindings.length}',
-                label: 'Findings',
-              ),
-              const SizedBox(width: AppSpacing.lg),
-              _MiniStat(
-                icon: Icons.photo_camera_outlined,
-                value: '$evidenceCount',
-                label: 'Photos',
-              ),
-            ],
+          Text(
+            'Inspection progress',
+            style: Theme.of(context).textTheme.labelLarge,
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.sm),
           SegmentedButton<SectionStatus>(
             segments: const [
               ButtonSegment(
@@ -141,135 +114,157 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
             },
           ),
           const SizedBox(height: AppSpacing.xl),
-          const AppSectionHeader(title: 'Elements'),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: AppSpacing.sm,
-              crossAxisSpacing: AppSpacing.sm,
-              childAspectRatio: 2.4,
-            ),
-            itemCount: section.elements.length,
-            itemBuilder: (context, index) {
-              final element = section.elements[index];
-              final elementFindingCount = areaFindings
-                  .where((f) => f.elementId == element.id)
-                  .length;
-              return _ElementCard(
-                name: element.name,
-                findingCount: elementFindingCount,
-                onTap: () => context.push(
-                  '/home-inspection/inspection/${section.id}/${element.id}',
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          const AppSectionHeader(title: 'Findings recorded so far'),
+          AppSectionHeader(title: 'Saved findings (${areaFindings.length})'),
           if (areaFindings.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-              child: Text('No findings recorded yet.'),
+              child: Text(
+                'No findings recorded yet. Tap "Take Defect Photo" below '
+                'whenever you spot a defect.',
+              ),
             )
           else
             for (final finding in areaFindings)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _FindingCard(section: section, finding: finding),
+                child: _FindingCard(finding: finding),
               ),
         ],
       ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16, color: AppColors.textMuted),
-        const SizedBox(width: 6),
-        Text('$value $label', style: Theme.of(context).textTheme.bodyMedium),
-      ],
-    );
-  }
-}
-
-class _ElementCard extends StatelessWidget {
-  const _ElementCard({
-    required this.name,
-    required this.findingCount,
-    required this.onTap,
-  });
-
-  final String name;
-  final int findingCount;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: onTap,
+      bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: FilledButton.icon(
+            onPressed: _isCapturing ? null : () => _takePhoto(section.id),
+            icon: _isCapturing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.photo_camera),
+            label: const Text('Take Defect Photo'),
           ),
-          child: Row(
+        ),
+      ),
+    );
+  }
+
+  Future<void> _takePhoto(String sectionId) async {
+    setState(() => _isCapturing = true);
+    final notifier = ref.read(activeSessionProvider.notifier);
+    final photo = await notifier.captureFindingPhoto(
+      source: EvidenceSource.camera,
+    );
+    if (!mounted) return;
+    setState(() => _isCapturing = false);
+    if (photo == null) return; // cancelled, or a capture error already shown
+
+    final result = await showModalBottomSheet<_PreviewResult>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _PhotoPreviewSheet(photo: photo),
+    );
+
+    if (!mounted) return;
+    if (result == null || !result.save) {
+      await notifier.discardCapturedFindingPhoto(photo);
+      return;
+    }
+    notifier.saveCameraFinding(
+      sectionId: sectionId,
+      photo: photo,
+      note: result.note,
+    );
+  }
+}
+
+class _PreviewResult {
+  const _PreviewResult({required this.save, this.note});
+
+  final bool save;
+  final String? note;
+}
+
+/// "Preview Photo -> optional side note -> Save Finding" — deliberately
+/// simple: one photo, one optional text field, one primary action.
+class _PhotoPreviewSheet extends StatefulWidget {
+  const _PhotoPreviewSheet({required this.photo});
+
+  final CapturedFindingPhoto photo;
+
+  @override
+  State<_PhotoPreviewSheet> createState() => _PhotoPreviewSheetState();
+}
+
+class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Icon(
-                  _iconForElement(name),
-                  color: AppColors.primary,
-                  size: 20,
+              // A fixed (not aspect-ratio-driven) height — keeps the
+              // whole sheet, note field, and Save/Discard buttons
+              // comfortably within view without scrolling on a small
+              // phone, regardless of the photo's own aspect ratio.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: Image.file(
+                    File(widget.photo.filePath),
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: _noteController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Side note (optional)',
+                  hintText: 'e.g. "Water leaking when turned on"',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          Navigator.of(context)
+                              .pop(const _PreviewResult(save: false)),
+                      child: const Text('Discard'),
                     ),
-                    if (findingCount > 0)
-                      Text(
-                        '$findingCount finding${findingCount == 1 ? '' : 's'}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(
+                        _PreviewResult(save: true, note: _noteController.text),
                       ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: AppColors.textMuted,
+                      child: const Text('Save Finding'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -280,49 +275,68 @@ class _ElementCard extends StatelessWidget {
 }
 
 class _FindingCard extends ConsumerWidget {
-  const _FindingCard({required this.section, required this.finding});
+  const _FindingCard({required this.finding});
 
-  final Section section;
   final Finding finding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final element = section.elements.firstWhereOrNull(
-      (e) => e.id == finding.elementId,
-    );
-    final component = element?.components.firstWhereOrNull(
-      (c) => c.id == finding.componentId,
-    );
-
-    final subtitleParts = <String>[
-      if (element != null) element.name,
-      if (component != null) component.name,
-    ];
+    final firstPhoto = finding.evidence.firstOrNull;
+    final suggestion = ref
+        .watch(activeSessionProvider)
+        ?.aiSuggestions
+        .firstWhereOrNull((s) => s.findingId == finding.id);
 
     return Card(
-      child: ListTile(
-        title: Text(
-          finding.description?.isNotEmpty == true
-              ? finding.description!
-              : '(No description)',
-        ),
-        subtitle: Text(
-          [
-            if (subtitleParts.isNotEmpty) subtitleParts.join(' / '),
-            '${finding.evidence.length} photo(s)',
-          ].join(' · '),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconButton(
-              tooltip: 'Edit',
-              icon: const Icon(Icons.edit),
-              onPressed: () => showFindingDialog(
-                context: context,
-                ref: ref,
-                existing: finding,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: firstPhoto == null
+                    ? const ColoredBox(
+                        color: AppColors.surfaceAlt,
+                        child: Icon(Icons.photo_outlined),
+                      )
+                    : Image.file(File(firstPhoto.filePath), fit: BoxFit.cover),
               ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _AiStatusLine(finding: finding, suggestion: suggestion),
+                  if (finding.description?.isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        finding.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  if (finding.evidence.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${finding.evidence.length} photos',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Edit note',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => _editNote(context, ref),
             ),
             IconButton(
               tooltip: 'Remove',
@@ -334,6 +348,139 @@ class _FindingCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _editNote(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(text: finding.description ?? '');
+    final newNote = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit note'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 2,
+          decoration: const InputDecoration(labelText: 'Side note'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newNote == null) return;
+    ref
+        .read(inspectionFindingsProvider.notifier)
+        .updateFinding(
+          findingId: finding.id,
+          description: newNote,
+          notes: finding.notes,
+        );
+  }
+}
+
+class _AiStatusLine extends ConsumerWidget {
+  const _AiStatusLine({required this.finding, required this.suggestion});
+
+  final Finding finding;
+  final AiSuggestion? suggestion;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    switch (finding.aiStatus) {
+      case AiFindingStatus.notQueued:
+      case AiFindingStatus.queued:
+        return const _StatusText(
+          icon: Icons.hourglass_empty,
+          color: AppColors.textMuted,
+          text: 'Waiting for connection',
+        );
+      case AiFindingStatus.uploading:
+        return const _StatusText(
+          icon: Icons.cloud_upload_outlined,
+          color: AppColors.info,
+          text: 'Uploading photo…',
+        );
+      case AiFindingStatus.analyzing:
+        return const _StatusText(
+          icon: Icons.smart_toy_outlined,
+          color: AppColors.info,
+          text: 'AI analysing…',
+        );
+      case AiFindingStatus.failed:
+        return Row(
+          children: [
+            const Expanded(
+              child: _StatusText(
+                icon: Icons.error_outline,
+                color: AppColors.danger,
+                text: 'AI analysis failed',
+              ),
+            ),
+            TextButton(
+              onPressed: () => ref
+                  .read(activeSessionProvider.notifier)
+                  .retryAiClassification(finding.id),
+              child: const Text('Retry'),
+            ),
+          ],
+        );
+      case AiFindingStatus.needsReview:
+        return const _StatusText(
+          icon: Icons.help_outline,
+          color: AppColors.warning,
+          text: 'Needs manual review',
+        );
+      case AiFindingStatus.completed:
+        final entryId = suggestion?.finalCatalogueEntryId?.isNotEmpty == true
+            ? suggestion!.finalCatalogueEntryId
+            : suggestion?.suggestedCatalogueEntryId;
+        final entry = entryId == null
+            ? null
+            : DefectCatalogue.instance.byId(entryId);
+        return _StatusText(
+          icon: Icons.check_circle_outline,
+          color: AppColors.success,
+          text: entry?.defectDescription ?? 'Classified',
+        );
+    }
+  }
+}
+
+class _StatusText extends StatelessWidget {
+  const _StatusText({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: color),
+          ),
+        ),
+      ],
     );
   }
 }

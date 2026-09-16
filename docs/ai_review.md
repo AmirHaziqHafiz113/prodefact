@@ -1,249 +1,267 @@
-# AI Review (Phase 6)
+# AI Review
 
-Post-inspection AI review: after physical inspection completes, AI
-suggests a defect type, recommendation, and notes for each finding, and
-the inspector accepts, edits, or rejects/corrects every suggestion
-before the inspection can proceed to reporting. AI is advisory only —
-the inspector is always the final authority.
+Progressive, per-finding AI classification against a controlled defect
+catalogue, plus the inspector's review of each result. AI is advisory
+only — the inspector is always the final authority. See
+`docs/ai_provider_architecture.md` for the catalogue, provider, and
+callable design this sits on top of, and
+`docs/home_inspection_workflow.md` for the full camera-first flow.
 
-## The AI timing rule
+## The AI timing rule (updated — progressive, not batch)
 
-**AI must never analyze photos or findings during physical inspection.**
-There is no photo → AI → confirmation → next-finding loop anywhere in
-this app. The only sequence that exists is:
+**AI must never run merely because a photo was captured/previewed, or
+a not-yet-saved note is being edited.** It runs — automatically, in the
+background — as soon as, and only as soon as, the inspector explicitly
+saves a finding:
 
 ```
-Physical inspection (capture findings/photos as drafts)
-  -> complete ALL included areas
-  -> Complete Physical Inspection
-  -> only then: AI analysis runs, once, over every finding
-  -> inspector reviews every suggestion
-  -> Continue to Report (only once every suggestion is resolved)
+Take Photo -> Preview -> optional side note -> Save Finding
+  -> finding persisted locally immediately (offline-first)
+  -> AI classification queued (fire-and-forget, non-blocking)
+  -> inspector immediately continues to the next photo/area
+  -> ... AI classifies this finding in the background, independent of
+       whatever area the inspector has moved on to ...
+  -> inspector reviews the result whenever they reach the AI Review
+     screen (independent of whether every area is physically done)
+  -> Continue to Report (only once every area is physically complete,
+     no finding is still mid-processing, and no suggestion is pending)
 ```
 
-This is enforced in *code*, not just by hiding a button:
+This replaces the earlier phase's rule ("AI only runs once the entire
+physical inspection is complete") — that gate no longer exists, and
+this is a deliberate, explicit product change: AI now works through
+Section A's findings while the inspector is already physically
+inspecting Section B.
 
-- **Application logic**: `AiReviewCoordinator.runAnalysis` checks
-  `session.status` first. If it's still `InspectionStatus.inProgress`
-  (physical inspection not complete), it returns
-  `AiAnalysisResult.notReady()` immediately — no AI call is made, no
-  suggestion record is created or touched. Any future caller (a new
-  screen, a background job, a test) gets this same controlled result
-  rather than being able to bypass the rule.
-- **UI/navigation**: the AI Review screen is only reachable by tapping
-  "Complete Physical Inspection" on the inspection queue, which is
-  itself only enabled once every included area is marked completed
-  (`isPhysicalInspectionCompleteProvider`). There's no other route to
-  it. Combined with the coordinator's own check, this is defense in
-  depth rather than reliance on a single hidden button.
+Enforced in code, not just by hiding a button:
+
+- **`ActiveInspectionSession.saveCameraFinding`** is the *only* place a
+  camera-first finding is created, and the *only* place
+  `_enqueueAiClassification` is ever invoked — capturing or discarding
+  a photo, or editing a not-yet-saved note, never reaches it. See
+  `test/features/ai_gating_regression_test.dart`.
+- **`DefaultAiClassificationCoordinator`** has no physical-inspection
+  gate at all (by design) — its only gates are per-finding: the
+  finding must have evidence (`isAiEligible`), and it must not already
+  be `completed`/`needsReview` (idempotent, never re-runs a settled
+  finding without an explicit retry).
+- **Report generation** (a separate gate — see "Report readiness"
+  below) is what actually requires physical completion, so the product
+  invariant "no report with unresolved AI work" still holds even though
+  AI itself is no longer gated on physical completion.
 
 ## Architecture
 
 ```
-UI (AiReviewOverviewScreen, ai_suggestion_review_dialog)
-  -> ActiveInspectionSession (Riverpod; startAiAnalysis/accept/edit/reject)
-  -> AiReviewCoordinator (interface)
-       -> DefaultAiReviewCoordinator (data layer)
-            -> InspectionRepository (local, Drift) — reads findings, persists suggestions
+UI (AreaInspectionScreen, AiReviewOverviewScreen, ai_suggestion_review_dialog)
+  -> ActiveInspectionSession (Riverpod)
+       saveCameraFinding -> _enqueueAiClassification (fire-and-forget)
+       acceptSuggestion / changeSuggestion / rejectSuggestion
+  -> AiClassificationCoordinator (interface)
+       -> DefaultAiClassificationCoordinator (data layer)
+            -> InspectionRepository (local, Drift) — reads the finding,
+               persists the suggestion + aiStatus
             -> AiInspectionService (interface)
-                 -> FakeAiInspectionService (data layer, today)
-                 -> [future] a backend gateway client
+                 -> FakeAiInspectionService (offline demo) or
+                    FirebaseAiInspectionService (real, DeepSeek-backed)
 ```
 
 Nothing in `lib/core` or `lib/features` imports a concrete AI
-implementation or SDK — they depend only on `AiInspectionService` and
-`AiReviewCoordinator` (both plain Dart interfaces in
+implementation or SDK — only `AiInspectionService` and
+`AiClassificationCoordinator` (plain Dart interfaces in
 `lib/core/inspection/ai/`). `test/architecture/repository_boundary_test.dart`
-asserts this automatically, the same way it already asserted the
-Drift/Firebase boundaries in earlier phases.
+asserts this automatically.
 
-## Structured input contract (`AiAnalysisRequest`)
-
-One request per analysis run, covering only what's needed and nothing
-else — no user account data, no unrelated app state:
+## Structured input/output (catalogue-based, not free text)
 
 ```
-AiAnalysisRequest
-  sessionId, industry, assetTypeId
-  findings: [AiFindingContext]
-    findingId
-    sectionId, sectionName, sectionIsPlumbing
-    elementId, elementName
-    componentId?, componentName?
-    description?           — inspector's finding text
-    notes?                 — inspector's notes
-    evidenceFilePaths: []   — local paths; a real backend would fetch/
-                              inspect these (or their cloud copies) —
-                              the fake only uses the *count*, never
-                              file contents
+AiFindingClassificationRequest
+  sessionId, findingId
+  sectionName, sectionIsPlumbing
+  note?                  — inspector's optional side note
+  evidenceFilePaths: []  — local paths; the fake only ever looks at the
+                            area name/note, never file contents; the
+                            real service sends evidenceIds instead
+  evidenceIds: []        — opaque ids only; the callable resolves these
+                            to actual images itself, server-side
+
+AiFindingClassification
+  findingId
+  catalogueEntryId?      — a real DefectCatalogue id, or absent
+  confidence?, shortReason?
+  candidateEntryIds: []  — ranked alternates when uncertain
+  needsReview            — true whenever catalogueEntryId is absent
 ```
 
-Only findings that don't already have a suggestion are included in a
-given request — this is what makes retrying after a partial/failed run
-safe (see Retry, below).
-
-## Structured output contract (`AiAnalysisResponse`)
-
-```
-AiAnalysisResponse
-  providerId
-  suggestions: [AiFindingSuggestion]
-    findingId
-    elementId?, componentId?, defectType?, recommendation?, notes?
-```
-
-The app never parses free-form prose out of a model response. A real
-backend gateway is responsible for validating the provider's raw
-response against this exact shape before it ever reaches Flutter — see
-Production backend design, below.
+One request per finding — never a whole-session batch. See
+`docs/ai_provider_architecture.md` for exactly why the full catalogue
+is embedded per request rather than a per-session subset.
 
 ## Original-vs-corrected data model (`AiSuggestion`)
-
-Every suggestion keeps the AI's original output and the inspector's
-final decision as two separate, independently-preserved sets of fields:
 
 ```
 AiSuggestion
   id, sessionId, findingId, providerId, generatedAt
 
-  suggested* (elementId, componentId, defectType, recommendation, notes)
-    — the AI's original output. Never mutated after generation.
+  suggestedCatalogueEntryId? — AI's original pick. Never mutated after
+                                generation. Null means needsReview.
+  suggestedConfidence?, suggestedShortReason?, suggestedCandidateEntryIds
 
-  final* (elementId, componentId, defectType, recommendation, notes)
-    — what the inspector approved/corrected. Starts out equal to
-      suggested* the moment a suggestion is generated.
+  finalCatalogueEntryId?     — what the inspector approved/picked.
+                                Null/empty while pending, and also
+                                empty after Reject (see below) until
+                                the inspector later resolves it via
+                                Change.
 
   status: pending | accepted | edited | rejected
   reviewedAt — null until reviewed
 ```
 
-- **Accept**: `final*` is set to exactly `suggested*`; `status` becomes
-  `accepted`.
-- **Edit**: the inspector changes `final*` directly (element, component,
-  defect type, recommendation, notes); `suggested*` is untouched;
-  `status` becomes `edited`.
-- **Reject / Correct**: the inspector disagrees with the AI outright but
-  still supplies their own `final*` values (the finding is never simply
-  discarded); `suggested*` is untouched; `status` becomes `rejected`.
+- **Accept**: `finalCatalogueEntryId` is set to exactly
+  `suggestedCatalogueEntryId`; `status` becomes `accepted`. Only
+  offered when AI actually had a confident suggestion.
+- **Change**: the inspector picks a different entry via a searchable,
+  filterable catalogue picker (`ai_suggestion_review_dialog.dart`) —
+  **never free text**; `suggestedCatalogueEntryId` is untouched;
+  `status` becomes `edited`. This is also how a `needsReview` finding
+  (no AI suggestion at all) gets its first and only classification.
+- **Reject / mark unresolved**: the inspector disagrees with the AI (or
+  there was nothing to agree/disagree with) and leaves no final
+  classification for now; `suggestedCatalogueEntryId` is untouched;
+  `status` becomes `rejected`. Still a *resolved*, reviewed state (not
+  `pending`) — the report renders it as an explicit "Unresolved —
+  pending manual classification" line. The inspector can return later
+  and call Change to resolve it.
 
-This is exactly the same "preserve original, never overwrite it"
-pattern the app already uses for evidence sync (Phase 5's local
-`filePath` vs. cloud `storagePath`) — extended here to AI review.
+The corrective action, defect description, and main element/component
+names are never stored as free text on the suggestion at all — they're
+resolved fresh from `DefectCatalogue`/`defectCatalogue` by
+`finalCatalogueEntryId` wherever they're displayed (review screen,
+PDF report), so a later catalogue correction is reflected everywhere
+without a data migration.
 
-## Review lifecycle (`AiReviewState`, session-level)
+**Legacy note**: a suggestion created under the earlier, pre-catalogue
+batch workflow (schema v5 and earlier) instead has
+`legacyFinalElementId`/`legacyFinalDefectType`/
+`legacyFinalRecommendation`/`legacyFinalNotes` — free-text fields
+preserved read-only so that inspection's history/report still renders
+correctly; no current code path writes them.
+
+## Three separate progress axes — never confused
+
+- **Physical inspection progress**: areas marked complete / total
+  included areas (`PhysicalProgress`) — entirely inspector-driven,
+  independent of AI.
+- **AI processing progress**: findings whose `aiStatus` reached a
+  terminal state / total AI-eligible findings (`AiProcessingProgress`)
+  — real, count-based ("12 of 19 findings analysed · 63%"), never a
+  fake timer.
+- **Review progress**: suggestions resolved / total suggestions
+  (`AiReviewProgress`).
+
+An inspector can mark every area physically complete while AI is still
+working through several findings, and can review already-completed
+suggestions while other findings are still `analyzing` — these are
+genuinely independent, simultaneously-visible states.
+
+## Per-finding AI status (`AiFindingStatus`)
 
 ```
-notStarted -> analyzing -> readyForReview -> completed
-                 |               ^
-                 v               |
-              failed  ----(retry)-+
+notQueued -> queued -> uploading -> analyzing -> completed
+                |                        |
+                |                        +-> needsReview
+                +--------(sync fails)-----> (stays queued)
+                            ^
+                         failed (retry available)
 ```
 
-- `notStarted`: no analysis has ever run for this session.
-- `analyzing`: set immediately before calling the AI backend — durable,
-  so a crash mid-call leaves a real record of "this was interrupted,"
-  not silence.
-- `readyForReview`: suggestions exist; at least one is still `pending`.
-- `completed`: every suggestion is resolved (accepted/edited/rejected).
-  Only from here does `InspectionSession.status` advance to
-  `InspectionStatus.aiReviewComplete`, and only from here does
-  "Continue to Report" enable.
-- `failed`: the last analysis attempt errored before producing any
-  suggestions. Retry is always offered.
+- `notQueued`: no evidence yet, or a legacy finding from before this
+  status existed (backfilled to `completed` at migration time if it
+  already had a suggestion — see `docs/production_readiness.md`,
+  "Camera-first migration").
+- `queued`: waiting to be processed. Displayed as **"waiting for
+  connection"** whenever the app is offline/signed out and Firebase is
+  configured — queued is queued either way; only the display
+  distinguishes why nothing is happening yet.
+- `uploading`: evidence is being synced to cloud storage (a
+  prerequisite for the real backend to resolve it) — skipped entirely
+  in local-only/demo mode, where the fake service runs immediately.
+- `analyzing`: the classification request is in flight.
+- `completed`: AI produced a confident catalogue match.
+- `needsReview`: AI ran but couldn't confidently match a catalogue
+  entry — the inspector must classify manually via Change.
+- `failed`: the classification attempt itself errored (timeout,
+  provider error) — safe and expected to retry; physical inspection
+  data is never affected either way.
 
-## Failure / retry behavior
+## Retry / idempotency
 
-If the AI backend call throws:
+- A finding's `AiSuggestion` row uses a deterministic id
+  (`suggestion_<findingId>`) — a retry after a partial/failed attempt
+  **upserts**, never duplicates.
+- `DefaultAiClassificationCoordinator` tracks in-flight findings by id
+  — two concurrent classification attempts for the same finding never
+  race; the second is a no-op (`alreadyInFlight`).
+- A finding stuck at `failed` is retried via
+  `ActiveInspectionSession.retryAiClassification` (exposed as a "Retry"
+  action on the area screen) or automatically re-attempted the next
+  time `processQueuedAiClassifications` runs (e.g. on session resume).
+- Adding a *new* photo to an already-`completed`/`needsReview` finding
+  re-queues it — new evidence can change the correct classification, so
+  it's never silently ignored.
 
-- The coordinator catches it, sets `aiReviewState = failed`, and
-  returns `AiAnalysisResult.failure(message)`.
-- **No local data is touched** — findings, evidence, sections, and any
-  suggestions from a *previous* successful run are completely
-  unaffected. The whole analysis call is all-or-nothing per run (the
-  fake, and any real backend, returns one batch response or throws —
-  there's no partial-success-within-one-call state to reconcile).
-- Retrying (calling `runAnalysis` again) re-submits only the findings
-  that still don't have a suggestion. Findings that already got a
-  suggestion from an earlier successful run are excluded from the
-  request, so retry can never create a duplicate logical suggestion for
-  the same finding.
-- Calling `runAnalysis` again once suggestions already exist
-  (`readyForReview`/`completed`) is a deliberate no-op
-  (`alreadyReviewed`) — it never regenerates over an inspector's
-  in-progress or completed review.
+## Report readiness (the gate that remains)
 
-## Persistence
+`DefaultReportCoordinator` requires all three axes settled:
 
-Drift schema v3 (see `lib/data/local/database.dart` /
-`lib/data/local/tables.dart`):
+1. `session.status != InspectionStatus.inProgress` (physical inspection
+   complete).
+2. `AiProcessingProgress.inFlight == 0` (no finding still
+   queued/uploading/analyzing, and no eligible finding still
+   `notQueued`).
+3. `AiReviewProgress.pending == 0` (every suggestion resolved — a
+   `rejected`/"unresolved" suggestion counts as resolved; only
+   `pending` blocks).
 
-- `InspectionSessionRows.aiReviewState` — new nullable-with-default
-  column on the existing sessions table.
-- `AiSuggestionRows` — new table, one row per `AiSuggestion`, with
-  separate `suggested*`/`final*` columns, `status`, `providerId`,
-  `generatedAt`, `reviewedAt`. Foreign keys cascade from both the owning
-  session and the owning finding.
-
-Both are added via `MigrationStrategy.onUpgrade` (`from < 3`) — the
-existing v1/v2 database is never dropped or recreated. Suggestions and
-review decisions survive navigation, app restart, and resuming a
-session, the same way findings and evidence already did from Phase 4
-onward.
+See `test/data/report_coordinator_test.dart` for the gate's tests and
+`docs/report.md` for how the PDF renders an "Unresolved" finding rather
+than blocking generation entirely over one unclassified item.
 
 ## Sync
 
 `CloudInspectionRepository.pushAiSuggestion` mirrors one `AiSuggestion`
-(including whatever the inspector has reviewed so far) to
+(catalogue ids + review state) to
 `users/{uid}/inspections/{id}/aiSuggestions/{suggestionId}` in
-Firestore, keyed by the same stable local id — same idempotency
-guarantee as every other synced record. `DefaultSyncCoordinator` pushes
-all of a session's `aiSuggestions` alongside its sections/findings/
-evidence. AI review is fully usable with Firebase unconfigured or
-unreachable — sync is opportunistic and never a precondition for
-running analysis, reviewing a suggestion, or continuing to the report.
+Firestore, keyed by the same stable local id. AI review is fully usable
+with Firebase unconfigured or unreachable — sync is opportunistic and
+never a precondition for saving a finding, reviewing a suggestion, or
+continuing to the report (the report readiness gate above is purely
+local-state-based).
 
 ## Fake/demo AI service
 
 `FakeAiInspectionService` (`lib/data/ai/fake_ai_inspection_service.dart`)
-is deliberately named and documented as fake/demo — it is **not**
-production AI. It:
+is deliberately named and documented as fake/demo — **not** production
+AI. It makes no network call, and deterministically resolves a real
+`DefectCatalogue` entry from area-name keywords (a bathroom/plumbing
+area matches sanitary-fitting/plumbing entries) plus a simple
+note-keyword tie-break, falling back to `needsReview` when nothing
+matches — so it exercises the exact same controlled-catalogue contract
+the real backend does, just without a network call.
 
-- Makes no network call whatsoever.
-- Maps each finding's **element name** to a fixed defect
-  type/recommendation via a lookup table (e.g. "Floor" → cracked tile;
-  "Window" → failed seal), with a generic fallback for anything else.
-- Adds a plumbing-area note and an evidence-count note deterministically
-  — never randomly — so the exact same finding always produces the
-  exact same suggestion. This determinism is what makes it safe to
-  assert on directly in tests.
-- Is wired in behind `aiInspectionServiceProvider`
-  (`lib/data/ai/ai_providers.dart`) — swapping in a real backend later
-  is an override of that one provider, not a rework of anything else.
+## Production backend gateway
 
-## Production backend gateway (implemented, Phase 9)
-
-The design once described here as "future" is now live:
 `FirebaseAiInspectionService` (`lib/data/ai/firebase_ai_inspection_service.dart`)
-calls the `analyzeInspection` Firebase callable function
-(`functions/src/index.ts`, region `asia-southeast1`), which depends on a
-provider-neutral gateway (`functions/src/ai/`) currently backed by
-DeepSeek. Full detail — request/response contract, provider swap
-process, secret handling, cost/abuse protections — lives in
-`docs/ai_provider_architecture.md`; this section only covers how it
-plugs into the Flutter-side flow described above.
+calls the `classifyFinding` Firebase callable function
+(`functions/src/index.ts`, region `asia-southeast1`), backed by a
+provider-neutral gateway (`functions/src/ai/`) currently using
+DeepSeek's `deepseek-flash` multimodal model. Full detail — request/
+response contract, provider swap process, secret handling, evidence
+security, cost/abuse protections — lives in
+`docs/ai_provider_architecture.md`.
 
 `aiInspectionServiceProvider` (`lib/data/ai/ai_providers.dart`) selects
 `FirebaseAiInspectionService` when Firebase is configured and falls
-back to `FakeAiInspectionService` otherwise — the same
-"local-first, Firebase optional" pattern used everywhere else in the
-app. Nothing about the AI timing rule, the gate, or the
-accept/edit/reject review flow changes based on which one is active.
-
-## Future provider interchangeability
-
-Because the whole app depends on `AiInspectionService` (an interface
-taking/returning only plain Dart types), swapping providers — or
-switching from the fake to a real backend, or from one real backend to
-another later — never requires touching `ActiveInspectionSession`,
-`AiReviewCoordinator`, the Drift schema, the sync layer, or any UI code.
-It's an override of `aiInspectionServiceProvider` alone.
+back to `FakeAiInspectionService` otherwise. Nothing about the AI
+timing rule, per-finding gating, or the accept/change/reject review
+flow changes based on which one is active.

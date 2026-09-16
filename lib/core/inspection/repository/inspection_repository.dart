@@ -1,3 +1,4 @@
+import '../entities/ai_finding_status.dart';
 import '../entities/ai_review.dart';
 import '../entities/ai_review_state.dart';
 import '../entities/evidence.dart';
@@ -58,6 +59,14 @@ abstract class InspectionRepository {
   Future<void> saveFinding(String sessionId, Finding finding);
 
   Future<void> deleteFinding(String sessionId, String findingId);
+
+  /// Records the per-finding progressive AI processing state — see
+  /// `AiFindingStatus`.
+  Future<void> setFindingAiStatus(
+    String sessionId,
+    String findingId,
+    AiFindingStatus status,
+  );
 
   /// Permanently deletes a session and everything that references it
   /// (sections, findings, evidence metadata, AI suggestions, report

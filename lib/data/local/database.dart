@@ -29,6 +29,21 @@ part 'database.g.dart';
 ///   full table scan per lookup. Indexes only; no column/table changes,
 ///   so nothing here can affect existing data. See
 ///   `docs/production_readiness.md` ("Database hardening").
+/// - v6: (camera-first pass) added `FindingRows.aiStatus` (defaults to
+///   `notQueued`, correct for every pre-existing finding) and four new
+///   nullable `AiSuggestionRows` columns for controlled-catalogue
+///   classification (`suggestedCatalogueEntryId`,
+///   `suggestedConfidence`, `suggestedShortReason`,
+///   `suggestedCandidateEntryIds`, `finalCatalogueEntryId`) — additive
+///   only. A finding that already has an `AiSuggestion` row from the
+///   old batch workflow is backfilled to `aiStatus = 'completed'` so
+///   its existing progress isn't misreported as "not yet queued" —
+///   see `docs/production_readiness.md` ("Camera-first migration").
+///   `FindingRows.elementId` stays a NOT NULL column unchanged (SQLite
+///   can't relax that via `ALTER TABLE` without a full rebuild);
+///   nullability for camera-first findings is handled at the
+///   application layer instead (`''` <-> `null`, see the table's doc
+///   comment) — no schema change needed for that part at all.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -47,7 +62,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -75,6 +90,48 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5) {
         await _createV5Indexes(migrator);
+      }
+      if (from < 6) {
+        await migrator.addColumn(findingRows, findingRows.aiStatus);
+        // `aiSuggestionRows` only needs these columns added if the
+        // table already existed *before* this migration run (from >=
+        // 3) — `migrator.createTable` above (for `from < 3`) always
+        // builds the table from the current Dart class definition,
+        // which already includes every column declared on it today
+        // (these v6 ones included). Adding them again in that case
+        // would be a duplicate-column error — this is exactly what a
+        // device last opened at schema v1/v2 jumping straight to v6
+        // would otherwise hit.
+        if (from >= 3) {
+          await migrator.addColumn(
+            aiSuggestionRows,
+            aiSuggestionRows.suggestedCatalogueEntryId,
+          );
+          await migrator.addColumn(
+            aiSuggestionRows,
+            aiSuggestionRows.suggestedConfidence,
+          );
+          await migrator.addColumn(
+            aiSuggestionRows,
+            aiSuggestionRows.suggestedShortReason,
+          );
+          await migrator.addColumn(
+            aiSuggestionRows,
+            aiSuggestionRows.suggestedCandidateEntryIds,
+          );
+          await migrator.addColumn(
+            aiSuggestionRows,
+            aiSuggestionRows.finalCatalogueEntryId,
+          );
+        }
+        // A finding that already has an AI suggestion from the old
+        // batch workflow has, in effect, already completed AI
+        // processing — without this, it would default to `notQueued`
+        // and misreport as never having been analyzed.
+        await migrator.database.customStatement(
+          "UPDATE finding_rows SET ai_status = 'completed' "
+          'WHERE id IN (SELECT finding_id FROM ai_suggestion_rows)',
+        );
       }
     },
   );

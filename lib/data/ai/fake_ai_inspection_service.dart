@@ -1,74 +1,110 @@
+import 'package:collection/collection.dart';
+
 import '../../core/inspection/inspection_domain.dart';
 
 /// Deterministic, offline demo/fake [AiInspectionService].
 ///
 /// This is **not production AI** — it never makes a network call and
-/// never talks to a real model. It exists so the AI review workflow can
-/// be developed, demoed, and tested without a backend gateway. See
-/// `docs/ai_review.md` for the production design this stands in for.
+/// never talks to a real model. It exists so the camera-first workflow
+/// can be developed, demoed, and tested without a backend gateway. See
+/// `docs/ai_provider_architecture.md` for the production design this
+/// stands in for.
 ///
-/// Suggestions are derived purely from each finding's element name (and
-/// whether evidence is attached) via a fixed lookup table — the same
-/// finding always produces the same suggestion, which is what makes this
-/// safe to assert on in tests.
+/// Classification is derived purely from the area name (and, as a
+/// tie-breaker, the inspector's note) via a fixed lookup into the real
+/// [DefectCatalogue] — the same finding always produces the same
+/// classification, which is what makes this safe to assert on in
+/// tests, and it always resolves to a genuinely valid catalogue entry
+/// id (never a fabricated one), exactly like the real backend must.
 class FakeAiInspectionService implements AiInspectionService {
-  static const providerId = 'fake-demo-v1';
+  static const providerId = 'fake-demo-v2';
 
-  static const Map<String, (String defectType, String recommendation)>
-  _defectsByElementName = {
-    'Floor': (
-      'Cracked/loose floor tile',
-      'Replace the affected tile(s) and reseal grout lines.',
-    ),
-    'Wall': (
-      'Surface crack',
-      'Monitor for further movement; patch and repaint if stable.',
-    ),
-    'Ceiling': (
-      'Water staining',
-      'Investigate the moisture source above before cosmetic repair.',
-    ),
-    'Door': ('Misaligned door frame', 'Adjust hinges and re-square the frame.'),
-    'Window': (
-      'Failed window seal',
-      'Replace weatherstripping/sealant to restore the weather seal.',
-    ),
-    'M&E': (
-      'Irregularity in mechanical/electrical/plumbing system',
-      'Recommend evaluation by a licensed contractor.',
-    ),
-  };
-
-  static const _defaultDefect = (
-    'General wear and deterioration',
-    'Recommend further evaluation during the next scheduled inspection.',
-  );
+  /// Area-name keyword -> main element id, in priority order. The
+  /// first match wins; an area matching none of these (or a note
+  /// containing no useful signal either) is a deliberate `needsReview`
+  /// case, not a forced guess.
+  static const List<(String keyword, String mainElementId)> _byAreaKeyword = [
+    ('bathroom', 'sanitary_fitting'),
+    ('toilet', 'sanitary_fitting'),
+    ('kitchen', 'plumbing'),
+    ('yard', 'floor'),
+    ('balcony', 'floor'),
+  ];
 
   @override
-  Future<AiAnalysisResponse> analyze(AiAnalysisRequest request) async {
-    final suggestions = request.findings.map(_suggestFor).toList();
-    return AiAnalysisResponse(providerId: providerId, suggestions: suggestions);
-  }
+  Future<AiFindingClassification> classifyFinding(
+    AiFindingClassificationRequest request,
+  ) async {
+    final catalogue = DefectCatalogue.instance;
+    final areaLower = request.sectionName.toLowerCase();
+    final noteLower = request.note?.toLowerCase() ?? '';
 
-  AiFindingSuggestion _suggestFor(AiFindingContext finding) {
-    final (defectType, recommendation) =
-        _defectsByElementName[finding.elementName] ?? _defaultDefect;
+    String? mainElementId;
+    for (final (keyword, id) in _byAreaKeyword) {
+      if (areaLower.contains(keyword)) {
+        mainElementId = id;
+        break;
+      }
+    }
+    // A plumbing-flagged area with no other keyword match still gets a
+    // plumbing-flavored guess rather than falling straight to
+    // needsReview, mirroring how a real vision model would weigh
+    // context alongside the photo.
+    mainElementId ??= request.sectionIsPlumbing ? 'plumbing' : null;
 
-    final notesParts = <String>[
-      if (finding.sectionIsPlumbing)
-        'Plumbing-related area — verify no active leakage before closing out.',
-      if (finding.evidenceFilePaths.isNotEmpty)
-        '${finding.evidenceFilePaths.length} photo(s) reviewed for this finding.',
-      if (finding.description == null || finding.description!.trim().isEmpty) 'No inspector description was provided; suggestion is based on element type only.',
-    ];
+    if (mainElementId == null) {
+      return AiFindingClassification(
+        findingId: request.findingId,
+        needsReview: true,
+        shortReason:
+            'Could not confidently match this area to a '
+            'catalogue main element.',
+      );
+    }
 
-    return AiFindingSuggestion(
-      findingId: finding.findingId,
-      elementId: finding.elementId,
-      componentId: finding.componentId,
-      defectType: defectType,
-      recommendation: recommendation,
-      notes: notesParts.isEmpty ? null : notesParts.join(' '),
+    final candidates = catalogue.forMainElement(mainElementId);
+    if (candidates.isEmpty) {
+      return AiFindingClassification(
+        findingId: request.findingId,
+        needsReview: true,
+        shortReason:
+            'No catalogue entries exist for this main element '
+            'yet.',
+      );
+    }
+
+    // Deterministic pick: prefer an entry whose defect description
+    // shares a word with the inspector's note, else the first entry
+    // for that main element.
+    final noteWords = noteLower
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length > 3)
+        .toSet();
+    final matched = noteWords.isEmpty
+        ? null
+        : candidates
+              .where(
+                (e) => noteWords.any(
+                  (w) => e.defectDescription.toLowerCase().contains(w),
+                ),
+              )
+              .firstOrNull;
+    final chosen = matched ?? candidates.first;
+
+    return AiFindingClassification(
+      findingId: request.findingId,
+      needsReview: false,
+      catalogueEntryId: chosen.id,
+      confidence: matched != null ? 0.82 : 0.55,
+      shortReason: matched != null
+          ? 'Note mentions symptoms matching this catalogue defect.'
+          : 'Best guess based on the area alone; no strong signal in '
+                'the note.',
+      candidateEntryIds: candidates
+          .where((e) => e.id != chosen.id)
+          .take(2)
+          .map((e) => e.id)
+          .toList(),
     );
   }
 }

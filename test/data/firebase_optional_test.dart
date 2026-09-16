@@ -31,22 +31,36 @@ void main() {
     final notifier = container.read(activeSessionProvider.notifier);
     final queue = container.read(inspectionQueueProvider);
     final statusNotifier = container.read(sectionStatusesProvider.notifier);
+
+    final photo = await notifier.captureFindingPhoto(
+      source: EvidenceSource.camera,
+    );
+    notifier.saveCameraFinding(
+      sectionId: queue.first.id,
+      photo: photo!,
+      note: 'Cracked tile',
+    );
+    // AI classification (the fake, offline service — Firebase is
+    // unconfigured) is fire-and-forget; give it a tick to complete.
+    await Future<void>.delayed(Duration.zero);
+
     for (final s in queue) {
       statusNotifier.setStatus(s.id, SectionStatus.completed);
     }
-    final section = queue.first;
-    notifier.addFinding(
-      sectionId: section.id,
-      elementId: section.elements.first.id,
-      description: 'Cracked tile',
-    );
     await notifier.markPhysicalInspectionComplete();
-    await notifier.startAiAnalysis();
+
     final suggestion = container
         .read(activeSessionProvider)!
         .aiSuggestions
         .single;
-    notifier.acceptSuggestion(suggestion.id);
+    if (suggestion.needsReview) {
+      notifier.changeSuggestion(
+        suggestion.id,
+        DefectCatalogue.instance.entries.first.id,
+      );
+    } else {
+      notifier.acceptSuggestion(suggestion.id);
+    }
 
     final result = await notifier.generateReport();
 
@@ -85,10 +99,13 @@ void main() {
     final sessionId = container.read(activeSessionProvider)!.id;
     final notifier = container.read(activeSessionProvider.notifier);
     final queue = container.read(inspectionQueueProvider);
-    notifier.addFinding(
+    final photo = await notifier.captureFindingPhoto(
+      source: EvidenceSource.camera,
+    );
+    notifier.saveCameraFinding(
       sectionId: queue.first.id,
-      elementId: queue.first.elements.first.id,
-      description: 'Cracked tile',
+      photo: photo!,
+      note: 'Cracked tile',
     );
     // Owned by the signed-in user.
     expect(container.read(activeSessionProvider)!.ownerUid, testAuthUser.uid);

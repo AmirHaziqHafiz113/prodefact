@@ -20,9 +20,10 @@ final aiInspectionServiceProvider = Provider<AiInspectionService>((ref) {
   return FirebaseAiInspectionService();
 });
 
-final aiReviewCoordinatorProvider = Provider<AiReviewCoordinator>((ref) {
-  return DefaultAiReviewCoordinator(
-    localRepository: ref.watch(inspectionRepositoryProvider),
-    aiService: ref.watch(aiInspectionServiceProvider),
-  );
-});
+final aiClassificationCoordinatorProvider =
+    Provider<AiClassificationCoordinator>((ref) {
+      return DefaultAiClassificationCoordinator(
+        localRepository: ref.watch(inspectionRepositoryProvider),
+        aiService: ref.watch(aiInspectionServiceProvider),
+      );
+    });

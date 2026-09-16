@@ -223,6 +223,98 @@ void main() {
     expect(sessionRow.aiReviewState, 'notStarted');
   });
 
+  test('upgrading from v5 (where ai_suggestion_rows already existed) adds '
+      'the v6 columns without a duplicate-column error, and backfills '
+      'aiStatus for findings that already had a suggestion', () async {
+    final dbFile = File('${tempDir.path}/v5.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        owner_uid TEXT,
+        ai_review_state TEXT NOT NULL DEFAULT 'notStarted'
+      );
+      CREATE TABLE finding_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        section_id TEXT NOT NULL,
+        element_id TEXT NOT NULL,
+        component_id TEXT,
+        description TEXT,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE ai_suggestion_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        finding_id TEXT NOT NULL REFERENCES finding_rows(id) ON DELETE CASCADE,
+        suggested_element_id TEXT,
+        suggested_component_id TEXT,
+        suggested_defect_type TEXT,
+        suggested_recommendation TEXT,
+        suggested_notes TEXT,
+        final_element_id TEXT,
+        final_component_id TEXT,
+        final_defect_type TEXT,
+        final_recommendation TEXT,
+        final_notes TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        provider_id TEXT NOT NULL,
+        generated_at INTEGER NOT NULL,
+        reviewed_at INTEGER
+      );
+      CREATE INDEX idx_finding_rows_session_id ON finding_rows (session_id);
+      CREATE INDEX idx_ai_suggestion_rows_finding_id ON ai_suggestion_rows (finding_id);
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, created_at, updated_at)
+      VALUES
+        ('session_5', 'homeInspection', 'highRise', 'inProgress', 5000, 5000);
+      INSERT INTO finding_rows
+        (id, session_id, section_id, element_id, description, created_at, updated_at)
+      VALUES
+        ('finding_legacy', 'session_5', 'bathroom', 'floor', 'Cracked tile', 5000, 5000);
+      INSERT INTO ai_suggestion_rows
+        (id, session_id, finding_id, status, provider_id, generated_at, final_defect_type)
+      VALUES
+        ('suggestion_1', 'session_5', 'finding_legacy', 'accepted', 'fake-demo-v1', 5000, 'Cracked tile');
+    ''');
+    raw.execute('PRAGMA user_version = 5');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    // Must not throw — this is exactly the duplicate-column regression
+    // this test guards against.
+    final findingRow = await (db.select(
+      db.findingRows,
+    )..where((t) => t.id.equals('finding_legacy'))).getSingle();
+
+    // A finding that already had an AI suggestion from the pre-v6
+    // batch workflow is backfilled to `completed`, not left at the
+    // new column's default (`notQueued`), so its progress isn't
+    // misreported as never having been analyzed.
+    expect(findingRow.aiStatus, 'completed');
+
+    final suggestionRow = await (db.select(
+      db.aiSuggestionRows,
+    )..where((t) => t.id.equals('suggestion_1'))).getSingle();
+    expect(suggestionRow.suggestedCatalogueEntryId, isNull);
+    expect(suggestionRow.finalCatalogueEntryId, isNull);
+    // The legacy free-text columns are completely untouched.
+    expect(suggestionRow.finalDefectType, 'Cracked tile');
+  });
+
   test('a fresh install (onCreate) also gets the v5 indexes', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);

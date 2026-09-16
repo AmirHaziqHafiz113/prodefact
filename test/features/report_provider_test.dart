@@ -9,6 +9,27 @@ import 'package:prodefact/features/home_inspection/providers/physical_inspection
 import '../support/fake_report_services.dart';
 import '../support/test_repository.dart';
 
+/// Resolves whatever suggestion is pending on the active session,
+/// tolerating either a confident (`accept`) or `needsReview`
+/// (`changeSuggestion`) classification from the fake AI.
+void _resolvePendingSuggestion(
+  ProviderContainer container,
+  ActiveInspectionSession notifier,
+) {
+  final suggestion = container
+      .read(activeSessionProvider)!
+      .aiSuggestions
+      .single;
+  if (suggestion.needsReview) {
+    notifier.changeSuggestion(
+      suggestion.id,
+      DefectCatalogue.instance.entries.first.id,
+    );
+  } else {
+    notifier.acceptSuggestion(suggestion.id);
+  }
+}
+
 void main() {
   test(
     'report generation is refused before physical inspection is complete',
@@ -52,11 +73,14 @@ void main() {
     for (final section in queue) {
       statusNotifier.setStatus(section.id, SectionStatus.completed);
     }
-    final section = queue.first;
-    notifier.addFinding(
-      sectionId: section.id,
-      elementId: section.elements.first.id,
-      description: 'Cracked tile',
+
+    final photo = await notifier.captureFindingPhoto(
+      source: EvidenceSource.camera,
+    );
+    notifier.saveCameraFinding(
+      sectionId: queue.first.id,
+      photo: photo!,
+      note: 'Cracked tile',
     );
     await notifier.markPhysicalInspectionComplete();
 
@@ -64,15 +88,13 @@ void main() {
     expect(tooEarly.outcome, ReportGenerationOutcome.aiReviewIncomplete);
     expect(renderer.renderCalls, 0);
 
-    await notifier.startAiAnalysis();
+    // AI classification is queued asynchronously on save; give it a
+    // tick, then it's still pending review.
+    await Future<void>.delayed(Duration.zero);
     final stillPending = await notifier.generateReport();
     expect(stillPending.outcome, ReportGenerationOutcome.aiReviewIncomplete);
 
-    final suggestion = container
-        .read(activeSessionProvider)!
-        .aiSuggestions
-        .single;
-    notifier.acceptSuggestion(suggestion.id);
+    _resolvePendingSuggestion(container, notifier);
 
     final result = await notifier.generateReport();
     expect(result.isSuccess, isTrue);
@@ -99,19 +121,18 @@ void main() {
     for (final section in queue) {
       statusNotifier.setStatus(section.id, SectionStatus.completed);
     }
-    final section = queue.first;
-    notifier.addFinding(
-      sectionId: section.id,
-      elementId: section.elements.first.id,
-      description: 'Cracked tile',
+
+    final photo = await notifier.captureFindingPhoto(
+      source: EvidenceSource.camera,
+    );
+    notifier.saveCameraFinding(
+      sectionId: queue.first.id,
+      photo: photo!,
+      note: 'Cracked tile',
     );
     await notifier.markPhysicalInspectionComplete();
-    await notifier.startAiAnalysis();
-    final suggestion = container
-        .read(activeSessionProvider)!
-        .aiSuggestions
-        .single;
-    notifier.acceptSuggestion(suggestion.id);
+    await Future<void>.delayed(Duration.zero);
+    _resolvePendingSuggestion(container, notifier);
     await notifier.generateReport();
 
     await notifier.shareReport();
@@ -140,19 +161,18 @@ void main() {
       for (final section in queue) {
         statusNotifier.setStatus(section.id, SectionStatus.completed);
       }
-      final section = queue.first;
-      notifier.addFinding(
-        sectionId: section.id,
-        elementId: section.elements.first.id,
-        description: 'Cracked tile',
+
+      final photo = await notifier.captureFindingPhoto(
+        source: EvidenceSource.camera,
+      );
+      notifier.saveCameraFinding(
+        sectionId: queue.first.id,
+        photo: photo!,
+        note: 'Cracked tile',
       );
       await notifier.markPhysicalInspectionComplete();
-      await notifier.startAiAnalysis();
-      final suggestion = container
-          .read(activeSessionProvider)!
-          .aiSuggestions
-          .single;
-      notifier.acceptSuggestion(suggestion.id);
+      await Future<void>.delayed(Duration.zero);
+      _resolvePendingSuggestion(container, notifier);
 
       final result = await notifier.generateReport();
 

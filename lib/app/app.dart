@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
-class ProDefactApp extends StatefulWidget {
+class ProDefactApp extends ConsumerStatefulWidget {
   const ProDefactApp({super.key});
 
   @override
-  State<ProDefactApp> createState() => _ProDefactAppState();
+  ConsumerState<ProDefactApp> createState() => _ProDefactAppState();
 }
 
-class _ProDefactAppState extends State<ProDefactApp> {
-  late final GoRouter _router = buildAppRouter();
+class _ProDefactAppState extends ConsumerState<ProDefactApp> {
+  late final GoRouter _router = buildAppRouter(ref);
 
   @override
   Widget build(BuildContext context) {

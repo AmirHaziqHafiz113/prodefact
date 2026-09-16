@@ -27,6 +27,8 @@ Section _bathroomSection() {
   );
 }
 
+/// A camera-first finding (has evidence, so it's AI-eligible) whose AI
+/// classification has completed and been accepted by the inspector.
 Future<Finding> _addResolvedFinding(
   DriftInspectionRepository local,
   String sessionId, {
@@ -36,13 +38,22 @@ Future<Finding> _addResolvedFinding(
   final finding = Finding(
     id: findingId,
     sectionId: 'master_bathroom',
-    elementId: 'floor',
-    componentId: 'floor_tile',
     description: 'Cracked tile',
+    aiStatus: AiFindingStatus.completed,
     createdAt: now,
     updatedAt: now,
   );
   await local.saveFinding(sessionId, finding);
+  await local.addEvidence(
+    sessionId,
+    Evidence(
+      id: '${findingId}_evidence',
+      findingId: findingId,
+      filePath: '/fake/$findingId.jpg',
+      createdAt: now,
+    ),
+  );
+  final entryId = DefectCatalogue.instance.entries.first.id;
   await local.saveAiSuggestion(
     AiSuggestion(
       id: 'suggestion_for_$findingId',
@@ -50,12 +61,37 @@ Future<Finding> _addResolvedFinding(
       findingId: findingId,
       providerId: 'fake-demo-v1',
       generatedAt: now,
-      suggestedDefectType: 'Cracked tile',
-      suggestedRecommendation: 'Replace it',
-      finalDefectType: 'Cracked tile',
-      finalRecommendation: 'Replace it',
+      suggestedCatalogueEntryId: entryId,
+      finalCatalogueEntryId: entryId,
       status: AiSuggestionStatus.accepted,
       reviewedAt: now,
+    ),
+  );
+  return finding;
+}
+
+/// A camera-first finding with evidence but no AI suggestion yet — used
+/// to exercise the "AI review incomplete" gate.
+Future<Finding> _addUnprocessedFinding(
+  DriftInspectionRepository local,
+  String sessionId, {
+  String findingId = 'finding_1',
+}) async {
+  final now = DateTime.now();
+  final finding = Finding(
+    id: findingId,
+    sectionId: 'master_bathroom',
+    createdAt: now,
+    updatedAt: now,
+  );
+  await local.saveFinding(sessionId, finding);
+  await local.addEvidence(
+    sessionId,
+    Evidence(
+      id: '${findingId}_evidence',
+      findingId: findingId,
+      filePath: '/fake/$findingId.jpg',
+      createdAt: now,
     ),
   );
   return finding;
@@ -114,17 +150,9 @@ void main() {
       session.id,
       InspectionStatus.physicalInspectionComplete,
     );
-    // A finding exists, but AI review has not run at all yet.
-    await local.saveFinding(
-      session.id,
-      Finding(
-        id: 'finding_1',
-        sectionId: 'master_bathroom',
-        elementId: 'floor',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
+    // A camera-first finding (with a photo) exists, but AI has not
+    // processed it at all yet — still `notQueued`/no suggestion.
+    await _addUnprocessedFinding(local, session.id);
 
     final result = await coordinator.generateReport(
       session.id,
@@ -146,24 +174,21 @@ void main() {
       session.id,
       InspectionStatus.physicalInspectionComplete,
     );
-    await local.saveFinding(
+    final finding = await _addUnprocessedFinding(local, session.id);
+    await local.setFindingAiStatus(
       session.id,
-      Finding(
-        id: 'finding_1',
-        sectionId: 'master_bathroom',
-        elementId: 'floor',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
+      finding.id,
+      AiFindingStatus.completed,
     );
     await local.saveAiSuggestion(
       AiSuggestion(
         id: 'suggestion_1',
         sessionId: session.id,
-        findingId: 'finding_1',
+        findingId: finding.id,
         providerId: 'fake-demo-v1',
         generatedAt: DateTime.now(),
-      ), // still pending
+        suggestedCatalogueEntryId: DefectCatalogue.instance.entries.first.id,
+      ), // still pending — no final entry, no review
     );
     await local.setAiReviewState(session.id, AiReviewState.readyForReview);
 

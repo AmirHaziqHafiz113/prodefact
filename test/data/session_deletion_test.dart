@@ -203,14 +203,23 @@ void main() {
         .evidence
         .single
         .filePath;
+    // Adding evidence queues AI classification asynchronously; give it
+    // a tick to run.
+    await Future<void>.delayed(Duration.zero);
 
     await notifier.markPhysicalInspectionComplete();
-    await notifier.startAiAnalysis();
     final suggestion = container
         .read(activeSessionProvider)!
         .aiSuggestions
         .single;
-    notifier.acceptSuggestion(suggestion.id);
+    if (suggestion.needsReview) {
+      notifier.changeSuggestion(
+        suggestion.id,
+        DefectCatalogue.instance.entries.first.id,
+      );
+    } else {
+      notifier.acceptSuggestion(suggestion.id);
+    }
     final generated = await notifier.generateReport();
     expect(generated.isSuccess, isTrue);
     final reportPath = generated.report!.filePath;

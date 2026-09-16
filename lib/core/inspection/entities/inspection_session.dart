@@ -116,6 +116,9 @@ class InspectionSessionSummary {
     required this.updatedAt,
     this.syncStatus = SyncStatus.localOnly,
     this.ownerUid,
+    this.aiEligibleFindingsCount = 0,
+    this.aiProcessedFindingsCount = 0,
+    this.aiPendingReviewCount = 0,
   });
 
   final String id;
@@ -126,6 +129,15 @@ class InspectionSessionSummary {
   final DateTime updatedAt;
   final SyncStatus syncStatus;
   final String? ownerUid;
+
+  /// Cheap, dashboard-card-sized AI progress counts — see
+  /// `AiProcessingProgress`/`AiReviewProgress` for the full-session
+  /// equivalents. Computed by the repository alongside the summary
+  /// itself so the dashboard never needs to load every session's full
+  /// findings/suggestions just to show a progress bar.
+  final int aiEligibleFindingsCount;
+  final int aiProcessedFindingsCount;
+  final int aiPendingReviewCount;
 
   bool get isComplete => status != InspectionStatus.inProgress;
 }

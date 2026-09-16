@@ -54,6 +54,18 @@ class FakeAuthService implements AuthService {
     return user;
   }
 
+  /// Emails a reset was requested for — lets a test assert the request
+  /// happened without a real email ever being sent.
+  final List<String> resetRequests = [];
+
+  @override
+  Future<void> resetPassword(String email) async {
+    if (!_passwordsByEmail.containsKey(email)) {
+      throw const AuthException('No account found for that email.');
+    }
+    resetRequests.add(email);
+  }
+
   @override
   Future<void> signOut() async {
     _current = null;

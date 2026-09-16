@@ -41,10 +41,25 @@ building a profile system. `authStateProvider` (a `StreamProvider`)
 listens to `AuthService.authStateChanges()`, which Firebase itself
 replays on app start, so auth state survives restarts for free.
 
-Signing in is entirely optional. Every inspection screen works fully
-without it; the only thing gated behind auth is cloud sync itself.
+**Updated**: signing in is optional only in **local-only/demo builds**
+(no Firebase project configured — `firebaseReadyProvider` false).
+Whenever Firebase *is* configured, authentication is a **hard gate** —
+see `docs/production_readiness.md` ("Authentication hard gate"): no
+inspection screen is reachable signed out at all, enforced by the
+router's `redirect`, not merely by a soft "sync is disabled" state.
 
 ## Ownership & the "no cross-user visibility" rule
+
+**Note on "guest" sessions after the hard gate**: the `ownerUid == null`
+("guest") case described below can now only actually occur in local-
+only/demo builds — once Firebase is configured, the hard gate above
+means a session can never be *created* while signed out in the first
+place (there's no reachable screen from which to create one), so
+`ownerUid` is always set immediately in that mode. The claiming logic
+remains in place and correct — it's simply unreachable in normal
+operation once a real Firebase project is configured, rather than
+removed, since a local-only build (which has no such gate) still
+relies on it behaving exactly as documented.
 
 Every local session has a nullable `ownerUid`:
 

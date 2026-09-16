@@ -16,14 +16,25 @@ import 'support/test_repository.dart';
 Finder _within(Finder matching) =>
     find.descendant(of: find.byType(Scaffold).last, matching: matching);
 
-// The add/edit finding UI is a modal bottom sheet (not an AlertDialog)
-// — see finding_dialog.dart.
-Finder _dialogTextFieldAt(int index) => find
-    .descendant(of: find.byType(BottomSheet), matching: find.byType(TextField))
-    .at(index);
+// The photo preview (side note + Save/Discard) is a modal bottom sheet
+// — see area_inspection_screen.dart's `_PhotoPreviewSheet`.
+Finder _previewNoteField() => find.descendant(
+  of: find.byType(BottomSheet),
+  matching: find.byType(TextField),
+);
 
-Finder _dialogButton(String label) =>
+Finder _previewButton(String label) =>
     find.descendant(of: find.byType(BottomSheet), matching: find.text(label));
+
+/// Takes a photo and saves a camera-first finding with [note] against
+/// whichever area screen is currently on top.
+Future<void> _takePhotoAndSave(WidgetTester tester, String note) async {
+  await tester.tap(_within(find.text('Take Defect Photo')));
+  await tester.pumpAndSettle();
+  await tester.enterText(_previewNoteField(), note);
+  await tester.tap(_previewButton('Save Finding'));
+  await tester.pumpAndSettle();
+}
 
 Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   final container = ProviderContainer(overrides: testOverrides());
@@ -75,34 +86,20 @@ void main() {
   });
 
   testWidgets(
-    'a finding added against an element/component survives navigating '
-    'back to the queue and forward again (in-memory state preserved)',
+    'a camera-first finding survives navigating back to the queue and '
+    'forward again (in-memory state preserved)',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
       final firstAreaName = container.read(inspectionQueueProvider).first.name;
-      final firstElementName = container
-          .read(inspectionQueueProvider)
-          .first
-          .elements
-          .first
-          .name;
 
       await tester.tap(_within(find.text(firstAreaName)));
       await tester.pumpAndSettle();
-      await tester.tap(_within(find.text(firstElementName)));
-      await tester.pumpAndSettle();
 
-      await tester.tap(_within(find.text('Add finding')).first);
-      await tester.pumpAndSettle();
-      await tester.enterText(_dialogTextFieldAt(0), 'Cracked tile');
-      await tester.tap(_dialogButton('Add'));
-      await tester.pumpAndSettle();
+      await _takePhotoAndSave(tester, 'Cracked tile');
 
       expect(_within(find.text('Cracked tile')), findsOneWidget);
 
       // Navigate back to the queue, then forward again.
-      _popRoute(tester);
-      await tester.pumpAndSettle();
       _popRoute(tester);
       await tester.pumpAndSettle();
       expect(find.text('Physical Inspection'), findsOneWidget);
@@ -110,44 +107,26 @@ void main() {
       await tester.tap(_within(find.text(firstAreaName)));
       await tester.pumpAndSettle();
 
-      // The area screen's overview (stats, status control, element
-      // grid) now takes more vertical space than the findings list
-      // below it — scroll to reveal it, as with any long screen.
-      await tester.scrollUntilVisible(
-        _within(find.text('Cracked tile')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
       expect(_within(find.text('Cracked tile')), findsOneWidget);
     },
   );
 
-  testWidgets('a finding can be edited and then removed', (tester) async {
+  testWidgets('a finding\'s note can be edited and the finding removed', (
+    tester,
+  ) async {
     final container = await _pumpToInspectionQueue(tester);
     final firstAreaName = container.read(inspectionQueueProvider).first.name;
-    final firstElementName = container
-        .read(inspectionQueueProvider)
-        .first
-        .elements
-        .first
-        .name;
 
     await tester.tap(_within(find.text(firstAreaName)));
     await tester.pumpAndSettle();
-    await tester.tap(_within(find.text(firstElementName)));
-    await tester.pumpAndSettle();
 
-    await tester.tap(_within(find.text('Add finding')).first);
-    await tester.pumpAndSettle();
-    await tester.enterText(_dialogTextFieldAt(0), 'Original text');
-    await tester.tap(_dialogButton('Add'));
-    await tester.pumpAndSettle();
+    await _takePhotoAndSave(tester, 'Original text');
     expect(_within(find.text('Original text')), findsOneWidget);
 
-    await tester.tap(_within(find.byIcon(Icons.edit)));
+    await tester.tap(_within(find.byIcon(Icons.edit_outlined)));
     await tester.pumpAndSettle();
-    await tester.enterText(_dialogTextFieldAt(0), 'Edited text');
-    await tester.tap(_dialogButton('Save'));
+    await tester.enterText(find.byType(TextField).last, 'Edited text');
+    await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(_within(find.text('Edited text')), findsOneWidget);
     expect(find.text('Original text'), findsNothing);
@@ -155,7 +134,10 @@ void main() {
     await tester.tap(_within(find.byIcon(Icons.delete_outline)));
     await tester.pumpAndSettle();
     expect(find.text('Edited text'), findsNothing);
-    expect(_within(find.text('No findings recorded yet.')), findsOneWidget);
+    expect(
+      _within(find.textContaining('No findings recorded yet')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('marking an area completed is reflected in the queue', (

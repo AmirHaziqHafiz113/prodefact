@@ -25,5 +25,10 @@ abstract class AuthService {
 
   Future<AuthUser> signUpWithEmail(String email, String password);
 
+  /// Sends a password-reset email. Throws [AuthException] with a
+  /// user-facing message on failure (invalid email, network error,
+  /// etc.) — never a raw Firebase exception.
+  Future<void> resetPassword(String email);
+
   Future<void> signOut();
 }

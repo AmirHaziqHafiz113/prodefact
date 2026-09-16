@@ -19,14 +19,19 @@ String? _orNull(String? value) {
   return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
 }
 
-/// The final/reviewed values an inspector approves for one suggestion.
-typedef _ReviewedFields = ({
-  String? elementId,
-  String? componentId,
-  String? defectType,
-  String? recommendation,
-  String? notes,
-});
+/// A photo captured for a finding that doesn't exist yet — see
+/// `ActiveInspectionSession.captureFindingPhoto`/`saveCameraFinding`.
+class CapturedFindingPhoto {
+  const CapturedFindingPhoto({
+    required this.pendingFindingId,
+    required this.filePath,
+    required this.source,
+  });
+
+  final String pendingFindingId;
+  final String filePath;
+  final EvidenceSource source;
+}
 
 /// Holds the most recent local-write failure message for the active
 /// session, if any — a durable-write "surfaced failure" companion to
@@ -69,7 +74,6 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       ref.read(inspectionRepositoryProvider);
 
   bool _isSyncing = false;
-  bool _isAnalyzing = false;
   bool _isGeneratingReport = false;
 
   /// Runs [write] (the durable persistence for a mutation already
@@ -182,6 +186,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       }
       state = session;
       ref.read(activeSessionErrorProvider.notifier).clear();
+      unawaited(processQueuedAiClassifications());
       return true;
     } catch (error, stackTrace) {
       AppLogger.error(
@@ -464,6 +469,116 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         action: 'attach photo',
       ),
     );
+
+    // A new photo can change an already-settled classification — a
+    // finding whose AI processing already finished is re-queued so the
+    // extra evidence actually gets considered, rather than silently
+    // never being looked at by AI at all.
+    final target = findings.firstWhereOrNull((f) => f.id == findingId);
+    if (target != null && !aiFindingStatusIsInFlight(target.aiStatus)) {
+      _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+      unawaited(_enqueueAiClassification(session.id, findingId));
+    }
+  }
+
+  // ---- camera-first finding creation ----
+
+  /// Captures a photo for a **not-yet-created** finding in [sectionId]
+  /// — no `Finding`/`Evidence` row is written to the database at this
+  /// point, so the inspector can preview and discard without ever
+  /// creating a finding (and, critically, without ever queuing AI —
+  /// AI only ever runs after an explicit [saveCameraFinding]). Returns
+  /// null if the picker was cancelled, or on a capture failure (surfaced
+  /// via [activeSessionErrorProvider]).
+  Future<CapturedFindingPhoto?> captureFindingPhoto({
+    required EvidenceSource source,
+  }) async {
+    final pendingFindingId = 'finding_${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final captureService = ref.read(evidenceCaptureServiceProvider);
+      final captured = await captureService.captureImage(
+        findingId: pendingFindingId,
+        source: source,
+      );
+      if (captured == null) return null; // user cancelled the picker
+      return CapturedFindingPhoto(
+        pendingFindingId: pendingFindingId,
+        filePath: captured.filePath,
+        source: captured.source,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error('Finding photo capture failed', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set(
+            'Could not add that photo. Check camera/photo permissions and '
+            'try again.',
+          );
+      return null;
+    }
+  }
+
+  /// Discards a photo captured via [captureFindingPhoto] that was never
+  /// saved — deletes the temp file; nothing else to roll back, since
+  /// nothing was ever persisted to the database.
+  Future<void> discardCapturedFindingPhoto(CapturedFindingPhoto photo) {
+    return ref
+        .read(evidenceFileStoreProvider)
+        .deleteEvidenceFile(photo.filePath);
+  }
+
+  /// Commits a photo captured via [captureFindingPhoto] as a new
+  /// camera-first finding: creates the `Finding` row (no pre-chosen
+  /// element/component — see `Finding`'s doc comment), attaches the
+  /// photo as its first evidence, persists both, and queues AI
+  /// classification. This is the **only** place a camera-first finding
+  /// is created, and it's also the only place AI is ever queued for a
+  /// finding — never merely from capturing/previewing a photo.
+  Finding saveCameraFinding({
+    required String sectionId,
+    required CapturedFindingPhoto photo,
+    String? note,
+  }) {
+    final session = state;
+    if (session == null) {
+      throw StateError('Cannot save a finding without an active session');
+    }
+    final now = DateTime.now();
+    final evidence = Evidence(
+      id: 'evidence_${now.microsecondsSinceEpoch}',
+      findingId: photo.pendingFindingId,
+      filePath: photo.filePath,
+      createdAt: now,
+      source: photo.source,
+    );
+    final finding = Finding(
+      id: photo.pendingFindingId,
+      sectionId: sectionId,
+      description: _orNull(note),
+      createdAt: now,
+      updatedAt: now,
+      evidence: [evidence],
+      aiStatus: AiFindingStatus.queued,
+    );
+
+    state = session.copyWith(
+      findings: [...session.findings, finding],
+      updatedAt: now,
+    );
+    unawaited(
+      _persist(
+        () async {
+          await _repository.saveFinding(session.id, finding);
+          await _repository.addEvidence(session.id, evidence);
+        },
+        previous: session,
+        action: 'save finding',
+      ),
+    );
+    ref.invalidate(sessionSummariesProvider);
+    _logAnalytics(AnalyticsEvent.findingSaved);
+    unawaited(_enqueueAiClassification(session.id, finding.id));
+    return finding;
   }
 
   void removeEvidence({required String findingId, required String evidenceId}) {
@@ -532,107 +647,222 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
-  // ---- AI review (Phase 6) ----
+  // ---- progressive per-finding AI classification ----
 
-  /// Runs AI analysis for the active session, refusing to do anything
-  /// (via [AiReviewCoordinator]'s gate) unless physical inspection is
-  /// already complete. Refreshes in-memory state either way so the UI
-  /// reflects the resulting `aiReviewState` and any new suggestions. A
-  /// no-op while a previous call for this notifier is still in flight —
-  /// double-tapping "Start AI Analysis" can never trigger two concurrent
-  /// analysis runs (which, without this guard, could each pass the
-  /// coordinator's own gate check before either had persisted
-  /// `analyzing`, and so both call the AI backend and duplicate
-  /// suggestions).
-  Future<AiAnalysisResult> startAiAnalysis() async {
+  /// Findings currently being classified, so a duplicate trigger (e.g.
+  /// resuming a session that already kicked off processing) can never
+  /// start two concurrent classification calls for the same finding.
+  final Set<String> _classifyingFindingIds = {};
+
+  void _setFindingAiStatusLocal(String findingId, AiFindingStatus status) {
+    // The notifier (and its `ref`) may have been disposed while a
+    // background classification was still in flight — e.g. the screen
+    // was popped, or (in tests) the container was torn down. There's
+    // nothing left to update at that point, and touching a disposed
+    // `ref`/`state` throws.
+    if (!ref.mounted) return;
     final session = state;
-    if (session == null) return const AiAnalysisResult.sessionNotFound();
-    if (_isAnalyzing) return const AiAnalysisResult.alreadyReviewed();
+    if (session == null) return;
+    state = session.copyWith(
+      findings: [
+        for (final finding in session.findings)
+          if (finding.id == findingId)
+            finding.copyWith(aiStatus: status)
+          else
+            finding,
+      ],
+    );
+  }
 
-    _isAnalyzing = true;
-    try {
-      final result = await ref
-          .read(aiReviewCoordinatorProvider)
-          .runAnalysis(session.id);
-      state = await _repository.loadSession(session.id);
-      ref.invalidate(sessionSummariesProvider);
-      if (result.outcome == AiAnalysisOutcome.success) {
-        _logAnalytics(AnalyticsEvent.aiReviewStarted);
-      }
-      return result;
-    } catch (error, stackTrace) {
-      AppLogger.error('AI analysis failed unexpectedly', error, stackTrace);
-      return AiAnalysisResult.failure(error.toString());
-    } finally {
-      _isAnalyzing = false;
+  /// Scans the active session for any finding whose AI processing
+  /// hasn't reached a terminal state yet (queued, or failed — safe to
+  /// retry) and (re)starts classification for each. Call this when a
+  /// session is resumed/reopened so work queued before the app was
+  /// closed, or before connectivity returned, actually continues —
+  /// closing and reopening the app never loses or corrupts this
+  /// progress, since it's driven entirely from the durably-persisted
+  /// `aiStatus`/`AiSuggestion` state, not any in-memory-only queue.
+  Future<void> processQueuedAiClassifications() async {
+    final session = state;
+    if (session == null) return;
+    final toProcess = session.findings.where(
+      (f) =>
+          f.isAiEligible &&
+          (f.aiStatus == AiFindingStatus.queued ||
+              f.aiStatus == AiFindingStatus.failed),
+    );
+    for (final finding in toProcess) {
+      unawaited(_enqueueAiClassification(session.id, finding.id));
     }
   }
 
+  /// Manually retries a finding whose AI classification previously
+  /// failed. A no-op for any other status (in particular, this never
+  /// re-runs a finding that's already `completed`/`needsReview` — use
+  /// the review actions below to change that outcome instead).
+  Future<void> retryAiClassification(String findingId) async {
+    final session = state;
+    if (session == null) return;
+    final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null || finding.aiStatus != AiFindingStatus.failed) return;
+    _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+    unawaited(_enqueueAiClassification(session.id, findingId));
+  }
+
+  /// Runs one finding's classification in the background: never awaited
+  /// by a caller, and safe to call redundantly (idempotent — a finding
+  /// already in flight, or already terminal, is skipped). This is what
+  /// lets AI work through Section A's findings while the inspector is
+  /// already physically inspecting Section B — nothing here blocks the
+  /// UI thread or any other provider call.
+  Future<void> _enqueueAiClassification(
+    String sessionId,
+    String findingId,
+  ) async {
+    if (!_classifyingFindingIds.add(findingId)) return;
+    try {
+      // The notifier (and its `ref`) may already be disposed by the
+      // time this actually runs — it's always kicked off un-awaited.
+      if (!ref.mounted) return;
+      final firebaseReady = ref.read(firebaseReadyProvider);
+      if (firebaseReady) {
+        if (ref.read(authServiceProvider).currentUser == null) {
+          // Stays `queued` — displayed as "waiting for connection"
+          // (not signed in) until the inspector signs in.
+          return;
+        }
+        _setFindingAiStatusLocal(findingId, AiFindingStatus.uploading);
+        unawaited(
+          _repository.setFindingAiStatus(
+            sessionId,
+            findingId,
+            AiFindingStatus.uploading,
+          ),
+        );
+        try {
+          final syncResult = await ref
+              .read(syncCoordinatorProvider)
+              .syncSession(sessionId);
+          if (!syncResult.isSuccess) {
+            // Offline or a transient sync failure — stays queued
+            // (displayed as "waiting for connection") rather than
+            // `failed`, since nothing about the classification itself
+            // was actually attempted yet.
+            _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+            unawaited(
+              _repository.setFindingAiStatus(
+                sessionId,
+                findingId,
+                AiFindingStatus.queued,
+              ),
+            );
+            return;
+          }
+        } catch (error) {
+          AppLogger.warning(
+            'Evidence sync before AI classification failed',
+            error,
+          );
+          _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+          unawaited(
+            _repository.setFindingAiStatus(
+              sessionId,
+              findingId,
+              AiFindingStatus.queued,
+            ),
+          );
+          return;
+        }
+      }
+
+      _setFindingAiStatusLocal(findingId, AiFindingStatus.analyzing);
+      unawaited(
+        _repository.setFindingAiStatus(
+          sessionId,
+          findingId,
+          AiFindingStatus.analyzing,
+        ),
+      );
+
+      await ref
+          .read(aiClassificationCoordinatorProvider)
+          .classifyFinding(sessionId, findingId);
+
+      if (!ref.mounted) return;
+      // Reload from the durable store rather than patching in-memory
+      // fields by hand — the coordinator already persisted the
+      // suggestion/status; this just brings this notifier's mirror
+      // back in sync with it. Only if this is still the active session
+      // (the inspector may have navigated away/opened another session
+      // while this was in flight).
+      if (state?.id == sessionId) {
+        final reloaded = await _repository.loadSession(sessionId);
+        if (ref.mounted && state?.id == sessionId) {
+          state = reloaded;
+          ref.invalidate(sessionSummariesProvider);
+        }
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'AI classification failed unexpectedly',
+        error,
+        stackTrace,
+      );
+      if (!ref.mounted) return;
+      _setFindingAiStatusLocal(findingId, AiFindingStatus.failed);
+      unawaited(
+        _repository.setFindingAiStatus(
+          sessionId,
+          findingId,
+          AiFindingStatus.failed,
+        ),
+      );
+    } finally {
+      _classifyingFindingIds.remove(findingId);
+    }
+  }
+
+  // ---- inspector review of AI classifications ----
+
+  /// Approves the AI's own suggestion as-is.
   void acceptSuggestion(String suggestionId) {
     _reviewSuggestion(
       suggestionId,
       status: AiSuggestionStatus.accepted,
-      buildFinal: (suggestion) => (
-        elementId: suggestion.suggestedElementId,
-        componentId: suggestion.suggestedComponentId,
-        defectType: suggestion.suggestedDefectType,
-        recommendation: suggestion.suggestedRecommendation,
-        notes: suggestion.suggestedNotes,
-      ),
+      finalCatalogueEntryId: (s) => s.suggestedCatalogueEntryId ?? '',
     );
   }
 
-  /// Inspector-modified values replace the AI's own suggestion in the
-  /// `final*` fields; the original `suggested*` values are untouched.
-  void editSuggestion(
-    String suggestionId, {
-    required String? elementId,
-    required String? componentId,
-    required String? defectType,
-    required String? recommendation,
-    required String? notes,
-  }) {
+  /// The inspector picks a different (or, for a `needsReview` finding,
+  /// the first) catalogue entry via the searchable picker — this is the
+  /// only way free text ever becomes the record; the inspector always
+  /// selects from the controlled catalogue, never types a defect name.
+  void changeSuggestion(String suggestionId, String catalogueEntryId) {
     _reviewSuggestion(
       suggestionId,
       status: AiSuggestionStatus.edited,
-      buildFinal: (_) => (
-        elementId: elementId,
-        componentId: componentId,
-        defectType: defectType,
-        recommendation: recommendation,
-        notes: notes,
-      ),
+      finalCatalogueEntryId: (_) => catalogueEntryId,
     );
   }
 
-  /// The inspector disagrees with the AI entirely but still records
-  /// their own assessment, rather than the finding being left with no
-  /// resolution at all.
-  void rejectSuggestion(
-    String suggestionId, {
-    required String? elementId,
-    required String? componentId,
-    required String? defectType,
-    required String? recommendation,
-    required String? notes,
-  }) {
+  /// The inspector disagrees with the AI (or there was nothing to
+  /// agree/disagree with) and leaves this finding without a final
+  /// classification — "reject / mark unresolved". Still a *reviewed*,
+  /// resolved state; the report renders it as an explicit "Unresolved"
+  /// line. The inspector can still return later and call
+  /// [changeSuggestion] to resolve it.
+  void rejectSuggestion(String suggestionId) {
     _reviewSuggestion(
       suggestionId,
       status: AiSuggestionStatus.rejected,
-      buildFinal: (_) => (
-        elementId: elementId,
-        componentId: componentId,
-        defectType: defectType,
-        recommendation: recommendation,
-        notes: notes,
-      ),
+      finalCatalogueEntryId: (_) => '',
     );
   }
 
   void _reviewSuggestion(
     String suggestionId, {
     required AiSuggestionStatus status,
-    required _ReviewedFields Function(AiSuggestion suggestion) buildFinal,
+    required String Function(AiSuggestion suggestion) finalCatalogueEntryId,
   }) {
     final session = state;
     if (session == null) return;
@@ -642,20 +872,25 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final suggestions = [
       for (final suggestion in session.aiSuggestions)
         if (suggestion.id == suggestionId)
-          (updated = _applyReview(suggestion, status, now, buildFinal))
+          (updated = suggestion.copyWith(
+            status: status,
+            reviewedAt: now,
+            finalCatalogueEntryId: finalCatalogueEntryId(suggestion),
+          ))
         else
           suggestion,
     ];
     final finalUpdated = updated;
     if (finalUpdated == null) return;
 
-    final allResolved = suggestions.every((s) => s.isResolved);
+    final reviewProgress = AiReviewProgress.forSuggestions(suggestions);
+    final allResolved = reviewProgress.pending == 0;
     state = session.copyWith(
       aiSuggestions: suggestions,
       updatedAt: now,
       aiReviewState: allResolved
           ? AiReviewState.completed
-          : session.aiReviewState,
+          : AiReviewState.readyForReview,
       status: allResolved ? InspectionStatus.aiReviewComplete : session.status,
     );
     unawaited(
@@ -678,24 +913,6 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       _logAnalytics(AnalyticsEvent.aiReviewCompleted);
     }
     ref.invalidate(sessionSummariesProvider);
-  }
-
-  AiSuggestion _applyReview(
-    AiSuggestion suggestion,
-    AiSuggestionStatus status,
-    DateTime reviewedAt,
-    _ReviewedFields Function(AiSuggestion suggestion) buildFinal,
-  ) {
-    final finalValues = buildFinal(suggestion);
-    return suggestion.copyWith(
-      status: status,
-      reviewedAt: reviewedAt,
-      finalElementId: finalValues.elementId ?? '',
-      finalComponentId: finalValues.componentId ?? '',
-      finalDefectType: finalValues.defectType ?? '',
-      finalRecommendation: finalValues.recommendation ?? '',
-      finalNotes: finalValues.notes ?? '',
-    );
   }
 
   // ---- report generation (Phase 7) ----

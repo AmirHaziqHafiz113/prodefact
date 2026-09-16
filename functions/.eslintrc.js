@@ -20,6 +20,10 @@ module.exports = {
   ignorePatterns: [
     "/lib/**/*", // Ignore built files.
     "/generated/**/*", // Ignore generated files.
+    // Generated verbatim from tool/generate_defect_catalogue.py at the
+    // repo root — long transcribed corrective-action strings aren't
+    // meant to be hand-wrapped/styled like authored code.
+    "src/ai/defect_catalogue_data.ts",
   ],
   plugins: [
     "@typescript-eslint",

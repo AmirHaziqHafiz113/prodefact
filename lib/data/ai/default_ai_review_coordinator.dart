@@ -2,15 +2,23 @@ import 'package:collection/collection.dart';
 
 import '../../core/inspection/inspection_domain.dart';
 
-/// Orchestrates one AI analysis run for a session: enforces the AI
-/// timing gate, builds the structured request from local data, calls
-/// the AI backend, and persists suggestions — all through the same
-/// [InspectionRepository] every other write in the app goes through, so
-/// physical inspection data is never at risk from an AI failure.
+/// Orchestrates one finding's progressive AI classification: enforces
+/// idempotency (never two concurrent runs for the same finding, never
+/// re-classifying a finding that's already terminal), builds the
+/// structured request from local data, calls the AI backend, validates
+/// its response against the controlled catalogue, and persists the
+/// result — all through the same [InspectionRepository] every other
+/// write in the app goes through, so physical inspection data is never
+/// at risk from an AI failure.
 ///
-/// See `docs/ai_review.md` for the full state machine and retry policy.
-class DefaultAiReviewCoordinator implements AiReviewCoordinator {
-  DefaultAiReviewCoordinator({
+/// Unlike the old whole-session batch coordinator, there is no "AI
+/// timing gate" here at all — this runs the moment it's called
+/// (immediately after a finding is saved with a photo), independent of
+/// whether the rest of the physical inspection is complete. See
+/// `docs/ai_provider_architecture.md`.
+class DefaultAiClassificationCoordinator
+    implements AiClassificationCoordinator {
+  DefaultAiClassificationCoordinator({
     required InspectionRepository localRepository,
     required AiInspectionService aiService,
   }) : _local = localRepository,
@@ -19,155 +27,122 @@ class DefaultAiReviewCoordinator implements AiReviewCoordinator {
   final InspectionRepository _local;
   final AiInspectionService _ai;
 
-  /// Guards against two concurrent `runAnalysis` calls for the same
-  /// session racing each other before either has durably recorded
-  /// `analyzing` — without this, a double-tap of "Start AI Analysis"
-  /// could see both calls read `notStarted`, both pass the gate, and
-  /// both call the AI backend, duplicating every suggestion. This
-  /// in-memory guard is per-coordinator-instance, which is sufficient
-  /// since the app only ever holds one via `aiReviewCoordinatorProvider`
-  /// — see `docs/production_readiness.md` ("Concurrency").
+  /// Guards against two concurrent `classifyFinding` calls for the
+  /// same finding racing each other — e.g. a retry triggered while a
+  /// previous attempt is still in flight. Per-coordinator-instance,
+  /// sufficient since the app only ever holds one via
+  /// `aiClassificationCoordinatorProvider`.
   final Set<String> _inFlight = {};
 
-  String _newId(String prefix) =>
-      '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+  /// Deterministic, not timestamp-based: a retry for the same finding
+  /// always resolves to the same suggestion row (upsert), so a retry
+  /// after a partial failure can never create a second, duplicate
+  /// suggestion for one finding.
+  String _suggestionIdFor(String findingId) => 'suggestion_$findingId';
 
   @override
-  Future<AiAnalysisResult> runAnalysis(String sessionId) async {
-    if (!_inFlight.add(sessionId)) {
-      return const AiAnalysisResult.alreadyReviewed();
+  Future<AiClassificationResult> classifyFinding(
+    String sessionId,
+    String findingId,
+  ) async {
+    final key = '$sessionId/$findingId';
+    if (!_inFlight.add(key)) {
+      return const AiClassificationResult.alreadyInFlight();
     }
     try {
-      return await _runAnalysis(sessionId);
+      return await _classifyFinding(sessionId, findingId);
     } finally {
-      _inFlight.remove(sessionId);
+      _inFlight.remove(key);
     }
   }
 
-  Future<AiAnalysisResult> _runAnalysis(String sessionId) async {
+  Future<AiClassificationResult> _classifyFinding(
+    String sessionId,
+    String findingId,
+  ) async {
     final session = await _local.loadSession(sessionId);
-    if (session == null) return const AiAnalysisResult.sessionNotFound();
+    if (session == null) return const AiClassificationResult.sessionNotFound();
 
-    // ---- the AI gate: enforced here, not just by hiding a button ----
-    if (session.status == InspectionStatus.inProgress) {
-      return const AiAnalysisResult.notReady();
+    final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null) return const AiClassificationResult.findingNotFound();
+    if (!finding.isAiEligible) return const AiClassificationResult.noEvidence();
+
+    // Already settled — never re-run over an inspector's in-progress
+    // review of an existing suggestion. A caller wanting a retry after
+    // `failed` should still reach here (failed is not terminal-safe in
+    // the sense of blocking retry) — only completed/needsReview (which
+    // already has a suggestion row for the inspector to act on) block.
+    if (finding.aiStatus == AiFindingStatus.completed ||
+        finding.aiStatus == AiFindingStatus.needsReview) {
+      return const AiClassificationResult.alreadyInFlight();
     }
 
-    switch (session.aiReviewState) {
-      case AiReviewState.readyForReview:
-      case AiReviewState.completed:
-        // Suggestions already exist and review is underway/done —
-        // never regenerate over an inspector's in-progress review.
-        return const AiAnalysisResult.alreadyReviewed();
-      case AiReviewState.notStarted:
-      case AiReviewState.analyzing:
-      case AiReviewState.failed:
-        // `analyzing` here means a previous run was interrupted (e.g. a
-        // crash) without ever reaching readyForReview/failed — safe,
-        // and expected, to retry.
-        break;
-    }
-
-    await _local.setAiReviewState(sessionId, AiReviewState.analyzing);
-
-    // Only findings that don't already have a suggestion are sent —
-    // this is what makes retry-after-partial-failure not duplicate
-    // already-successful suggestion records.
-    final alreadySuggestedFindingIds = session.aiSuggestions
-        .map((s) => s.findingId)
-        .toSet();
-    final findingsNeedingSuggestions = session.findings
-        .where((f) => !alreadySuggestedFindingIds.contains(f.id))
-        .toList();
-
-    if (findingsNeedingSuggestions.isEmpty) {
-      final state = session.aiSuggestions.isEmpty
-          ? AiReviewState.completed
-          : AiReviewState.readyForReview;
-      await _local.setAiReviewState(sessionId, state);
-      return const AiAnalysisResult.success();
-    }
-
-    final request = AiAnalysisRequest(
-      sessionId: session.id,
-      industry: session.industry.name,
-      assetTypeId: session.assetTypeId,
-      findings: findingsNeedingSuggestions
-          .map((finding) => _contextFor(session, finding))
-          .toList(),
-    );
-
-    final AiAnalysisResponse response;
-    try {
-      response = await _ai.analyze(request);
-    } catch (error) {
-      await _local.setAiReviewState(sessionId, AiReviewState.failed);
-      return AiAnalysisResult.failure(error.toString());
-    }
-
-    final now = DateTime.now();
-    for (final suggestion in response.suggestions) {
-      await _local.saveAiSuggestion(
-        AiSuggestion(
-          id: _newId('suggestion'),
-          sessionId: session.id,
-          findingId: suggestion.findingId,
-          providerId: response.providerId,
-          generatedAt: now,
-          suggestedElementId: suggestion.elementId,
-          suggestedComponentId: suggestion.componentId,
-          suggestedDefectType: suggestion.defectType,
-          suggestedRecommendation: suggestion.recommendation,
-          suggestedNotes: suggestion.notes,
-          // Final fields start out equal to the AI's own suggestion —
-          // Accept keeps them as-is; Edit/Reject change them later.
-          finalElementId: suggestion.elementId,
-          finalComponentId: suggestion.componentId,
-          finalDefectType: suggestion.defectType,
-          finalRecommendation: suggestion.recommendation,
-          finalNotes: suggestion.notes,
-        ),
-      );
-    }
-
-    await _local.setAiReviewState(sessionId, AiReviewState.readyForReview);
-    return const AiAnalysisResult.success();
-  }
-
-  AiFindingContext _contextFor(InspectionSession session, Finding finding) {
-    final section = session.sections.firstWhere(
+    final section = session.sections.firstWhereOrNull(
       (s) => s.id == finding.sectionId,
-      orElse: () => throw StateError(
-        'Finding ${finding.id} references missing section '
-        '${finding.sectionId}',
-      ),
     );
-    final element = section.elements.firstWhere(
-      (e) => e.id == finding.elementId,
-      orElse: () => throw StateError(
-        'Finding ${finding.id} references missing element '
-        '${finding.elementId} in section ${section.id}',
-      ),
-    );
-    final component = finding.componentId == null
-        ? null
-        : element.components.firstWhereOrNull(
-            (c) => c.id == finding.componentId,
-          );
 
-    return AiFindingContext(
+    final request = AiFindingClassificationRequest(
+      sessionId: session.id,
       findingId: finding.id,
-      sectionId: section.id,
-      sectionName: section.name,
-      sectionIsPlumbing: section.isPlumbing,
-      elementId: element.id,
-      elementName: element.name,
-      componentId: component?.id,
-      componentName: component?.name,
-      description: finding.description,
-      notes: finding.notes,
+      sectionName: section?.name ?? finding.sectionId,
+      sectionIsPlumbing: section?.isPlumbing ?? false,
+      note: finding.description ?? finding.notes,
       evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
     );
+
+    final AiFindingClassification classification;
+    try {
+      classification = await _ai.classifyFinding(request);
+    } catch (error) {
+      await _local.setFindingAiStatus(
+        session.id,
+        finding.id,
+        AiFindingStatus.failed,
+      );
+      return AiClassificationResult.failure(error.toString());
+    }
+
+    // Defense in depth: never trust a catalogue id at face value, even
+    // though the backend gateway already validated it — a fake/local
+    // provider or a future bug shouldn't be able to persist a
+    // hallucinated id either.
+    final catalogue = DefectCatalogue.instance;
+    final validEntryId =
+        classification.catalogueEntryId != null &&
+            catalogue.isValidEntryId(classification.catalogueEntryId!)
+        ? classification.catalogueEntryId
+        : null;
+    final validCandidates = classification.candidateEntryIds
+        .where(catalogue.isValidEntryId)
+        .toList();
+    final needsReview = classification.needsReview || validEntryId == null;
+
+    final now = DateTime.now();
+    await _local.saveAiSuggestion(
+      AiSuggestion(
+        id: _suggestionIdFor(finding.id),
+        sessionId: session.id,
+        findingId: finding.id,
+        providerId: 'ai',
+        generatedAt: now,
+        suggestedCatalogueEntryId: validEntryId,
+        suggestedConfidence: classification.confidence,
+        suggestedShortReason: classification.shortReason,
+        suggestedCandidateEntryIds: validCandidates,
+        // A confident match starts out as its own final value —
+        // Accept keeps it; Change/Reject replace it later. A
+        // needs-review finding starts with no final value at all;
+        // the inspector must pick one via the catalogue picker.
+        finalCatalogueEntryId: validEntryId,
+      ),
+    );
+    await _local.setFindingAiStatus(
+      session.id,
+      finding.id,
+      needsReview ? AiFindingStatus.needsReview : AiFindingStatus.completed,
+    );
+
+    return const AiClassificationResult.success();
   }
 }

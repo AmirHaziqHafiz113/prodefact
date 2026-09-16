@@ -1,33 +1,41 @@
-/// One finding's worth of structured AI output. The app never parses
-/// free-form prose out of a model response — a real backend gateway is
-/// responsible for validating the provider's response against this
-/// exact shape before it ever reaches Flutter (see `docs/ai_review.md`).
-class AiFindingSuggestion {
-  const AiFindingSuggestion({
+/// One finding's structured AI classification against the controlled
+/// defect catalogue. The app never parses free-form prose out of a
+/// model response — a real backend gateway validates the provider's
+/// response against this exact shape, and rejects/discards any
+/// catalogue id that isn't genuinely in `DefectCatalogue`, before this
+/// ever reaches Flutter. See `docs/ai_provider_architecture.md`.
+class AiFindingClassification {
+  const AiFindingClassification({
     required this.findingId,
-    this.elementId,
-    this.componentId,
-    this.defectType,
-    this.recommendation,
-    this.notes,
+    required this.needsReview,
+    this.catalogueEntryId,
+    this.confidence,
+    this.shortReason,
+    this.candidateEntryIds = const [],
   });
 
   final String findingId;
-  final String? elementId;
-  final String? componentId;
-  final String? defectType;
-  final String? recommendation;
-  final String? notes;
-}
 
-/// The result of one analysis run: which backend produced it, and one
-/// suggestion per finding that was submitted.
-class AiAnalysisResponse {
-  const AiAnalysisResponse({
-    required this.providerId,
-    required this.suggestions,
-  });
+  /// The selected catalogue entry id, or null if AI could not
+  /// confidently classify this finding at all ([needsReview] is then
+  /// always true). Always either null or a genuinely valid catalogue
+  /// id — never trusted/used to look up a corrective action until the
+  /// gateway/coordinator has independently verified it exists.
+  final String? catalogueEntryId;
 
-  final String providerId;
-  final List<AiFindingSuggestion> suggestions;
+  /// 0.0-1.0, if the provider reported one.
+  final double? confidence;
+
+  /// A short, plain-language reason — not a technical diagnostic
+  /// paragraph.
+  final String? shortReason;
+
+  /// Ranked alternative catalogue entries, when more than one match
+  /// was plausible.
+  final List<String> candidateEntryIds;
+
+  /// True when [catalogueEntryId] is null, or when the provider
+  /// otherwise flagged this finding as needing manual review (unclear
+  /// photo, no confident match).
+  final bool needsReview;
 }

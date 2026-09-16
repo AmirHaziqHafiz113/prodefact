@@ -12,6 +12,9 @@ enum AnalyticsEvent {
   aiReviewStarted,
   aiReviewCompleted,
   reportGenerated,
+
+  /// A camera-first finding (photo + optional note) was saved.
+  findingSaved,
 }
 
 /// Reports coarse product-usage milestones only. Kept optional the same

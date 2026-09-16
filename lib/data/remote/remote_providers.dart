@@ -36,6 +36,22 @@ final cloudInspectionRepositoryProvider = Provider<CloudInspectionRepository>((
   return FirestoreCloudInspectionRepository();
 });
 
+/// Whether progressive AI classification can proceed right now — the
+/// signal `AiCardSummary`/the classification queue use to distinguish
+/// "actively analysing" from "waiting for connection". True whenever
+/// Firebase isn't configured at all (local-only/demo mode always works
+/// offline via the fake AI service), otherwise true only once the
+/// inspector is signed in. This does not detect genuine loss of
+/// internet connectivity while otherwise signed in — a queued finding
+/// simply stays queued if the network call itself fails, which is safe
+/// (never lost, never duplicated) even though the card's label may lag
+/// briefly in that specific case; see `docs/production_readiness.md`
+/// ("Known limitations").
+final isOnlineForAiProvider = Provider<bool>((ref) {
+  if (!ref.watch(firebaseReadyProvider)) return true;
+  return ref.watch(authStateProvider).value != null;
+});
+
 final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {
   return DefaultSyncCoordinator(
     localRepository: ref.watch(inspectionRepositoryProvider),
@@ -63,6 +79,11 @@ class _UnavailableAuthService implements AuthService {
 
   @override
   Future<AuthUser> signUpWithEmail(String email, String password) {
+    throw const AuthException(_unconfiguredMessage);
+  }
+
+  @override
+  Future<void> resetPassword(String email) {
     throw const AuthException(_unconfiguredMessage);
   }
 

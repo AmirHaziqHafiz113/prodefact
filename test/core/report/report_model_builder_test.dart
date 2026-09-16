@@ -25,7 +25,9 @@ Section _kitchenSection() {
   );
 }
 
-Finding _finding({
+/// A legacy (pre-camera-first, component-first) finding — has a real
+/// [elementId], routing the report builder through its legacy branch.
+Finding _legacyFinding({
   required String id,
   required String sectionId,
   required String elementId,
@@ -48,15 +50,36 @@ Finding _finding({
   );
 }
 
-AiSuggestion _resolvedSuggestion({
+/// A camera-first finding — no [elementId], routing the report builder
+/// through the controlled-catalogue branch.
+Finding _cameraFirstFinding({
+  required String id,
+  required String sectionId,
+  String? description,
+  String? notes,
+  List<Evidence> evidence = const [],
+  AiFindingStatus aiStatus = AiFindingStatus.completed,
+}) {
+  final now = DateTime(2026, 1, 1);
+  return Finding(
+    id: id,
+    sectionId: sectionId,
+    description: description,
+    notes: notes,
+    evidence: evidence,
+    aiStatus: aiStatus,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+AiSuggestion _legacyResolvedSuggestion({
   required String id,
   required String findingId,
   required AiSuggestionStatus status,
   required String finalDefectType,
   required String finalRecommendation,
   String? finalNotes,
-  String suggestedDefectType = 'AI original defect',
-  String suggestedRecommendation = 'AI original recommendation',
 }) {
   final now = DateTime(2026, 1, 1);
   return AiSuggestion(
@@ -65,13 +88,33 @@ AiSuggestion _resolvedSuggestion({
     findingId: findingId,
     providerId: 'fake-demo-v1',
     generatedAt: now,
-    suggestedElementId: 'floor',
-    suggestedDefectType: suggestedDefectType,
-    suggestedRecommendation: suggestedRecommendation,
-    finalElementId: 'floor',
-    finalDefectType: finalDefectType,
-    finalRecommendation: finalRecommendation,
-    finalNotes: finalNotes,
+    status: status,
+    reviewedAt: now,
+    legacyFinalElementId: 'floor',
+    legacyFinalDefectType: finalDefectType,
+    legacyFinalRecommendation: finalRecommendation,
+    legacyFinalNotes: finalNotes,
+  );
+}
+
+/// A resolved, catalogue-based suggestion — [catalogueEntryId] must be
+/// a real entry id (the report builder resolves display text fresh
+/// from `DefectCatalogue`, never from any AI-provided free text).
+AiSuggestion _catalogueResolvedSuggestion({
+  required String id,
+  required String findingId,
+  required AiSuggestionStatus status,
+  String? catalogueEntryId,
+}) {
+  final now = DateTime(2026, 1, 1);
+  return AiSuggestion(
+    id: id,
+    sessionId: 'session_1',
+    findingId: findingId,
+    providerId: 'deepseek',
+    generatedAt: now,
+    suggestedCatalogueEntryId: catalogueEntryId,
+    finalCatalogueEntryId: catalogueEntryId ?? '',
     status: status,
     reviewedAt: now,
   );
@@ -98,50 +141,46 @@ InspectionSession _session({
 }
 
 void main() {
-  group('final value precedence', () {
-    test(
-      'an accepted suggestion reports the AI value (final == suggested)',
-      () {
-        final session = _session(
-          sections: [_bathroomSection()],
-          findings: [
-            _finding(
-              id: 'f1',
-              sectionId: 'master_bathroom',
-              elementId: 'floor',
-              componentId: 'floor_tile',
-              description: 'Cracked tile',
-            ),
-          ],
-          aiSuggestions: [
-            _resolvedSuggestion(
-              id: 's1',
-              findingId: 'f1',
-              status: AiSuggestionStatus.accepted,
-              finalDefectType: 'AI original defect',
-              finalRecommendation: 'AI original recommendation',
-            ),
-          ],
-        );
-
-        final model = buildReportModel(
-          session: session,
-          propertyTypeLabel: 'High Rise',
-          generatedAt: DateTime(2026, 1, 2),
-        );
-
-        final finding = model.areas.single.findings.single;
-        expect(finding.defectType, 'AI original defect');
-        expect(finding.recommendation, 'AI original recommendation');
-      },
-    );
-
-    test('an edited suggestion reports the inspector-corrected value, not '
-        'the original AI suggestion', () {
+  group('final value precedence — legacy (component-first) findings', () {
+    test('an accepted suggestion reports the approved final value', () {
       final session = _session(
         sections: [_bathroomSection()],
         findings: [
-          _finding(
+          _legacyFinding(
+            id: 'f1',
+            sectionId: 'master_bathroom',
+            elementId: 'floor',
+            componentId: 'floor_tile',
+            description: 'Cracked tile',
+          ),
+        ],
+        aiSuggestions: [
+          _legacyResolvedSuggestion(
+            id: 's1',
+            findingId: 'f1',
+            status: AiSuggestionStatus.accepted,
+            finalDefectType: 'AI original defect',
+            finalRecommendation: 'AI original recommendation',
+          ),
+        ],
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      final finding = model.areas.single.findings.single;
+      expect(finding.defectType, 'AI original defect');
+      expect(finding.recommendation, 'AI original recommendation');
+    });
+
+    test('an edited suggestion reports the inspector-corrected value', () {
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: [
+          _legacyFinding(
             id: 'f1',
             sectionId: 'master_bathroom',
             elementId: 'floor',
@@ -149,13 +188,12 @@ void main() {
           ),
         ],
         aiSuggestions: [
-          _resolvedSuggestion(
+          _legacyResolvedSuggestion(
             id: 's1',
             findingId: 'f1',
             status: AiSuggestionStatus.edited,
             finalDefectType: 'Inspector-corrected defect',
             finalRecommendation: 'Inspector-corrected recommendation',
-            suggestedDefectType: 'AI original defect',
           ),
         ],
       );
@@ -168,69 +206,6 @@ void main() {
 
       final finding = model.areas.single.findings.single;
       expect(finding.defectType, 'Inspector-corrected defect');
-      expect(finding.defectType, isNot('AI original defect'));
-    });
-
-    test('a rejected/corrected suggestion reports the inspector value, not '
-        'the original AI suggestion', () {
-      final session = _session(
-        sections: [_bathroomSection()],
-        findings: [
-          _finding(id: 'f1', sectionId: 'master_bathroom', elementId: 'floor'),
-        ],
-        aiSuggestions: [
-          _resolvedSuggestion(
-            id: 's1',
-            findingId: 'f1',
-            status: AiSuggestionStatus.rejected,
-            finalDefectType: 'No defect — AI was wrong',
-            finalRecommendation: 'No action needed',
-            suggestedDefectType: 'AI original defect',
-          ),
-        ],
-      );
-
-      final model = buildReportModel(
-        session: session,
-        propertyTypeLabel: 'High Rise',
-        generatedAt: DateTime(2026, 1, 2),
-      );
-
-      final finding = model.areas.single.findings.single;
-      expect(finding.defectType, 'No defect — AI was wrong');
-      expect(finding.defectType, isNot('AI original defect'));
-    });
-
-    test('the original AI value is never substituted over the final '
-        'inspector value across accept/edit/reject', () {
-      final session = _session(
-        sections: [_bathroomSection()],
-        findings: [
-          _finding(id: 'f1', sectionId: 'master_bathroom', elementId: 'floor'),
-        ],
-        aiSuggestions: [
-          _resolvedSuggestion(
-            id: 's1',
-            findingId: 'f1',
-            status: AiSuggestionStatus.edited,
-            finalDefectType: 'Corrected',
-            finalRecommendation: 'Corrected recommendation',
-            suggestedDefectType: 'Original AI defect that must not leak',
-          ),
-        ],
-      );
-
-      final model = buildReportModel(
-        session: session,
-        propertyTypeLabel: 'High Rise',
-        generatedAt: DateTime(2026, 1, 2),
-      );
-
-      final allText = model.areas
-          .expand((a) => a.findings)
-          .map((f) => '${f.defectType} ${f.recommendation} ${f.notes}')
-          .join(' ');
-      expect(allText, isNot(contains('Original AI defect that must not leak')));
     });
 
     test('a finding with no AI suggestion falls back to the inspector\'s '
@@ -238,7 +213,7 @@ void main() {
       final session = _session(
         sections: [_bathroomSection()],
         findings: [
-          _finding(
+          _legacyFinding(
             id: 'f1',
             sectionId: 'master_bathroom',
             elementId: 'floor',
@@ -261,18 +236,103 @@ void main() {
     });
   });
 
+  group('final value precedence — camera-first (controlled catalogue) '
+      'findings', () {
+    test('an accepted suggestion resolves the defect/recommendation from '
+        'the catalogue entry, never from free text', () {
+      final entry = DefectCatalogue.instance.entries.firstWhere(
+        (e) => e.correctiveAction != null,
+      );
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: [_cameraFirstFinding(id: 'f1', sectionId: 'master_bathroom')],
+        aiSuggestions: [
+          _catalogueResolvedSuggestion(
+            id: 's1',
+            findingId: 'f1',
+            status: AiSuggestionStatus.accepted,
+            catalogueEntryId: entry.id,
+          ),
+        ],
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      final finding = model.areas.single.findings.single;
+      expect(finding.elementName, entry.mainElementName);
+      expect(finding.componentName, entry.componentName);
+      expect(finding.defectType, entry.defectDescription);
+      expect(finding.recommendation, entry.correctiveAction);
+    });
+
+    test('a rejected/unresolved suggestion renders an explicit '
+        '"Unresolved" line rather than blank or crashing', () {
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: [_cameraFirstFinding(id: 'f1', sectionId: 'master_bathroom')],
+        aiSuggestions: [
+          _catalogueResolvedSuggestion(
+            id: 's1',
+            findingId: 'f1',
+            status: AiSuggestionStatus.rejected,
+            catalogueEntryId: null,
+          ),
+        ],
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      final finding = model.areas.single.findings.single;
+      expect(finding.elementName, 'Unresolved');
+      expect(finding.defectType, contains('Unresolved'));
+    });
+
+    test('a finding still pending review never shows an unapproved AI '
+        'value', () {
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: [_cameraFirstFinding(id: 'f1', sectionId: 'master_bathroom')],
+        aiSuggestions: [
+          _catalogueResolvedSuggestion(
+            id: 's1',
+            findingId: 'f1',
+            status: AiSuggestionStatus.pending,
+            catalogueEntryId: DefectCatalogue.instance.entries.first.id,
+          ),
+        ],
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      final finding = model.areas.single.findings.single;
+      expect(finding.elementName, 'Pending review');
+    });
+  });
+
   group('grouping and completeness', () {
     test('findings are grouped by area', () {
       final session = _session(
         sections: [_bathroomSection(), _kitchenSection()],
         findings: [
-          _finding(
+          _legacyFinding(
             id: 'f1',
             sectionId: 'master_bathroom',
             elementId: 'floor',
             description: 'Bathroom issue',
           ),
-          _finding(
+          _legacyFinding(
             id: 'f2',
             sectionId: 'kitchen',
             elementId: 'wall',
@@ -296,11 +356,44 @@ void main() {
       expect(kitchenArea.findings.single.defectType, 'Kitchen issue');
     });
 
+    test('finding numbers are sequential across the whole report, not '
+        'reset per area', () {
+      final session = _session(
+        sections: [_bathroomSection(), _kitchenSection()],
+        findings: [
+          _legacyFinding(
+            id: 'f1',
+            sectionId: 'master_bathroom',
+            elementId: 'floor',
+            description: 'Bathroom issue',
+          ),
+          _legacyFinding(
+            id: 'f2',
+            sectionId: 'kitchen',
+            elementId: 'wall',
+            description: 'Kitchen issue',
+          ),
+        ],
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      final numbers = model.areas
+          .expand((a) => a.findings)
+          .map((f) => f.number)
+          .toList();
+      expect(numbers, [1, 2]);
+    });
+
     test('a completed area with zero findings is represented, not omitted', () {
       final session = _session(
         sections: [_bathroomSection(), _kitchenSection()],
         findings: [
-          _finding(
+          _legacyFinding(
             id: 'f1',
             sectionId: 'master_bathroom',
             elementId: 'floor',
@@ -350,7 +443,7 @@ void main() {
       final session = _session(
         sections: [_bathroomSection()],
         findings: [
-          _finding(
+          _legacyFinding(
             id: 'f1',
             sectionId: 'master_bathroom',
             elementId: 'floor',

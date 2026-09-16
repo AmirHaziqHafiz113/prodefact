@@ -1,7 +1,7 @@
 import {AiProvider, AiProviderError} from "./provider";
 import {
-  AnalyzeInspectionInput,
-  AnalyzeInspectionResult,
+  ClassificationResult,
+  ClassifyFindingInput,
   FindingImages,
 } from "./types";
 
@@ -12,7 +12,7 @@ import {
  * fabricated here. To enable this provider later:
  *   1. `firebase functions:secrets:set OPENAI_API_KEY`
  *   2. bind it in index.ts the same way DEEPSEEK_API_KEY is bound
- *   3. implement `analyzeInspection` below against the Chat
+ *   3. implement `classifyFinding` below against the Chat
  *      Completions (or Responses) API using
  *      `response_format: {type: "json_object"}` or a JSON schema,
  *      following the same structure as `DeepSeekProvider` (timeout,
@@ -38,10 +38,10 @@ export class OpenAiProvider implements AiProvider {
   }
 
   /** @inheritdoc */
-  analyzeInspection(
-    input: AnalyzeInspectionInput,
-    images: FindingImages[]
-  ): Promise<AnalyzeInspectionResult> {
+  classifyFinding(
+    input: ClassifyFindingInput,
+    images: FindingImages
+  ): Promise<ClassificationResult> {
     void input;
     void images;
     throw new AiProviderError(

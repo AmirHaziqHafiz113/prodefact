@@ -4,21 +4,22 @@ import 'package:flutter/foundation.dart';
 import '../../core/inspection/inspection_domain.dart';
 import '../../core/logging/app_logger.dart';
 
-/// Region the `analyzeInspection` callable is deployed to — must match
+/// Region the `classifyFinding` callable is deployed to — must match
 /// `functions/src/index.ts` and `firebase.json`.
 const _kFunctionsRegion = 'asia-southeast1';
 
-/// Production [AiInspectionService]: calls the `analyzeInspection`
-/// Firebase callable function, which itself depends on a
-/// provider-neutral backend gateway (DeepSeek today) — see
-/// `docs/ai_provider_architecture.md`.
+/// Production [AiInspectionService]: calls the `classifyFinding`
+/// Firebase callable function once per finding — a provider-neutral
+/// backend gateway (DeepSeek today) classifies it against the
+/// controlled defect catalogue and returns a catalogue entry id (or
+/// `needsReview`) — see `docs/ai_provider_architecture.md`.
 ///
 /// This is the only file that imports `cloud_functions` — no Firebase
-/// SDK type leaks past it; [analyze] only ever returns/throws plain
-/// Dart types the rest of the app already understands. The request/
-/// response mapping is factored into top-level, side-effect-free
-/// functions below so it can be unit-tested without a live callable —
-/// see `test/data/firebase_ai_inspection_service_test.dart`.
+/// SDK type leaks past it; [classifyFinding] only ever returns/throws
+/// plain Dart types the rest of the app already understands. The
+/// request/response mapping is factored into top-level, side-effect-
+/// free functions below so it can be unit-tested without a live
+/// callable — see `test/data/firebase_ai_inspection_service_test.dart`.
 class FirebaseAiInspectionService implements AiInspectionService {
   FirebaseAiInspectionService({FirebaseFunctions? functions})
     : _functions =
@@ -27,16 +28,18 @@ class FirebaseAiInspectionService implements AiInspectionService {
   final FirebaseFunctions _functions;
 
   @override
-  Future<AiAnalysisResponse> analyze(AiAnalysisRequest request) async {
+  Future<AiFindingClassification> classifyFinding(
+    AiFindingClassificationRequest request,
+  ) async {
     final callable = _functions.httpsCallable(
-      'analyzeInspection',
+      'classifyFinding',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
     );
 
     final Map<String, dynamic> rawResult;
     try {
       final result = await callable.call<Map<String, dynamic>>(
-        buildAnalyzeInspectionPayload(request),
+        buildClassifyFindingPayload(request),
       );
       rawResult = result.data;
     } on FirebaseFunctionsException catch (error, stackTrace) {
@@ -49,95 +52,62 @@ class FirebaseAiInspectionService implements AiInspectionService {
       );
     }
 
-    return parseAnalyzeInspectionResponse(rawResult, request);
+    return parseClassifyFindingResponse(rawResult, request);
   }
 }
 
-/// Builds the JSON payload the `analyzeInspection` callable expects.
-/// Only redacted inspection context — no account/user data, and no
-/// evidence file paths/bytes/URLs, only opaque evidence *ids*: the
-/// callable resolves each one to an actual image itself, server-side,
-/// scoped to the authenticated caller's own cloud storage — see
-/// `docs/ai_provider_architecture.md` ("Multimodal evidence
-/// resolution"). An id with no matching synced evidence is simply
-/// skipped server-side rather than failing the request, so this works
-/// the same whether or not the session has ever been synced to the
-/// cloud.
+/// Builds the JSON payload the `classifyFinding` callable expects. Only
+/// redacted inspection context — no account/user data, and no evidence
+/// file paths/bytes/URLs, only opaque evidence *ids*: the callable
+/// resolves each one to an actual image itself, server-side, scoped to
+/// the authenticated caller's own cloud storage — see
+/// `docs/ai_provider_architecture.md`. An id with no matching synced
+/// evidence is simply skipped server-side rather than failing the
+/// request, so this works the same whether or not the finding's
+/// photos have been synced to the cloud yet.
 @visibleForTesting
-Map<String, dynamic> buildAnalyzeInspectionPayload(AiAnalysisRequest request) {
+Map<String, dynamic> buildClassifyFindingPayload(
+  AiFindingClassificationRequest request,
+) {
   return {
     'inspectionId': request.sessionId,
-    'propertyType': request.assetTypeId,
-    'findings': request.findings
-        .map(
-          (finding) => {
-            'findingId': finding.findingId,
-            'area': finding.sectionName,
-            'isPlumbingArea': finding.sectionIsPlumbing,
-            'element': finding.elementName,
-            if (finding.componentName != null)
-              'component': finding.componentName,
-            if (finding.description != null) 'description': finding.description,
-            if (finding.notes != null) 'notes': finding.notes,
-            'evidenceCount': finding.evidenceFilePaths.length,
-            if (finding.evidenceIds.isNotEmpty)
-              'evidenceIds': finding.evidenceIds,
-          },
-        )
-        .toList(),
+    'findingId': request.findingId,
+    'area': request.sectionName,
+    'isPlumbingArea': request.sectionIsPlumbing,
+    if (request.note != null && request.note!.isNotEmpty) 'note': request.note,
+    if (request.evidenceIds.isNotEmpty) 'evidenceIds': request.evidenceIds,
   };
 }
 
-/// Maps the callable's JSON into the app's typed AI domain objects.
+/// Maps the callable's JSON into the app's typed AI domain object.
 /// Never trusts the shape blindly — a malformed response is surfaced
-/// as a clear failure (a thrown [Exception]) rather than a crash.
-///
-/// The backend's `suggestedElement`/`suggestedComponent` are
-/// human-readable names, not the app's internal element/component ids
-/// — this app deliberately keeps each finding pinned to the element/
-/// component the inspector originally logged it against (AI is
-/// advisory on the defect/recommendation, never on where the finding
-/// structurally lives), so the response is matched back to the
-/// original request's element/component ids by findingId. A
-/// suggestion for a findingId that wasn't in the original request is
-/// silently dropped — defense in depth on top of the backend
-/// gateway's own validation.
+/// as a clear failure (a thrown [Exception]) rather than a crash, and
+/// a `findingId` mismatch (the response referring to a different
+/// finding than what was requested) is treated the same way: defense
+/// in depth on top of the backend gateway's own validation.
 @visibleForTesting
-AiAnalysisResponse parseAnalyzeInspectionResponse(
+AiFindingClassification parseClassifyFindingResponse(
   Map<String, dynamic> rawResult,
-  AiAnalysisRequest request,
+  AiFindingClassificationRequest request,
 ) {
-  final rawSuggestions = rawResult['suggestions'];
-  if (rawSuggestions is! List) {
-    throw Exception('AI returned an unexpected response shape.');
+  final findingId = rawResult['findingId'];
+  if (findingId != request.findingId) {
+    throw Exception('AI response did not match the requested finding.');
   }
 
-  final findingsById = {
-    for (final finding in request.findings) finding.findingId: finding,
-  };
+  final needsReview = rawResult['needsReview'] == true;
+  final catalogueEntryId = _asStringOrNull(rawResult['catalogueEntryId']);
+  final rawCandidates = rawResult['candidateEntryIds'];
 
-  final suggestions = <AiFindingSuggestion>[];
-  for (final raw in rawSuggestions) {
-    if (raw is! Map) continue;
-    final findingId = raw['findingId'];
-    if (findingId is! String || findingId.isEmpty) continue;
-    final originalFinding = findingsById[findingId];
-    if (originalFinding == null) continue;
-    suggestions.add(
-      AiFindingSuggestion(
-        findingId: findingId,
-        elementId: originalFinding.elementId,
-        componentId: originalFinding.componentId,
-        defectType: _asStringOrNull(raw['defectType']),
-        recommendation: _asStringOrNull(raw['recommendation']),
-        notes: _asStringOrNull(raw['notes']),
-      ),
-    );
-  }
-
-  return AiAnalysisResponse(
-    providerId: 'firebase-callable',
-    suggestions: suggestions,
+  return AiFindingClassification(
+    findingId: request.findingId,
+    needsReview: needsReview || catalogueEntryId == null,
+    catalogueEntryId: catalogueEntryId,
+    confidence: (rawResult['confidence'] as num?)?.toDouble(),
+    shortReason: _asStringOrNull(rawResult['shortReason']),
+    candidateEntryIds: rawCandidates is List
+        ? rawCandidates.whereType<String>().toList()
+        : const [],
   );
 }
 
@@ -163,7 +133,7 @@ String friendlyMessageForFunctionsError(String code) {
       return 'AI analysis is unavailable right now. Check your connection '
           'and try again.';
     case 'invalid-argument':
-      return 'This inspection could not be analyzed (invalid data).';
+      return 'This finding could not be analyzed (invalid data).';
     default:
       return 'AI analysis failed. Please try again.';
   }

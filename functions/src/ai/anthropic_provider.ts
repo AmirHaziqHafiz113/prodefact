@@ -1,7 +1,7 @@
 import {AiProvider, AiProviderError} from "./provider";
 import {
-  AnalyzeInspectionInput,
-  AnalyzeInspectionResult,
+  ClassificationResult,
+  ClassifyFindingInput,
   FindingImages,
 } from "./types";
 
@@ -12,7 +12,7 @@ import {
  * fabricated here. To enable this provider later:
  *   1. `firebase functions:secrets:set ANTHROPIC_API_KEY`
  *   2. bind it in index.ts the same way DEEPSEEK_API_KEY is bound
- *   3. implement `analyzeInspection` below against the Messages API,
+ *   3. implement `classifyFinding` below against the Messages API,
  *      requesting structured JSON output (e.g. via tool use or a
  *      strict prompt contract), following the same structure as
  *      `DeepSeekProvider`
@@ -35,10 +35,10 @@ export class AnthropicProvider implements AiProvider {
   }
 
   /** @inheritdoc */
-  analyzeInspection(
-    input: AnalyzeInspectionInput,
-    images: FindingImages[]
-  ): Promise<AnalyzeInspectionResult> {
+  classifyFinding(
+    input: ClassifyFindingInput,
+    images: FindingImages
+  ): Promise<ClassificationResult> {
     void input;
     void images;
     throw new AiProviderError(

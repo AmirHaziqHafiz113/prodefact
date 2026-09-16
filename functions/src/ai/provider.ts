@@ -1,16 +1,15 @@
 import {
-  AnalyzeInspectionInput,
-  AnalyzeInspectionResult,
+  ClassificationResult,
+  ClassifyFindingInput,
   FindingImages,
 } from "./types";
 
 /**
- * Contract every AI provider adapter implements. The callable
- * function depends only on this interface via the gateway — never on
- * a specific provider's request/response shape. Swapping the active
- * provider is an addition of one more class + one line in the
- * gateway's provider map, never a rework of the callable function or
- * Flutter.
+ * Contract every AI provider adapter implements. The callable function
+ * depends only on this interface via the gateway — never on a specific
+ * provider's request/response shape. Swapping the active provider is
+ * an addition of one more class + one line in the gateway's provider
+ * map, never a rework of the callable function or Flutter.
  *
  * `images` is always passed, even to a text-only provider (which
  * simply ignores it, per its own `supportsImages: false`) — this keeps
@@ -22,10 +21,10 @@ export interface AiProvider {
   readonly id: string;
   /** Whether this provider actually looks at `images` at all. */
   readonly supportsImages: boolean;
-  analyzeInspection(
-    input: AnalyzeInspectionInput,
-    images: FindingImages[]
-  ): Promise<AnalyzeInspectionResult>;
+  classifyFinding(
+    input: ClassifyFindingInput,
+    images: FindingImages
+  ): Promise<ClassificationResult>;
 }
 
 /** Thrown by a provider adapter for any request/response failure. */

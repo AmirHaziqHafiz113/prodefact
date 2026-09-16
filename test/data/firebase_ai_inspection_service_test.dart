@@ -3,152 +3,126 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/ai/firebase_ai_inspection_service.dart';
 
-AiAnalysisRequest _requestWithOneFinding() {
-  return const AiAnalysisRequest(
+const _validEntryId = 'door.door_hinge.03';
+
+AiFindingClassificationRequest _requestWithEvidence() {
+  return const AiFindingClassificationRequest(
     sessionId: 'session_1',
-    industry: 'homeInspection',
-    assetTypeId: 'highRise',
-    findings: [
-      AiFindingContext(
-        findingId: 'finding_1',
-        sectionId: 'master_bathroom',
-        sectionName: 'Master Bathroom',
-        sectionIsPlumbing: true,
-        elementId: 'floor',
-        elementName: 'Floor',
-        componentId: 'floor_tile',
-        componentName: 'Floor tile',
-        description: 'Cracked tile',
-        notes: 'Near the drain',
-        evidenceFilePaths: ['/fake/e1.jpg', '/fake/e2.jpg'],
-        evidenceIds: ['evidence_1', 'evidence_2'],
-      ),
-    ],
+    findingId: 'finding_1',
+    sectionName: 'Master Bathroom',
+    sectionIsPlumbing: true,
+    note: 'Cracked tile near the drain',
+    evidenceFilePaths: ['/fake/e1.jpg', '/fake/e2.jpg'],
+    evidenceIds: ['evidence_1', 'evidence_2'],
   );
 }
 
 void main() {
-  group('buildAnalyzeInspectionPayload', () {
+  group('buildClassifyFindingPayload', () {
     test('maps session/finding context into the callable payload shape', () {
-      final payload = buildAnalyzeInspectionPayload(_requestWithOneFinding());
+      final payload = buildClassifyFindingPayload(_requestWithEvidence());
 
       expect(payload['inspectionId'], 'session_1');
-      expect(payload['propertyType'], 'highRise');
-      final findings = payload['findings'] as List;
-      expect(findings, hasLength(1));
-      final finding = findings.single as Map;
-      expect(finding['findingId'], 'finding_1');
-      expect(finding['area'], 'Master Bathroom');
-      expect(finding['isPlumbingArea'], isTrue);
-      expect(finding['element'], 'Floor');
-      expect(finding['component'], 'Floor tile');
-      expect(finding['description'], 'Cracked tile');
-      expect(finding['notes'], 'Near the drain');
-      // Evidence *count* only — never file paths/bytes.
-      expect(finding['evidenceCount'], 2);
-      expect(finding.containsKey('evidenceFilePaths'), isFalse);
+      expect(payload['findingId'], 'finding_1');
+      expect(payload['area'], 'Master Bathroom');
+      expect(payload['isPlumbingArea'], isTrue);
+      expect(payload['note'], 'Cracked tile near the drain');
       // Opaque evidence ids only — the callable resolves these to
       // actual images itself, server-side.
-      expect(finding['evidenceIds'], ['evidence_1', 'evidence_2']);
+      expect(payload['evidenceIds'], ['evidence_1', 'evidence_2']);
     });
 
     test('never includes account/user data (no such field exists to '
         'include in the first place)', () {
-      final payload = buildAnalyzeInspectionPayload(_requestWithOneFinding());
+      final payload = buildClassifyFindingPayload(_requestWithEvidence());
       expect(payload.containsKey('ownerUid'), isFalse);
       expect(payload.containsKey('email'), isFalse);
       expect(payload.toString(), isNot(contains('@')));
     });
 
     test('never includes local evidence file paths — only ids', () {
-      final payload = buildAnalyzeInspectionPayload(_requestWithOneFinding());
+      final payload = buildClassifyFindingPayload(_requestWithEvidence());
       expect(payload.toString(), isNot(contains('/fake/e1.jpg')));
       expect(payload.toString(), isNot(contains('/fake/e2.jpg')));
     });
 
-    test('omits evidenceIds entirely for a finding with no evidence', () {
-      const request = AiAnalysisRequest(
+    test('omits evidenceIds/note entirely when absent', () {
+      const request = AiFindingClassificationRequest(
         sessionId: 'session_1',
-        industry: 'homeInspection',
-        assetTypeId: 'highRise',
-        findings: [
-          AiFindingContext(
-            findingId: 'finding_1',
-            sectionId: 'master_bathroom',
-            sectionName: 'Master Bathroom',
-            sectionIsPlumbing: true,
-            elementId: 'floor',
-            elementName: 'Floor',
-          ),
-        ],
+        findingId: 'finding_1',
+        sectionName: 'Master Bathroom',
+        sectionIsPlumbing: true,
       );
-      final payload = buildAnalyzeInspectionPayload(request);
-      final finding = (payload['findings'] as List).single as Map;
-      expect(finding.containsKey('evidenceIds'), isFalse);
+      final payload = buildClassifyFindingPayload(request);
+      expect(payload.containsKey('evidenceIds'), isFalse);
+      expect(payload.containsKey('note'), isFalse);
     });
   });
 
-  group('parseAnalyzeInspectionResponse', () {
-    test('maps a well-formed response into typed suggestions, pinning '
-        'element/component to the original finding', () {
-      final response = parseAnalyzeInspectionResponse({
-        'suggestions': [
-          {
-            'findingId': 'finding_1',
-            'suggestedElement': 'Floor',
-            'defectType': 'Cracked tile',
-            'recommendation': 'Replace the tile',
-            'notes': 'Check grout too',
-          },
-        ],
-      }, _requestWithOneFinding());
+  group('parseClassifyFindingResponse', () {
+    test('maps a well-formed response into a typed classification', () {
+      final classification = parseClassifyFindingResponse({
+        'findingId': 'finding_1',
+        'catalogueEntryId': _validEntryId,
+        'confidence': 0.85,
+        'shortReason': 'Visible crack in the photo',
+        'needsReview': false,
+      }, _requestWithEvidence());
 
-      final suggestion = response.suggestions.single;
-      expect(suggestion.findingId, 'finding_1');
-      expect(suggestion.elementId, 'floor');
-      expect(suggestion.componentId, 'floor_tile');
-      expect(suggestion.defectType, 'Cracked tile');
-      expect(suggestion.recommendation, 'Replace the tile');
-      expect(suggestion.notes, 'Check grout too');
+      expect(classification.findingId, 'finding_1');
+      expect(classification.catalogueEntryId, _validEntryId);
+      expect(classification.confidence, 0.85);
+      expect(classification.shortReason, 'Visible crack in the photo');
+      expect(classification.needsReview, isFalse);
     });
 
-    test('drops a suggestion referencing a findingId not in the request', () {
-      final response = parseAnalyzeInspectionResponse({
-        'suggestions': [
-          {'findingId': 'finding_never_requested', 'defectType': 'x'},
-        ],
-      }, _requestWithOneFinding());
-      expect(response.suggestions, isEmpty);
-    });
-
-    test('drops a malformed suggestion entry instead of throwing', () {
-      final response = parseAnalyzeInspectionResponse({
-        'suggestions': [
-          'not a map',
-          {'findingId': 123},
-          {'noFindingIdField': true},
-        ],
-      }, _requestWithOneFinding());
-      expect(response.suggestions, isEmpty);
-    });
-
-    test('throws when the response has no suggestions array at all '
-        '(malformed provider output)', () {
+    test('a response for the wrong findingId throws rather than being '
+        'silently accepted', () {
       expect(
-        () => parseAnalyzeInspectionResponse({
-          'unexpected': 'shape',
-        }, _requestWithOneFinding()),
+        () => parseClassifyFindingResponse({
+          'findingId': 'finding_never_requested',
+          'catalogueEntryId': _validEntryId,
+        }, _requestWithEvidence()),
         throwsException,
       );
     });
 
-    test('coerces a non-string field to null rather than throwing', () {
-      final response = parseAnalyzeInspectionResponse({
-        'suggestions': [
-          {'findingId': 'finding_1', 'defectType': 42},
-        ],
-      }, _requestWithOneFinding());
-      expect(response.suggestions.single.defectType, isNull);
+    test('needsReview defaults to true when catalogueEntryId is absent', () {
+      final classification = parseClassifyFindingResponse({
+        'findingId': 'finding_1',
+        'needsReview': true,
+      }, _requestWithEvidence());
+      expect(classification.catalogueEntryId, isNull);
+      expect(classification.needsReview, isTrue);
+    });
+
+    test('coerces a non-string shortReason to null rather than throwing', () {
+      final classification = parseClassifyFindingResponse({
+        'findingId': 'finding_1',
+        'catalogueEntryId': _validEntryId,
+        'shortReason': 42,
+      }, _requestWithEvidence());
+      expect(classification.shortReason, isNull);
+    });
+
+    test('candidateEntryIds is empty when absent or malformed', () {
+      final classification = parseClassifyFindingResponse({
+        'findingId': 'finding_1',
+        'needsReview': true,
+      }, _requestWithEvidence());
+      expect(classification.candidateEntryIds, isEmpty);
+    });
+
+    test('candidateEntryIds passes through a well-formed list', () {
+      final classification = parseClassifyFindingResponse({
+        'findingId': 'finding_1',
+        'needsReview': true,
+        'candidateEntryIds': [_validEntryId, 'door.door_hinge.01'],
+      }, _requestWithEvidence());
+      expect(classification.candidateEntryIds, [
+        _validEntryId,
+        'door.door_hinge.01',
+      ]);
     });
   });
 

@@ -1,5 +1,5 @@
 import {HttpsError} from "firebase-functions/v2/https";
-import {AnalyzeInspectionInput, FindingInput} from "./types";
+import {ClassifyFindingInput} from "./types";
 
 /**
  * Cost/abuse guardrails: bounds on what one callable invocation may
@@ -7,7 +7,6 @@ import {AnalyzeInspectionInput, FindingInput} from "./types";
  * here means a runaway client (buggy or malicious) can never turn
  * into an unbounded provider bill.
  */
-export const MAX_FINDINGS_PER_REQUEST = 60;
 export const MAX_TEXT_FIELD_LENGTH = 4_000;
 export const MAX_SHORT_FIELD_LENGTH = 200;
 /** Mirrors `evidence.ts`'s own per-finding cap — validated here too so
@@ -62,23 +61,18 @@ function requireShortString(value: unknown, field: string): string {
 
 /**
  * Validates an optional `evidenceIds` array: each entry must be a
- * short, non-empty string, duplicates within the same finding are
- * dropped, and the list is capped at
- * [MAX_EVIDENCE_IDS_PER_FINDING] entries (extras are simply not sent
- * for resolution — this is a cost bound, not a hard failure, since a
- * finding can legitimately have more photos than we choose to send to
- * the model).
+ * short, non-empty string, duplicates are dropped, and the list is
+ * capped at [MAX_EVIDENCE_IDS_PER_FINDING] entries (extras are simply
+ * not sent for resolution — this is a cost bound, not a hard failure,
+ * since a finding can legitimately have more photos than we choose to
+ * send to the model).
  * @param {unknown} value the candidate `evidenceIds` field.
- * @param {number} index the finding's index, for the error message.
  * @return {string[] | undefined} the validated, capped id list.
  */
-function parseEvidenceIds(value: unknown, index: number): string[] | undefined {
+function parseEvidenceIds(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
-    throw new HttpsError(
-      "invalid-argument",
-      `findings[${index}].evidenceIds must be an array.`
-    );
+    throw new HttpsError("invalid-argument", "evidenceIds must be an array.");
   }
   const seen = new Set<string>();
   const ids: string[] = [];
@@ -86,13 +80,13 @@ function parseEvidenceIds(value: unknown, index: number): string[] | undefined {
     if (typeof raw !== "string" || raw.trim().length === 0) {
       throw new HttpsError(
         "invalid-argument",
-        `findings[${index}].evidenceIds must contain only non-empty strings.`
+        "evidenceIds must contain only non-empty strings."
       );
     }
     if (raw.length > MAX_SHORT_FIELD_LENGTH) {
       throw new HttpsError(
         "invalid-argument",
-        `findings[${index}].evidenceIds entries exceed the maximum length.`
+        "evidenceIds entries exceed the maximum length."
       );
     }
     if (seen.has(raw)) continue;
@@ -105,91 +99,26 @@ function parseEvidenceIds(value: unknown, index: number): string[] | undefined {
 }
 
 /**
- * Validates and narrows the untyped callable payload. Throws a
- * well-formed `HttpsError` (never a raw exception) for anything
- * malformed or over the configured limits.
+ * Validates and narrows the untyped callable payload for one finding.
+ * Throws a well-formed `HttpsError` (never a raw exception) for
+ * anything malformed or over the configured limits.
  * @param {unknown} data the raw `request.data` from the callable.
- * @return {AnalyzeInspectionInput} the validated, typed input.
+ * @return {ClassifyFindingInput} the validated, typed input.
  */
-export function parseAnalyzeInspectionInput(
+export function parseClassifyFindingInput(
   data: unknown
-): AnalyzeInspectionInput {
+): ClassifyFindingInput {
   if (typeof data !== "object" || data === null) {
     throw new HttpsError("invalid-argument", "Request payload is required.");
   }
   const payload = data as Record<string, unknown>;
 
-  const inspectionId = requireShortString(
-    payload.inspectionId,
-    "inspectionId"
-  );
-  const propertyType = requireShortString(
-    payload.propertyType,
-    "propertyType"
-  );
-
-  if (!Array.isArray(payload.findings)) {
-    throw new HttpsError("invalid-argument", "findings must be an array.");
-  }
-  if (payload.findings.length === 0) {
-    throw new HttpsError("invalid-argument", "findings must not be empty.");
-  }
-  if (payload.findings.length > MAX_FINDINGS_PER_REQUEST) {
-    throw new HttpsError(
-      "invalid-argument",
-      "A maximum of " +
-        `${MAX_FINDINGS_PER_REQUEST} findings may be analyzed per request.`
-    );
-  }
-
-  const seenIds = new Set<string>();
-  const findings: FindingInput[] = payload.findings.map((raw, index) => {
-    if (typeof raw !== "object" || raw === null) {
-      throw new HttpsError(
-        "invalid-argument",
-        `findings[${index}] is malformed.`
-      );
-    }
-    const f = raw as Record<string, unknown>;
-    const findingId = requireShortString(
-      f.findingId,
-      `findings[${index}].findingId`
-    );
-    if (seenIds.has(findingId)) {
-      throw new HttpsError(
-        "invalid-argument",
-        `Duplicate findingId in request: ${findingId}.`
-      );
-    }
-    seenIds.add(findingId);
-
-    return {
-      findingId,
-      area: requireShortString(f.area, `findings[${index}].area`),
-      isPlumbingArea: f.isPlumbingArea === true,
-      element: requireShortString(f.element, `findings[${index}].element`),
-      component: requireString(
-        f.component,
-        `findings[${index}].component`,
-        MAX_SHORT_FIELD_LENGTH
-      ),
-      description: requireString(
-        f.description,
-        `findings[${index}].description`,
-        MAX_TEXT_FIELD_LENGTH
-      ),
-      notes: requireString(
-        f.notes,
-        `findings[${index}].notes`,
-        MAX_TEXT_FIELD_LENGTH
-      ),
-      evidenceCount:
-        typeof f.evidenceCount === "number" && f.evidenceCount >= 0 ?
-          Math.min(Math.floor(f.evidenceCount), 999) :
-          0,
-      evidenceIds: parseEvidenceIds(f.evidenceIds, index),
-    };
-  });
-
-  return {inspectionId, propertyType, findings};
+  return {
+    inspectionId: requireShortString(payload.inspectionId, "inspectionId"),
+    findingId: requireShortString(payload.findingId, "findingId"),
+    area: requireShortString(payload.area, "area"),
+    isPlumbingArea: payload.isPlumbingArea === true,
+    note: requireString(payload.note, "note", MAX_TEXT_FIELD_LENGTH),
+    evidenceIds: parseEvidenceIds(payload.evidenceIds),
+  };
 }

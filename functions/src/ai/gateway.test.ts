@@ -1,98 +1,119 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {resolveProviderId, validateAndNormalize} from "./gateway";
-import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
+import {ClassificationResult, ClassifyFindingInput} from "./types";
 
-/** @return {AnalyzeInspectionInput} a small, two-finding sample request. */
-function sampleInput(): AnalyzeInspectionInput {
+/** @return {ClassifyFindingInput} a sample plumbing-area request. */
+function sampleInput(): ClassifyFindingInput {
   return {
     inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [
-      {
-        findingId: "finding_1",
-        area: "Master Bathroom",
-        isPlumbingArea: true,
-        element: "Floor",
-        evidenceCount: 1,
-      },
-      {
-        findingId: "finding_2",
-        area: "Kitchen",
-        isPlumbingArea: true,
-        element: "Wall",
-        evidenceCount: 0,
-      },
-    ],
+    findingId: "finding_1",
+    area: "Master Bathroom",
+    isPlumbingArea: true,
   };
 }
 
-test("keeps a suggestion matching a requested findingId", () => {
-  const result: AnalyzeInspectionResult = {
-    providerId: "deepseek",
-    suggestions: [
-      {
-        findingId: "finding_1",
-        defectType: "Cracked tile",
-        recommendation: "Replace tile",
-      },
+// Two real, valid catalogue ids used across these tests.
+const VALID_ID = "sanitary_fitting.water_tap.03"; // "leaking/dripping"
+const OTHER_VALID_ID = "sanitary_fitting.water_tap.02"; // "is damaged"
+
+test("keeps a valid catalogue id and marks it not needing review", () => {
+  const result: ClassificationResult = {
+    findingId: "finding_1",
+    catalogueEntryId: VALID_ID,
+    confidence: 0.9,
+    needsReview: false,
+  };
+  const normalized = validateAndNormalize(sampleInput(), result);
+  assert.equal(normalized.catalogueEntryId, VALID_ID);
+  assert.equal(normalized.needsReview, false);
+});
+
+test("rejects a hallucinated/unknown catalogue id — forces needsReview", () => {
+  const result: ClassificationResult = {
+    findingId: "finding_1",
+    catalogueEntryId: "made_up.entry.99",
+    needsReview: false,
+  };
+  const normalized = validateAndNormalize(sampleInput(), result);
+  assert.equal(normalized.catalogueEntryId, undefined);
+  assert.equal(normalized.needsReview, true);
+});
+
+test("a response for a different findingId is rejected as needsReview", () => {
+  const result: ClassificationResult = {
+    findingId: "finding_other",
+    catalogueEntryId: VALID_ID,
+    needsReview: false,
+  };
+  const normalized = validateAndNormalize(sampleInput(), result);
+  assert.equal(normalized.findingId, "finding_1");
+  assert.equal(normalized.catalogueEntryId, undefined);
+  assert.equal(normalized.needsReview, true);
+});
+
+test("filters candidateEntryIds to valid ids only, deduplicated and " +
+  "capped", () => {
+  const result: ClassificationResult = {
+    findingId: "finding_1",
+    needsReview: true,
+    candidateEntryIds: [
+      VALID_ID,
+      VALID_ID,
+      OTHER_VALID_ID,
+      "made_up.entry.1",
+      "made_up.entry.2",
+      "made_up.entry.3",
+      "made_up.entry.4",
+      "made_up.entry.5",
+      "made_up.entry.6",
     ],
   };
   const normalized = validateAndNormalize(sampleInput(), result);
-  assert.equal(normalized.suggestions.length, 1);
-  assert.equal(normalized.suggestions[0].findingId, "finding_1");
-  assert.equal(normalized.suggestions[0].defectType, "Cracked tile");
+  assert.deepEqual(normalized.candidateEntryIds, [VALID_ID, OTHER_VALID_ID]);
 });
 
-test("rejects a suggestion for an unknown findingId", () => {
-  const result: AnalyzeInspectionResult = {
-    providerId: "deepseek",
-    suggestions: [
-      {findingId: "finding_1", defectType: "Cracked tile"},
-      {
-        findingId: "finding_never_requested",
-        defectType: "Should be dropped",
-      },
-    ],
-  };
-  const normalized = validateAndNormalize(sampleInput(), result);
-  assert.equal(normalized.suggestions.length, 1);
-  assert.equal(normalized.suggestions[0].findingId, "finding_1");
+test("clamps an out-of-range confidence to [0, 1]", () => {
+  const tooHigh = validateAndNormalize(sampleInput(), {
+    findingId: "finding_1",
+    catalogueEntryId: VALID_ID,
+    confidence: 5,
+    needsReview: false,
+  });
+  assert.equal(tooHigh.confidence, 1);
+
+  const negative = validateAndNormalize(sampleInput(), {
+    findingId: "finding_1",
+    catalogueEntryId: VALID_ID,
+    confidence: -3,
+    needsReview: false,
+  });
+  assert.equal(negative.confidence, 0);
 });
 
-test("drops a duplicate findingId, keeping the first", () => {
-  const result: AnalyzeInspectionResult = {
-    providerId: "deepseek",
-    suggestions: [
-      {findingId: "finding_1", defectType: "First"},
-      {findingId: "finding_1", defectType: "Duplicate, dropped"},
-    ],
-  };
-  const normalized = validateAndNormalize(sampleInput(), result);
-  assert.equal(normalized.suggestions.length, 1);
-  assert.equal(normalized.suggestions[0].defectType, "First");
-});
-
-test("coerces a non-string field to undefined instead of throwing", () => {
+test("coerces a non-string shortReason to undefined instead of " +
+  "throwing", () => {
   const result = {
-    providerId: "deepseek",
-    suggestions: [
-      {findingId: "finding_1", defectType: 12345},
-    ],
+    findingId: "finding_1",
+    catalogueEntryId: VALID_ID,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any as AnalyzeInspectionResult;
+    shortReason: 12345 as any,
+    needsReview: false,
+  } as ClassificationResult;
   const normalized = validateAndNormalize(sampleInput(), result);
-  assert.equal(normalized.suggestions.length, 1);
-  assert.equal(normalized.suggestions[0].defectType, undefined);
+  assert.equal(normalized.shortReason, undefined);
 });
 
-test("handles an empty suggestions array", () => {
-  const result: AnalyzeInspectionResult = {
-    providerId: "deepseek",
-    suggestions: [],
-  };
-  const normalized = validateAndNormalize(sampleInput(), result);
-  assert.deepEqual(normalized.suggestions, []);
+test("needsReview stays true when explicitly set even with a valid id", () => {
+  const normalized = validateAndNormalize(sampleInput(), {
+    findingId: "finding_1",
+    catalogueEntryId: VALID_ID,
+    needsReview: true,
+  });
+  assert.equal(normalized.needsReview, true);
+  // The id itself is still preserved/valid — needsReview only affects
+  // how the caller treats it (e.g. still offering it as a candidate).
+  assert.equal(normalized.catalogueEntryId, VALID_ID);
 });
 
 test("resolveProviderId defaults to deepseek when unset", () => {

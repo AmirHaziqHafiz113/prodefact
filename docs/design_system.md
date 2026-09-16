@@ -92,31 +92,8 @@ Phase 9 final report for the itemized before/after per screen.
 
 ## Manual end-to-end test checklist
 
-Automated tests cover the flows below with fakes; before a pilot,
-manually verify on a real device with the deployed function and a real
-(non-shared) Firebase project:
-
-1. Fresh install → "Start Home Inspection" → dashboard shows the empty
-   state → "New Inspection."
-2. Select High Rise/Landed → configure areas (toggle, rename, add,
-   remove, reset) → Continue.
-3. Physical inspection: open an area (plumbing areas appear first),
-   open an element, add a finding with a photo (camera and gallery),
-   edit it, remove a photo, remove the finding.
-4. Mark every area completed → "Complete Physical Inspection" enables
-   → AI Review screen reached.
-5. Sign in, then tap "Start AI Analysis" — confirm a real DeepSeek
-   suggestion appears (not the fake's fixed text) within the timeout.
-6. Accept one suggestion, Edit another, Reject/Correct a third —
-   confirm the "Inspector final decision" block reflects each choice
-   and the original AI text is never overwritten.
-7. Once every suggestion is resolved, "Continue to Report" enables →
-   generate the report → preview it → share it → edit a finding
-   afterward and confirm the "stale" banner appears → regenerate.
-8. Delete the inspection → confirm its photos and report file are gone
-   from device storage.
-9. Turn on airplane mode and repeat steps 2–4 — confirm nothing
-   requires connectivity, and "Sync now" fails gracefully without
-   losing local data.
-10. Sign out mid-session — confirm the active inspection and its data
-    are completely unaffected.
+See `docs/production_readiness.md` ("Manual E2E test sequence") for
+the current, maintained checklist — camera-first capture, progressive
+per-finding AI against the controlled catalogue, the authentication
+hard gate, and report structure. Kept in one place rather than
+duplicated here to avoid the two drifting out of sync.

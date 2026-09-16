@@ -188,6 +188,7 @@ class PdfReportRenderer implements ReportRenderer {
         children: [
           pw.Text(
             [
+              '#${finding.number}',
               finding.elementName,
               if (finding.componentName != null) finding.componentName!,
             ].join(' — '),
@@ -195,7 +196,7 @@ class PdfReportRenderer implements ReportRenderer {
           ),
           pw.SizedBox(height: 4),
           pw.Text(
-            'Defect: ${finding.defectType ?? 'Not specified'}',
+            'Finding: ${finding.defectType ?? 'Not specified'}',
             style: const pw.TextStyle(fontSize: 10),
           ),
           if (finding.recommendation != null)

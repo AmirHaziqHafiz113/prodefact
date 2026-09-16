@@ -72,6 +72,98 @@ label in `Flexible` + `TextOverflow.ellipsis` — a global fix, since
 every other screen's status/sync pills share the same widget and were
 equally at risk of the same overflow on a narrow device.
 
+## Camera-first rewrite (product pivot)
+
+The component-first physical inspection flow (Area → choose element →
+choose component → manually add finding → photo) has been replaced
+with a camera-first flow (Area → Take Photo → optional note → Save;
+AI classifies against a controlled catalogue afterward) — see
+`docs/home_inspection_workflow.md` for the full flow and
+`docs/ai_review.md`/`docs/ai_provider_architecture.md` for the AI
+model. This section covers the migration/compatibility impact only.
+
+**Drift schema v6** (`lib/data/local/database.dart`): additive only,
+consistent with the app's existing "never drop/recreate" migration
+policy —
+
+- `FindingRows.aiStatus` (new column, defaults to `notQueued`).
+- `AiSuggestionRows` gained `suggestedCatalogueEntryId`,
+  `suggestedConfidence`, `suggestedShortReason`,
+  `suggestedCandidateEntryIds`, `finalCatalogueEntryId` (all nullable).
+- A finding that already had an `AiSuggestion` from the old batch
+  workflow is backfilled to `aiStatus = 'completed'` in the same
+  migration, so its existing progress isn't misreported as never
+  having been analyzed.
+- `FindingRows.elementId` is **unchanged at the SQL level** — still a
+  real, non-empty NOT NULL column for a legacy finding. A camera-first
+  finding stores `''` (never SQL `NULL`) there instead, translated to
+  Dart `null` by `DriftInspectionRepository` — deliberately avoiding an
+  `ALTER TABLE` constraint change, which SQLite doesn't support without
+  a full table rebuild. Zero schema risk to the column every legacy
+  finding already depends on.
+- **A genuine migration bug was caught and fixed while implementing
+  this**: `migrator.createTable(aiSuggestionRows)` (run once, at schema
+  v3) always builds the table from the table class's *current* Dart
+  definition — meaning a device that jumps straight from schema v1/v2
+  to v6 (skipping v3-v5 entirely, i.e. hadn't opened the app in a long
+  time) would have the v6 columns already present the moment
+  `createTable` ran, and the later `if (from < 6)` block's
+  `addColumn` calls for those same columns would then fail with a
+  duplicate-column SQL error. Fixed by only running those specific
+  `addColumn` calls when `from >= 3` (the table already existed before
+  this migration run) — see `test/data/database_migration_test.dart`
+  for the regression test that exercises exactly this path (v1 and v5
+  upgrade scenarios are both covered directly).
+
+**Legacy findings** (schema v5 and earlier, with a real `elementId`)
+continue to work, render, and report correctly — `report_model_builder.dart`
+branches on `finding.elementId == null` to decide whether to resolve
+display text from the controlled catalogue (camera-first) or from the
+finding's own recorded element/component and a legacy suggestion's
+preserved free-text fields (`legacyFinalElementId`, etc. — never
+written by new code, only ever read for old data). See
+`test/core/report/report_model_builder_test.dart` for both paths.
+
+**UI**: the old `ElementInspectionScreen`/`finding_dialog.dart` (choose
+element → choose component → add finding) are removed — nothing routes
+to them anymore. `AreaInspectionScreen` was rebuilt around "Take Defect
+Photo" as the primary action; see `docs/home_inspection_workflow.md`.
+
+## Authentication hard gate (product pivot)
+
+Authentication changed from *fully optional* (any screen reachable
+signed out, "guest" sessions allowed) to a **hard gate**, whenever
+Firebase is actually configured for a build: `buildAppRouter`'s
+`redirect` callback (`lib/app/router/app_router.dart`) sends an
+unauthenticated caller to `SignInScreen` before any route under
+`/home-inspection/*` (dashboard, new inspection, physical inspection,
+AI review, report) ever builds, and bounces a signed-in caller away
+from `SignInScreen` back to the dashboard. `GoRouterRefreshStream`
+(`lib/app/router/go_router_refresh_stream.dart`) re-evaluates this
+redirect on every auth state change, not just on navigation, so a
+sign-out that happens while a gated screen is already open is caught
+immediately.
+
+**This does not apply in local-only/demo builds** (`firebaseReadyProvider`
+false — no Firebase project configured at all): there is no backend to
+authenticate against, so the existing fully-offline, no-account
+behavior documented under "Offline-first guarantees" below is
+unaffected. This is the only way "hard auth gate" and "physical
+inspection must remain usable even if Firebase is unavailable" are both
+true at once: the gate requires *being authenticated*, not *being
+online* — a legitimately signed-in inspector's session restores from
+the platform's own secure storage and works fully offline exactly as
+before; the gate only ever blocks a genuinely never-authenticated (or
+explicitly signed-out) caller.
+
+A `resetPassword` method was added to `AuthService` (previously
+missing entirely) with a "Forgot password?" entry point on
+`SignInScreen` — closing a real gap where password-reset errors had no
+handling at all before this pass. See
+`test/features/auth_gate_test.dart` for the redirect behavior (gated
+when Firebase is configured, un-gated in local-only mode, bounce-back
+from Sign In when already authenticated).
+
 ## Offline-first guarantees
 
 The local Drift database (`AppDatabase`, `lib/data/local/database.dart`)
@@ -138,21 +230,25 @@ runs of the same expensive, non-idempotent operation for the same
 session, in addition to each already being logically idempotent/safe to
 retry sequentially:
 
-- `DefaultAiReviewCoordinator.runAnalysis` — an in-memory
-  `Set<String> _inFlight` rejects a second concurrent call for a
-  session already being analyzed (returns `alreadyReviewed`). Without
-  this, two concurrent calls could both read `aiReviewState: notStarted`
-  before either had durably written `analyzing`, both call the AI
-  backend, and duplicate every suggestion.
+- `DefaultAiClassificationCoordinator.classifyFinding` — an in-memory
+  `Set<String> _inFlight` (keyed by `sessionId/findingId`) rejects a
+  second concurrent classification call for the same finding (returns
+  `alreadyInFlight`). Without this, two concurrent calls could both
+  read the finding's pre-classification `aiStatus` before either had
+  durably persisted a suggestion, both call the AI backend, and
+  duplicate the suggestion. Note this is scoped per *finding*, not per
+  *session* — progressive AI means many findings across many areas can
+  legitimately be classifying concurrently; only the same finding
+  twice at once is guarded against.
 - `DefaultReportCoordinator.generateReport` — the same pattern; without
   it, two concurrent calls (same day → same predictable filename) could
   race writing the same file path.
 - `DefaultSyncCoordinator.syncSession` — the same pattern, for a
   double-tap of "Sync now".
 
-`ActiveInspectionSession` also holds its own `_isAnalyzing`/
-`_isGeneratingReport`/`_isSyncing` flags as a second layer, so a rapid
-double-tap at the UI level is rejected even before reaching the
+`ActiveInspectionSession` also holds its own `_classifyingFindingIds`/
+`_isGeneratingReport`/`_isSyncing` guards as a second layer, so a rapid
+double-trigger at the UI level is rejected even before reaching the
 coordinator. Verified with genuinely concurrent (`Future.wait`, not
 sequential) calls in `test/data/concurrency_test.dart`, using fakes with
 an artificial delay so the race window is real rather than incidental.
@@ -373,11 +469,11 @@ Confirmed by this phase's audit (existing guarantees) plus what's new:
 - **No unsafe dynamic file paths**: confirmed by inspection — every
   `File(...)`/directory path in `lib/data/` is built from app-generated
   ids and fixed prefixes, never directly from unsanitized user text.
-- **AI requests exclude unnecessary account data**: `AiAnalysisRequest`/
-  `AiFindingContext` (`lib/core/inspection/ai/`) have no `ownerUid`,
-  `email`, or auth-token field at all — a structural guarantee, not
-  just a convention — confirmed by capturing an actual request built
-  during a full workflow run in `test/security_test.dart`.
+- **AI requests exclude unnecessary account data**:
+  `AiFindingClassificationRequest` (`lib/core/inspection/ai/`) has no
+  `ownerUid`, `email`, or auth-token field at all — a structural
+  guarantee, not just a convention — confirmed by capturing an actual
+  request built during a full workflow run in `test/security_test.dart`.
 - **Logs don't print secrets/tokens**: `AppLogger.error` logs an
   exception's type name rather than its full message (see "Logging"
   above), specifically to avoid a `FirebaseAuthException` or similar
@@ -386,6 +482,34 @@ Confirmed by this phase's audit (existing guarantees) plus what's new:
   `lib/firebase_options.dart` opens with a large comment block
   explicitly stating it's a placeholder with no real credentials and
   the exact command (`flutterfire configure`) that replaces it.
+
+### Re-audit for the camera-first/controlled-catalogue pass
+
+Re-confirmed unchanged and still correct:
+
+- `firestore.rules`/`storage.rules` — still scoped to
+  `users/{uid}/...`, deny-by-default elsewhere; no change was needed
+  since evidence/finding paths didn't change shape.
+- The `classifyFinding` callable (renamed from `analyzeInspection`,
+  same security posture) still: requires `request.auth` before
+  touching any provider; derives the evidence Storage path only from
+  the verified caller's own `uid` plus the request's own ids, never
+  from a client-supplied path; independently re-verifies ownership via
+  Firestore before ever reading Storage. See
+  `docs/ai_provider_architecture.md` ("Secure evidence delivery") and
+  `functions/src/handle_classify_finding.test.ts` for the auth-gate and
+  ownership tests.
+- `DEEPSEEK_API_KEY` is still Secret-Manager-only, never logged, never
+  in Flutter source — unchanged.
+- New this pass: the router's authentication hard gate (see "Camera-
+  first rewrite (product pivot)" above) — client-side navigation
+  gating only, not a substitute for the server-side rules/callable auth
+  checks above, which remain the actual trust boundary.
+- New this pass: the controlled defect catalogue itself contains no
+  user data and is committed as plain source (not a secret) — both
+  copies (`defect_catalogue_data.dart`/`.ts`) are generated from
+  `tool/generate_defect_catalogue.py`, a public, non-sensitive
+  transcription of a published defect list.
 
 ## App Check
 
@@ -476,34 +600,42 @@ the app's current scope).
 
 ## AI security architecture (production-readiness)
 
-Unchanged in shape from Phase 6, confirmed intact this phase:
+The real, deployed architecture (superseding the earlier "[future]
+gateway" placeholder this section originally described):
 
 ```
-Flutter (AiInspectionService.analyze)
-  -> [future] authenticated backend gateway
-       -> validates the request, selects/calls the real AI provider,
-          validates the response, logs/rate-limits
-  -> Flutter parses the typed AiAnalysisResponse
+Flutter (AiInspectionService.classifyFinding)
+  -> FirebaseAiInspectionService -> `classifyFinding` callable
+       -> requires Firebase Authentication (unauthenticated -> rejected
+          before any provider is ever invoked)
+       -> validates the request (functions/src/ai/validation.ts)
+       -> resolves evidence server-side, ownership-checked
+          (functions/src/ai/evidence.ts)
+       -> calls DeepSeek (deepseek-flash), validates its response
+          against the controlled catalogue (functions/src/ai/gateway.ts)
+  -> Flutter parses the typed AiFindingClassification
 ```
 
+Full detail: `docs/ai_provider_architecture.md`.
 `FakeAiInspectionService` is explicitly named and documented as
 fake/demo (`lib/data/ai/fake_ai_inspection_service.dart`) — deterministic,
-no network call, not production AI. No paid/provider API is ever called
-directly from Flutter, and no provider secret exists in the mobile
-codebase (see "Security" above) — a real provider integration is
-additive behind the same `AiInspectionService` interface, an override of
-one provider (`aiInspectionServiceProvider`), never a rework of
-`ActiveInspectionSession`, `AiReviewCoordinator`, the Drift schema, sync,
-or any UI.
+no network call, not production AI, used only when Firebase isn't
+configured. No paid/provider API is ever called directly from Flutter,
+and no provider secret (`DEEPSEEK_API_KEY`, Secret-Manager-only) exists
+in the mobile codebase (see "Security" above) — swapping to a different
+provider is an override of one provider (`aiInspectionServiceProvider`
+server-side selection), never a rework of `ActiveInspectionSession`,
+`AiClassificationCoordinator`, the Drift schema, sync, or any UI.
 
 ## Report hardening
 
 Confirmed intact from Phase 7 (see `docs/report.md` for full detail),
 re-audited this phase:
 
-- Eligibility gating (physical inspection complete AND every AI
-  suggestion resolved) is enforced in `DefaultReportCoordinator`, not
-  just by hiding a button.
+- Eligibility gating (physical inspection complete AND no finding
+  still mid-AI-processing AND every AI suggestion resolved — see
+  `docs/ai_review.md`, "Report readiness") is enforced in
+  `DefaultReportCoordinator`, not just by hiding a button.
 - A file-write failure (or a render failure) is caught and returned as
   `ReportGenerationResult.failure` — inspection data is untouched.
 - A missing/deleted evidence photo is caught per-image in
@@ -640,12 +772,22 @@ itself documents as non-sensitive.
   (placeholders only), so `aiInspectionServiceProvider` resolves to
   `FakeAiInspectionService` (deterministic, no network) until
   `flutterfire configure` points it at a real project. The real,
-  provider-neutral, multimodal (`deepseek-flash`) implementation itself
-  exists (`FirebaseAiInspectionService` → `analyzeInspection` callable
-  → the DeepSeek gateway) — see `docs/ai_provider_architecture.md` —
-  but it has not been exercised against a real signed-in user and a
-  real synced photo in this environment; that is the manual E2E gap
-  called out below.
+  provider-neutral, multimodal (`deepseek-flash`), controlled-catalogue
+  implementation itself exists and is deployed to `prodefact-82bac`
+  (`FirebaseAiInspectionService` → `classifyFinding` callable → the
+  DeepSeek gateway) — see `docs/ai_provider_architecture.md` — but it
+  has not been exercised against a real signed-in user and a real
+  synced photo in this environment; that is the manual E2E gap called
+  out below.
+- **The "waiting for connection" AI status does not detect genuine
+  network loss directly** — there is no connectivity-monitoring plugin
+  in this app. `isOnlineForAiProvider` is a proxy (true whenever
+  Firebase isn't configured at all, or the inspector is signed in) —
+  if a signed-in device is actually offline, a queued finding simply
+  stays `queued` (safe: never lost, never duplicated) but the
+  dashboard card may briefly still say "analysing" rather than
+  "waiting for connection" until the next sync attempt fails. A future
+  pass could add `connectivity_plus` for a more precise label.
 - **Cloud deletion is not implemented** — deleting a session locally
   never deletes a previously-synced remote copy (see "Session
   deletion").
@@ -660,17 +802,25 @@ itself documents as non-sensitive.
   arriving in a Crashlytics dashboard, and no request has actually been
   attested by App Check, in this environment.
 - **Coverage is uneven** — core domain logic (coordinators, the report
-  model builder, migrations) is heavily tested; UI screens beyond the
-  ones this phase specifically touched were not newly instrumented; see
-  the coverage figure in the final Phase 8 report for the current
-  overall percentage.
+  model builder, migrations, the AI catalogue/gateway) is heavily
+  tested; UI screens beyond the ones a given pass specifically touched
+  were not newly instrumented.
 - **`activeSessionErrorProvider` is not yet wired into every screen** —
-  it exists and is exercised by tests, and the two screens/flows this
-  phase specifically hardened (start/resume, evidence capture, report
-  generation) show it; wiring a consistent banner into the remaining
-  screens (physical inspection queue, area configuration, AI review) is
-  straightforward, additive follow-up work, not started this phase to
-  keep the change bounded.
+  it exists and is exercised by tests, and several screens/flows show
+  it; wiring a consistent banner into every remaining screen is
+  straightforward, additive follow-up work.
+- **The searchable catalogue picker ("Change") has no fuzzy matching**
+  — `DefectCatalogue.search` is a plain case-insensitive substring
+  match across defect/component/main-element name. Sufficient for 222
+  entries in practice, but a typo-tolerant search would be a nice-to-
+  have follow-up.
+- **No automated test drives the real DeepSeek API, a real device
+  camera, or a real Cloud Storage upload** — every AI/evidence test
+  uses a fake provider or hand-rolled fake Firestore/Storage client.
+  This is a deliberate, standard testing boundary (never spend real
+  money/quota in CI), but it means the manual E2E sequence below is not
+  optional decoration — it is the only verification that the real,
+  deployed integration actually works end-to-end.
 
 ## Pilot-readiness checklist
 
@@ -694,23 +844,28 @@ Use this before a real pilot inspection:
       photos/report from the device's storage; a report survives being
       generated, shared, and regenerated after an edit.
 - [ ] Confirm pilot inspectors understand: cloud data currently only
-      ever grows (no delete-sync), and AI suggestions are demo-quality
-      unless a real backend has been connected.
+      ever grows (no delete-sync), and an unauthenticated device never
+      sees the dashboard once Firebase is configured for this build.
 
 ### Manual E2E test sequence (required — not covered by automated tests)
 
 None of this has been exercised on a real device/simulator against a
 real Firebase project in this environment. Before treating any of the
-fixes/features in this pass as pilot-ready, manually run through:
+features in this pass as pilot-ready, manually run through:
 
-1. **Fresh install, sign-up, sign-in.** Uninstall and reinstall the app
-   (or use a fresh simulator). Confirm the app opens to a genuine
-   signed-out state — no phantom/anonymous session. Register a new
-   account, sign out, sign back in with the correct password (succeeds)
-   and then with a deliberately wrong password (shows the clear "email
-   or password is incorrect" message, not a raw Firebase code). Trigger
-   a password reset email and confirm signing in with the new password
-   works and the old one no longer does.
+1. **Authentication hard gate.** Uninstall and reinstall the app (or
+   use a fresh simulator) against a build with a real Firebase project
+   configured. Confirm the app never shows the dashboard, New
+   Inspection, or any inspection screen while signed out — only Sign
+   In/Register. Register a new account, sign out, sign back in with
+   the correct password (succeeds) and then with a deliberately wrong
+   password (shows the clear "email or password is incorrect" message,
+   not a raw Firebase code). Tap "Forgot password?", request a reset
+   for a real test account, confirm the email arrives, and confirm
+   signing in with the new password works and the old one no longer
+   does. Confirm a legitimate prior session (don't sign out; just
+   relaunch the app) restores automatically without being asked to
+   sign in again.
 2. **New Inspection — no phantom inspections.** From the dashboard,
    start New Inspection, pick a property type, then back out (device
    back button and the app bar back arrow) before touching the areas
@@ -720,30 +875,60 @@ fixes/features in this pass as pilot-ready, manually run through:
    again nothing was created. Finally, go through the flow and actually
    tap "Start Inspection" once — confirm exactly one inspection appears,
    including the custom area and your include/exclude/rename choices.
-3. **Area configuration on a narrow phone.** On the smallest real/
+3. **Camera-first capture, rapid succession.** Open an area and confirm
+   "Take Defect Photo" is the single, prominent primary action — no
+   element/component picker appears anywhere first. Take a photo,
+   preview it, add a short note, tap "Save Finding" — confirm it
+   appears in the findings list within the same screen almost
+   immediately, with an AI status that starts at "waiting"/"analysing"
+   without ever blocking you from immediately tapping "Take Defect
+   Photo" again. Repeat several times in quick succession (take, save,
+   take, save...) and confirm no duplicate findings and no UI stall.
+   Add a second photo to an existing finding and confirm it re-queues
+   AI (status returns to "analysing").
+4. **Area configuration on a narrow phone.** On the smallest real/
    simulated device available, open area configuration and confirm the
    "Plumbing area — inspect first" pill never visually collides with or
    hides the edit/delete buttons, for both a short default area name
-   and a long custom one.
-4. **Physical inspection, photos, gating.** Complete a full inspection
-   with at least one finding carrying two or more photos in a plumbing
-   area. Confirm no AI call happens merely from taking a photo or
-   completing an area (no network indicator/spinner tied to AI
-   appears). Confirm "Start AI Analysis" is unavailable until every
-   included area is marked complete.
-5. **Real AI Vision review.** With a real Firebase project and deployed
-   function (`DEEPSEEK_API_KEY` bound), sign in, sync, and run "Start AI
-   Analysis." Confirm a suggestion for the photographed finding actually
-   references something specific to the photo (not a generic template
-   answer) and that its notes clearly separate what's directly visible
-   from what's inferred. Edit one suggestion's defect/recommendation,
-   confirm the PDF report reflects your edited value, then force-quit
-   and reopen the app and confirm both the original AI suggestion and
-   your edited final value are still present (not overwritten).
-6. **AI failure paths.** With airplane mode on, attempt "Start AI
-   Analysis" and confirm a clear, non-technical connectivity message
-   appears rather than a hang or crash; confirm the physical inspection
-   data is untouched afterward and analysis can be retried once back
-   online.
-7. **Android + iOS parity.** Repeat at least steps 1, 2, and 4 on both
+   and a long custom one. Confirm the photo preview sheet (photo + note
+   + Save/Discard) is fully visible and usable without scrolling on the
+   same small device.
+5. **Physical vs. AI vs. review progress — independence.** Mark every
+   area physically complete while at least one finding is still
+   showing "AI analysing" or is unreviewed — confirm you can freely
+   move between areas and the AI Review screen shows progress
+   ("analysing · X of Y", "needs review") without letting you continue
+   to the report yet. Confirm the dashboard card's AI progress line
+   updates as findings finish, independent of physical-completion
+   state.
+6. **Real AI Vision review against the controlled catalogue.** With a
+   real Firebase project and the deployed `classifyFinding` function
+   (`DEEPSEEK_API_KEY` bound), sign in, complete an inspection with
+   several photographed defects across different areas (include at
+   least one genuinely unclear/ambiguous photo). Confirm: each result
+   is one of the defined catalogue entries (never a made-up
+   element/component/defect); the "needs review" cases occur for the
+   ambiguous photo rather than a confident wrong guess; the review
+   screen's wording is plain-language, not a technical paragraph;
+   "Change" opens a searchable picker (never a free-text field) and
+   choosing an entry updates the final value while leaving the original
+   AI pick visible/preserved. Force-quit and reopen the app and confirm
+   both the original AI classification and your reviewed final value
+   are still present (not overwritten) for at least one accepted and
+   one changed suggestion.
+7. **PDF report structure.** Generate the report and confirm: findings
+   are grouped by area matching the areas you actually configured;
+   numbering runs continuously across the whole report (not reset per
+   area); each finding shows an actual evidence photo (not a
+   placeholder); the corrective action text matches the catalogue,
+   not any AI free text; a rejected/unresolved finding (if you left one
+   that way) renders as "Unresolved" rather than blank or crashing;
+   pages break cleanly with 20+ findings.
+8. **AI failure paths.** With airplane mode on, save a new camera-first
+   finding and confirm its status clearly reads as waiting/unable to
+   analyse right now (not a crash, not silently stuck as "analysing"
+   forever) and that physical inspection data is completely unaffected;
+   confirm it actually gets classified once connectivity returns
+   without any extra action from the inspector.
+9. **Android + iOS parity.** Repeat at least steps 1, 3, and 6 on both
    an Android device/emulator and an iOS device/simulator.

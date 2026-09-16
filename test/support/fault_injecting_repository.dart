@@ -84,6 +84,16 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> setFindingAiStatus(
+    String sessionId,
+    String findingId,
+    AiFindingStatus status,
+  ) {
+    _maybeFail('setFindingAiStatus');
+    return _inner.setFindingAiStatus(sessionId, findingId, status);
+  }
+
+  @override
   Future<void> deleteSession(String sessionId) {
     _maybeFail('deleteSession');
     return _inner.deleteSession(sessionId);

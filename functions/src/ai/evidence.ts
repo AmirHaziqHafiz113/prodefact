@@ -1,11 +1,10 @@
 import type {Firestore} from "firebase-admin/firestore";
 import type {Storage} from "firebase-admin/storage";
 import sharp from "sharp";
-import {FindingImages, FindingInput, ResolvedImage} from "./types";
+import {ClassifyFindingInput, FindingImages, ResolvedImage} from "./types";
 
 /** Never trust a client-supplied path — see `resolveEvidenceImage`. */
-const MAX_IMAGES_PER_FINDING = 4;
-const MAX_IMAGES_PER_REQUEST = 24;
+export const MAX_IMAGES_PER_FINDING = 4;
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024; // guard before decoding at all
 // Long edge, in pixels — ample defect detail, bounded cost/tokens.
 const MAX_OUTPUT_DIMENSION = 1568;
@@ -148,83 +147,62 @@ export async function resolveEvidenceImage(params: {
 }
 
 /**
- * Resolves every finding's requested evidence, bounded so a client
- * can never force an unbounded number of downloads/decodes: at most
- * [MAX_IMAGES_PER_FINDING] per finding and [MAX_IMAGES_PER_REQUEST]
- * total, with bounded concurrency so many images don't all download
- * at once.
+ * Resolves one finding's requested evidence, bounded so a client can
+ * never force an unbounded number of downloads/decodes: at most
+ * [MAX_IMAGES_PER_FINDING] images, downloaded with bounded concurrency
+ * so several photos don't all download/decode at once. A caller with
+ * more evidence ids than that limit still gets a useful (partial)
+ * result rather than a rejection — see `unavailableCount`.
  * @param {object} params the resolution parameters.
  * @param {string} params.uid the authenticated caller's uid.
- * @param {string} params.inspectionId the inspection id.
- * @param {FindingInput[]} params.findings the validated request findings.
+ * @param {ClassifyFindingInput} params.input the validated request.
  * @param {Firestore} params.firestore the Admin Firestore client.
  * @param {Storage} params.storage the Admin Storage client.
- * @return {Promise<FindingImages[]>} resolved images per finding.
+ * @return {Promise<FindingImages>} the resolved images for this finding.
  */
-export async function resolveAllEvidence(params: {
+export async function resolveFindingEvidence(params: {
   uid: string;
-  inspectionId: string;
-  findings: FindingInput[];
+  input: ClassifyFindingInput;
   firestore: Firestore;
   storage: Storage;
-}): Promise<FindingImages[]> {
-  const {uid, inspectionId, findings, firestore, storage} = params;
-
-  type Job = {findingId: string; evidenceId: string};
-  const jobs: Job[] = [];
-  for (const finding of findings) {
-    const ids = (finding.evidenceIds ?? []).slice(0, MAX_IMAGES_PER_FINDING);
-    for (const evidenceId of ids) {
-      if (jobs.length >= MAX_IMAGES_PER_REQUEST) break;
-      jobs.push({findingId: finding.findingId, evidenceId});
-    }
-    if (jobs.length >= MAX_IMAGES_PER_REQUEST) break;
-  }
-
-  const resolvedByFinding = new Map<string, ResolvedImage[]>();
-  const requestedByFinding = new Map<string, number>();
-  for (const finding of findings) {
-    requestedByFinding.set(
-      finding.findingId,
-      Math.min(finding.evidenceIds?.length ?? 0, MAX_IMAGES_PER_FINDING)
-    );
-  }
+}): Promise<FindingImages> {
+  const {uid, input, firestore, storage} = params;
+  const evidenceIds = (input.evidenceIds ?? []).slice(
+    0,
+    MAX_IMAGES_PER_FINDING
+  );
 
   // Bounded concurrency — a handful of downloads in flight at once
   // rather than one at a time (slow) or all at once (a burst of large
   // Storage/decoding work per request).
   const CONCURRENCY = 4;
+  const images: ResolvedImage[] = [];
   let cursor = 0;
-  /** Pulls jobs off the shared queue until it's empty. */
+  /** Pulls evidence ids off the shared queue until it's empty. */
   async function worker() {
-    while (cursor < jobs.length) {
-      const job = jobs[cursor++];
+    while (cursor < evidenceIds.length) {
+      const evidenceId = evidenceIds[cursor++];
       const resolved = await resolveEvidenceImage({
         uid,
-        inspectionId,
-        findingId: job.findingId,
-        evidenceId: job.evidenceId,
+        inspectionId: input.inspectionId,
+        findingId: input.findingId,
+        evidenceId,
         firestore,
         storage,
       });
-      if (resolved) {
-        const list = resolvedByFinding.get(job.findingId) ?? [];
-        list.push(resolved);
-        resolvedByFinding.set(job.findingId, list);
-      }
+      if (resolved) images.push(resolved);
     }
   }
   await Promise.all(
-    Array.from({length: Math.min(CONCURRENCY, jobs.length)}, () => worker())
+    Array.from(
+      {length: Math.min(CONCURRENCY, evidenceIds.length)},
+      () => worker()
+    )
   );
 
-  return findings.map((finding) => {
-    const images = resolvedByFinding.get(finding.findingId) ?? [];
-    const requested = requestedByFinding.get(finding.findingId) ?? 0;
-    return {
-      findingId: finding.findingId,
-      images,
-      unavailableCount: Math.max(0, requested - images.length),
-    };
-  });
+  return {
+    findingId: input.findingId,
+    images,
+    unavailableCount: Math.max(0, evidenceIds.length - images.length),
+  };
 }

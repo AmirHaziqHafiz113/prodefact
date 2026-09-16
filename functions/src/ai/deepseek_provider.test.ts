@@ -2,23 +2,21 @@ import assert from "node:assert/strict";
 import {test, TestContext} from "node:test";
 import {DeepSeekProvider} from "./deepseek_provider";
 import {AiProviderError} from "./provider";
-import {AnalyzeInspectionInput} from "./types";
+import {ClassifyFindingInput, FindingImages} from "./types";
 
-/** @return {AnalyzeInspectionInput} a minimal one-finding request. */
-function sampleInput(): AnalyzeInspectionInput {
+/** @return {ClassifyFindingInput} a minimal one-finding request. */
+function sampleInput(): ClassifyFindingInput {
   return {
     inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [
-      {
-        findingId: "finding_1",
-        area: "Kitchen",
-        isPlumbingArea: false,
-        element: "Wall",
-        evidenceCount: 0,
-      },
-    ],
+    findingId: "finding_1",
+    area: "Kitchen",
+    isPlumbingArea: false,
   };
+}
+
+/** @return {FindingImages} no resolved images. */
+function noImages(): FindingImages {
+  return {findingId: "finding_1", images: [], unavailableCount: 0};
 }
 
 type FetchImpl =
@@ -50,15 +48,17 @@ function okResponse(content: string): Response {
   );
 }
 
-test("a successful response is parsed into suggestions", async (t) => {
+test("a successful response is parsed into a classification", async (t) => {
   stubFetch(t, async () =>
     okResponse(JSON.stringify({
-      suggestions: [{findingId: "finding_1", defectType: "Peeling paint"}],
+      catalogueEntryId: "wall.concrete_wall.05",
+      confidence: 0.8,
+      needsReview: false,
     })));
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.analyzeInspection(sampleInput(), []);
-  assert.equal(result.suggestions.length, 1);
-  assert.equal(result.suggestions[0].defectType, "Peeling paint");
+  const result = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(result.catalogueEntryId, "wall.concrete_wall.05");
+  assert.equal(result.confidence, 0.8);
 });
 
 test("a 400 response fails immediately, without retrying", async (t) => {
@@ -69,7 +69,7 @@ test("a 400 response fails immediately, without retrying", async (t) => {
   });
   const provider = new DeepSeekProvider("fake-key");
   await assert.rejects(
-    () => provider.analyzeInspection(sampleInput(), []),
+    () => provider.classifyFinding(sampleInput(), noImages()),
     AiProviderError
   );
   assert.equal(calls, 1);
@@ -84,7 +84,7 @@ test("a 500 response is retried once, then still fails if it keeps " +
   });
   const provider = new DeepSeekProvider("fake-key");
   await assert.rejects(
-    () => provider.analyzeInspection(sampleInput(), []),
+    () => provider.classifyFinding(sampleInput(), noImages()),
     AiProviderError
   );
   assert.equal(calls, 2);
@@ -97,13 +97,14 @@ test("a 429 (rate limit) response is retried once and can succeed on " +
     calls++;
     if (calls === 1) return new Response("rate limited", {status: 429});
     return okResponse(JSON.stringify({
-      suggestions: [{findingId: "finding_1", defectType: "Cracked tile"}],
+      catalogueEntryId: "floor.floor_tiles.03",
+      needsReview: false,
     }));
   });
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.analyzeInspection(sampleInput(), []);
+  const result = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
-  assert.equal(result.suggestions[0].defectType, "Cracked tile");
+  assert.equal(result.catalogueEntryId, "floor.floor_tiles.03");
 });
 
 test("a network/abort failure is treated as transient and retried", async (
@@ -114,13 +115,14 @@ test("a network/abort failure is treated as transient and retried", async (
     calls++;
     if (calls === 1) throw new Error("network down");
     return okResponse(JSON.stringify({
-      suggestions: [{findingId: "finding_1", defectType: "Loose fixture"}],
+      catalogueEntryId: "door.door_hinge.03",
+      needsReview: false,
     }));
   });
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.analyzeInspection(sampleInput(), []);
+  const result = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
-  assert.equal(result.suggestions[0].defectType, "Loose fixture");
+  assert.equal(result.catalogueEntryId, "door.door_hinge.03");
 });
 
 test("malformed (non-JSON) model output fails clearly instead of " +
@@ -128,7 +130,7 @@ test("malformed (non-JSON) model output fails clearly instead of " +
   stubFetch(t, async () => okResponse("not valid json {{{"));
   const provider = new DeepSeekProvider("fake-key");
   await assert.rejects(
-    () => provider.analyzeInspection(sampleInput(), []),
+    () => provider.classifyFinding(sampleInput(), noImages()),
     AiProviderError
   );
 });
@@ -138,7 +140,24 @@ test("an empty model response body fails clearly", async (t) => {
     new Response(JSON.stringify({choices: []}), {status: 200}));
   const provider = new DeepSeekProvider("fake-key");
   await assert.rejects(
-    () => provider.analyzeInspection(sampleInput(), []),
+    () => provider.classifyFinding(sampleInput(), noImages()),
     AiProviderError
   );
+});
+
+test("a needsReview response with no catalogueEntryId is parsed " +
+  "correctly", async (t) => {
+  stubFetch(t, async () =>
+    okResponse(JSON.stringify({
+      needsReview: true,
+      candidateEntryIds: ["door.door_hinge.01", "door.door_hinge.02"],
+    })));
+  const provider = new DeepSeekProvider("fake-key");
+  const result = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(result.catalogueEntryId, undefined);
+  assert.equal(result.needsReview, true);
+  assert.deepEqual(result.candidateEntryIds, [
+    "door.door_hinge.01",
+    "door.door_hinge.02",
+  ]);
 });

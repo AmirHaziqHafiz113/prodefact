@@ -9,8 +9,15 @@ network access.
 
 ## Report eligibility (the gate)
 
+With progressive per-finding AI (see `docs/ai_review.md`), report
+readiness requires **three independent axes** to all be settled —
+never conflated:
+
 ```
-Physical Inspection -> AI Review -> all suggestions resolved -> Report
+Physical inspection complete (every included area)
+  AND no finding still mid-AI-processing (queued/uploading/analyzing)
+  AND no AI suggestion still pending review
+  -> Report
 ```
 
 `ReportCoordinator.generateReport` (implemented by
@@ -21,12 +28,18 @@ button:
 1. Load the session. Missing session -> `ReportGenerationOutcome.sessionNotFound`.
 2. `session.status == InspectionStatus.inProgress` (physical inspection
    not yet complete) -> `physicalInspectionIncomplete`.
-3. `session.aiReviewState != AiReviewState.completed` **or** any
-   suggestion has `!isResolved` -> `aiReviewIncomplete`. Both checks run
-   (defense in depth), matching the same pattern Phase 6 uses to gate
-   `InspectionStatus.aiReviewComplete`.
+3. `AiProcessingProgress.inFlight > 0` (some AI-eligible finding hasn't
+   settled into a terminal `aiStatus` yet) **or**
+   `AiReviewProgress.pending > 0` (some suggestion is still `pending`)
+   -> `aiReviewIncomplete`.
 4. Otherwise, render, save, and persist the report ->
    `ReportGenerationResult.success(report)`.
+
+A `rejected`/"unresolved" suggestion does **not** block generation — it
+is a *resolved*, reviewed state; see "Unresolved findings" below for
+how it renders instead of blocking. A finding with zero evidence (no
+photo — only possible for a legacy, pre-camera-first finding) is never
+AI-eligible at all, so it can never block this gate either.
 
 Every outcome is a typed `ReportGenerationResult`
 (`lib/core/inspection/report/report_generation_result.dart`) — a caller
@@ -42,22 +55,49 @@ navigation gating) used for AI review in Phase 6.
 ## Final inspector value precedence
 
 The report **only ever shows inspector-approved/final values** — never
-the AI's original suggestion when it was edited or rejected/corrected.
+the AI's original suggestion when it was changed or rejected.
 `buildReportModel` (`lib/core/inspection/report/report_model_builder.dart`,
-a pure function, no I/O) implements this precedence per finding:
+a pure function, no I/O) implements this precedence per finding, and
+takes two different paths depending on the finding's kind:
 
-- A resolved `AiSuggestion` exists for the finding -> use its `final*`
-  fields (`finalDefectType`, `finalRecommendation`, `finalNotes`) —
-  regardless of whether it was accepted, edited, or rejected/corrected.
-  The AI's original `suggested*` fields are never read here.
-- No suggestion exists for the finding (e.g. AI review skipped a
-  finding that was somehow added afterward) -> fall back to the
-  inspector's raw finding text (`description`/`notes`) so the finding is
-  never silently dropped from the report.
+**Camera-first findings** (no legacy `elementId` — the normal case
+today): resolved fresh from the controlled catalogue by id, never from
+any AI-provided free text.
+
+- A resolved `AiSuggestion` with `finalCatalogueEntryId` set -> resolve
+  that id via `DefectCatalogue.instance.byId` and use its
+  `mainElementName`/`componentName`/`defectDescription`/
+  `correctiveAction`. The AI's original `suggestedCatalogueEntryId` is
+  never read here.
+- A resolved suggestion with no final entry (rejected/"unresolved") ->
+  see "Unresolved findings" below.
+- No suggestion yet, or still pending (shouldn't normally reach report
+  generation at all, since the gate above blocks it — this is a
+  defensive fallback) -> a clearly-labeled "Pending review" placeholder
+  rather than an unapproved AI value.
+
+**Legacy findings** (schema v5 and earlier, real `elementId` set):
+unchanged from the original design — a resolved legacy suggestion's
+`legacyFinalDefectType`/`legacyFinalRecommendation`/`legacyFinalNotes`
+free-text fields are used; no suggestion at all falls back to the
+finding's own recorded `description`/`notes`.
 
 `test/core/report/report_model_builder_test.dart` asserts the original
-AI value never leaks into the report text across all three resolution
-paths (accept/edit/reject).
+AI value never leaks into the report text across accept/change/reject,
+for both camera-first and legacy findings.
+
+### Unresolved findings
+
+A finding the inspector explicitly rejected/left unresolved renders as
+an explicit line — `elementName: "Unresolved"`,
+`defectType: "Unresolved — pending manual classification"` — rather
+than being silently omitted or blocking the whole report. This is a
+deliberate choice: the report readiness gate above does not require
+every finding to have a confident classification, only that every
+suggestion has been *reviewed* (accept/change/reject all count; only
+`pending` blocks) — so an inspector can generate a report even with one
+or two findings they've decided not to classify, as long as they made
+that decision explicitly.
 
 ## Report domain model (provider-neutral)
 
@@ -82,10 +122,20 @@ ReportModel
   areas: [ReportAreaSection]
     name, isPlumbing
     findings: [ReportFinding]     — deliberately can be empty
+      number                      — sequential across the WHOLE report,
+                                     never reset per area (the reference
+                                     format's "No" column)
       elementName, componentName?
       defectType?, recommendation?, notes?
       evidenceFilePaths: []
 ```
+
+`number` is assigned once, in `buildReportModel`, by a running counter
+threaded across areas in order — area 1's 3 findings get 1-3, area 2's
+findings continue from 4, and so on, matching the reference report
+format ("DEFECT_REPORT_LIST.xlsx - REPORT- For Editing.pdf") where
+numbering runs continuously down the whole document rather than
+restarting per section.
 
 Only `session.sections.where((s) => s.isIncluded)` are considered —
 excluded areas never appear in the report at all.
@@ -104,12 +154,22 @@ Drift/Firebase/AI SDKs.
   date.
 - **Inspection summary**: total areas, completed areas, total findings,
   total evidence photos, and a completion label.
-- **Area-by-area findings**, grouped by area name:
-  - Each finding card shows element, component (if any), defect/
-    observation, recommendation, notes, and any evidence thumbnails.
+- **Area-by-area findings**, grouped by area name, matching the
+  reference report's structure (Foyer/Entrance, Living, Kitchen, Master
+  Bathroom, etc. — one heading per included area, in configured
+  order):
+  - Each finding card is headed `#<number> — <main element> —
+    <component>` (continuously numbered across the whole report — see
+    `ReportModel` above), followed by "Finding: <defect description>",
+    "Recommendation: <corrective action>" (the controlled catalogue
+    text, resolved fresh by id — never AI free text), inspector notes,
+    and any evidence thumbnails.
   - **An area with zero findings still renders its heading**, with
     "No defects recorded." in place of finding cards — it is never
     omitted from the report.
+  - A rejected/unresolved finding renders as "Unresolved — pending
+    manual classification" rather than blank (see "Unresolved
+    findings" above).
 - **Evidence photos** are embedded as inline thumbnails. A missing,
   deleted, or unreadable image file is caught per-image
   (`_buildEvidenceThumbnail`'s try/catch) and replaced with a small

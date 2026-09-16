@@ -43,13 +43,32 @@ Future<ProviderContainer> _pumpToReportScreen(
 
   final queue = container.read(inspectionQueueProvider);
   final section = queue.first;
-  container
-      .read(activeSessionProvider.notifier)
-      .addFinding(
-        sectionId: section.id,
-        elementId: section.elements.first.id,
-        description: 'Cracked tile',
-      );
+  await tester.tap(_within(find.text(section.name)));
+  await tester.pumpAndSettle();
+  await tester.tap(_within(find.text('Take Defect Photo')));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(TextField),
+    ),
+    'Cracked tile',
+  );
+  await tester.tap(
+    find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.text('Save Finding'),
+    ),
+  );
+  await tester.pumpAndSettle();
+  // Let the fire-and-forget AI classification actually run.
+  await tester.pump();
+  await tester.pump();
+
+  final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+  navigator.pop();
+  await tester.pumpAndSettle();
+
   final statusNotifier = container.read(sectionStatusesProvider.notifier);
   for (final s in queue) {
     statusNotifier.setStatus(s.id, SectionStatus.completed);
@@ -58,10 +77,14 @@ Future<ProviderContainer> _pumpToReportScreen(
 
   await tester.tap(_within(find.text('Complete Physical Inspection')));
   await tester.pumpAndSettle();
-  await tester.tap(_within(find.text('Start AI Analysis')));
-  await tester.pumpAndSettle();
+
+  final suggestion = container
+      .read(activeSessionProvider)!
+      .aiSuggestions
+      .single;
+  final resolveLabel = suggestion.needsReview ? 'Change' : 'Accept';
   await tester.scrollUntilVisible(
-    _within(find.text('Accept')),
+    _within(find.text(resolveLabel)),
     300,
     scrollable: find.byType(Scrollable).first,
   );
@@ -69,8 +92,12 @@ Future<ProviderContainer> _pumpToReportScreen(
   // nudge further so the button clears it before tapping.
   await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
   await tester.pumpAndSettle();
-  await tester.tap(_within(find.text('Accept')));
+  await tester.tap(_within(find.text(resolveLabel)));
   await tester.pumpAndSettle();
+  if (suggestion.needsReview) {
+    await tester.tap(find.byType(ListTile).first);
+    await tester.pumpAndSettle();
+  }
 
   await tester.tap(
     _within(find.widgetWithText(FilledButton, 'Continue to Report')),

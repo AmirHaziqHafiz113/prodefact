@@ -1,7 +1,7 @@
 import {AiProvider, AiProviderError} from "./provider";
 import {
-  AnalyzeInspectionInput,
-  AnalyzeInspectionResult,
+  ClassificationResult,
+  ClassifyFindingInput,
   FindingImages,
 } from "./types";
 
@@ -12,7 +12,7 @@ import {
  * fabricated here. To enable this provider later:
  *   1. `firebase functions:secrets:set GEMINI_API_KEY`
  *   2. bind it in index.ts the same way DEEPSEEK_API_KEY is bound
- *   3. implement `analyzeInspection` below against the Gemini API
+ *   3. implement `classifyFinding` below against the Gemini API
  *      using a JSON-mode/`responseSchema` request, following the
  *      same structure as `DeepSeekProvider`
  *   4. set `AI_PROVIDER=gemini` (see gateway.ts)
@@ -34,10 +34,10 @@ export class GeminiProvider implements AiProvider {
   }
 
   /** @inheritdoc */
-  analyzeInspection(
-    input: AnalyzeInspectionInput,
-    images: FindingImages[]
-  ): Promise<AnalyzeInspectionResult> {
+  classifyFinding(
+    input: ClassifyFindingInput,
+    images: FindingImages
+  ): Promise<ClassificationResult> {
     void input;
     void images;
     throw new AiProviderError(

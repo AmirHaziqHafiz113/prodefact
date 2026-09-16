@@ -3,37 +3,31 @@
  * gateway. Nothing provider-specific (DeepSeek/OpenAI/Gemini/Anthropic
  * request/response shapes) belongs here — only what the callable
  * function and Flutter agree on.
+ *
+ * Camera-first model: one callable invocation classifies exactly one
+ * finding (its area context, optional inspector note, and photos)
+ * against the controlled defect catalogue (`defect_catalogue.ts`) —
+ * never a whole-session batch. See
+ * `docs/ai_provider_architecture.md`.
  */
 
 /** One finding's redacted context — no account/user data, ever. */
-export interface FindingInput {
+export interface ClassifyFindingInput {
+  inspectionId: string;
   findingId: string;
   area: string;
   isPlumbingArea: boolean;
-  element: string;
-  component?: string;
-  description?: string;
-  notes?: string;
-  /** Total evidence count, independent of how many are analyzable. */
-  evidenceCount: number;
+  /** The inspector's optional side note. */
+  note?: string;
   /**
    * Ids only — never a Storage path, a URL, or bytes. The callable
    * resolves each id to an actual image itself, server-side, deriving
    * the Storage location from the authenticated caller's own uid and
    * this finding's ids (see `ai/evidence.ts`) — a client-supplied path
    * is never trusted or even accepted. Missing/unsynced/corrupted
-   * evidence is skipped rather than failing the request (see
-   * `docs/ai_provider_architecture.md`, "Multimodal evidence
-   * resolution").
+   * evidence is skipped rather than failing the request.
    */
   evidenceIds?: string[];
-}
-
-/** One session's worth of input to analyze. */
-export interface AnalyzeInspectionInput {
-  inspectionId: string;
-  propertyType: string;
-  findings: FindingInput[];
 }
 
 /** One evidence image, already downloaded, validated, and normalized
@@ -55,18 +49,27 @@ export interface FindingImages {
   unavailableCount: number;
 }
 
-/** One finding's worth of structured AI output. */
-export interface FindingSuggestion {
+/**
+ * One finding's classification result against the controlled defect
+ * catalogue. `catalogueEntryId` is either a genuinely valid catalogue
+ * id or absent/null — the gateway independently re-verifies this
+ * before it's ever trusted, so a hallucinated id from the provider can
+ * never reach the client. The corrective action, defect description,
+ * and main element/component names are **never** provided by the
+ * model directly; they're always resolved server-side from
+ * `catalogueEntryId` via `defectCatalogue.getById`.
+ */
+export interface ClassificationResult {
   findingId: string;
-  suggestedElement?: string;
-  suggestedComponent?: string;
-  defectType?: string;
-  recommendation?: string;
-  notes?: string;
-}
-
-/** The result of one analysis run. */
-export interface AnalyzeInspectionResult {
-  providerId: string;
-  suggestions: FindingSuggestion[];
+  catalogueEntryId?: string;
+  /** 0.0-1.0. */
+  confidence?: number;
+  /** A short, plain-language reason — not a technical paragraph. */
+  shortReason?: string;
+  /** Ranked alternative catalogue entry ids, when more than one match
+   * was plausible. */
+  candidateEntryIds?: string[];
+  /** True when the provider could not confidently classify this
+   * finding at all. Always true if `catalogueEntryId` is absent. */
+  needsReview: boolean;
 }

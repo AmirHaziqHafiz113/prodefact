@@ -21,6 +21,7 @@ void main() {
           isPlumbing: true,
           findings: [
             ReportFinding(
+              number: 1,
               elementName: 'Floor',
               componentName: 'Floor tile',
               defectType: 'Cracked tile',

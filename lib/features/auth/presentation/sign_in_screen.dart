@@ -5,9 +5,13 @@ import '../../../app/theme/design_system.dart';
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../data/remote/remote_providers.dart';
 
-/// Minimal email/password sign-in, deliberately small: this is
-/// additive to the app, not a gate. Every inspection screen works fully
-/// without ever visiting this one — see docs/firebase.md.
+/// Email/password sign-in/registration. When Firebase is configured,
+/// this is a **hard gate**: no dashboard, inspection, or report screen
+/// is reachable without a signed-in session — see the router's
+/// `redirect` in `app_router.dart`. When Firebase isn't configured at
+/// all (local-only/demo/test builds), there is nothing to gate against
+/// and every inspection screen works fully offline without ever
+/// visiting this one — see docs/firebase.md.
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
@@ -127,6 +131,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           : 'New here? Create an account',
                     ),
                   ),
+                  if (!_isSignUp)
+                    TextButton(
+                      onPressed: firebaseReady && !_isSubmitting
+                          ? _forgotPassword
+                          : null,
+                      child: const Text('Forgot password?'),
+                    ),
                 ],
               ),
             ),
@@ -157,6 +168,45 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       setState(() => _errorMessage = e.message);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _emailController.text);
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset password'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Email'),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Send reset link'),
+          ),
+        ],
+      ),
+    );
+    if (email == null || email.isEmpty || !mounted) return;
+
+    try {
+      await ref.read(authServiceProvider).resetPassword(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Password reset email sent to $email.')),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 }

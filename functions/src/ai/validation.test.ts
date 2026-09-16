@@ -2,157 +2,92 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {
   MAX_EVIDENCE_IDS_PER_FINDING,
-  MAX_FINDINGS_PER_REQUEST,
   MAX_TEXT_FIELD_LENGTH,
-  parseAnalyzeInspectionInput,
+  parseClassifyFindingInput,
 } from "./validation";
 
 /**
  * @param {string} id the finding id.
  * @return {object} a minimal, valid finding payload.
  */
-function baseFinding(id: string) {
+function basePayload(id = "finding_1") {
   return {
+    inspectionId: "inspection_1",
     findingId: id,
     area: "Master Bathroom",
     isPlumbingArea: true,
-    element: "Floor",
-    evidenceCount: 1,
   };
 }
 
 test("parses a well-formed payload", () => {
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [baseFinding("finding_1")],
-  });
+  const input = parseClassifyFindingInput(basePayload());
   assert.equal(input.inspectionId, "inspection_1");
-  assert.equal(input.findings.length, 1);
-  assert.equal(input.findings[0].isPlumbingArea, true);
+  assert.equal(input.findingId, "finding_1");
+  assert.equal(input.isPlumbingArea, true);
 });
 
 test("rejects a non-object payload", () => {
-  assert.throws(() => parseAnalyzeInspectionInput(null));
-  assert.throws(() => parseAnalyzeInspectionInput("not an object"));
+  assert.throws(() => parseClassifyFindingInput(null));
+  assert.throws(() => parseClassifyFindingInput("not an object"));
 });
 
-test("rejects a missing findings array", () => {
+test("rejects a missing findingId", () => {
+  const payload = basePayload();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (payload as any).findingId;
+  assert.throws(() => parseClassifyFindingInput(payload));
+});
+
+test("rejects a missing inspectionId", () => {
+  const payload = basePayload();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (payload as any).inspectionId;
+  assert.throws(() => parseClassifyFindingInput(payload));
+});
+
+test("rejects a missing area", () => {
+  const payload = basePayload();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (payload as any).area;
+  assert.throws(() => parseClassifyFindingInput(payload));
+});
+
+test("rejects an excessively long note", () => {
   assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
+    parseClassifyFindingInput({
+      ...basePayload(),
+      note: "x".repeat(MAX_TEXT_FIELD_LENGTH + 1),
     })
   );
 });
 
-test("rejects an empty findings array", () => {
-  assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: [],
-    })
-  );
-});
-
-test("rejects more than the maximum number of findings", () => {
-  const findings = Array.from(
-    {length: MAX_FINDINGS_PER_REQUEST + 1},
-    (_, i) => baseFinding(`finding_${i}`)
-  );
-  assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings,
-    })
-  );
-});
-
-test("rejects a duplicate findingId", () => {
-  assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: [baseFinding("finding_1"), baseFinding("finding_1")],
-    })
-  );
-});
-
-test("rejects an excessively long text field", () => {
-  const finding = {
-    ...baseFinding("finding_1"),
-    description: "x".repeat(MAX_TEXT_FIELD_LENGTH + 1),
-  };
-  assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: [finding],
-    })
-  );
-});
-
-test("rejects a malformed finding entry", () => {
-  assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: ["not an object"],
-    })
-  );
-});
-
-test("clamps a negative/absurd evidenceCount rather than throwing", () => {
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [{...baseFinding("finding_1"), evidenceCount: -5}],
-  });
-  assert.equal(input.findings[0].evidenceCount, 0);
+test("note is optional and omitted when not provided", () => {
+  const input = parseClassifyFindingInput(basePayload());
+  assert.equal(input.note, undefined);
 });
 
 test("evidenceIds is optional and omitted when not provided", () => {
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [baseFinding("finding_1")],
-  });
-  assert.equal(input.findings[0].evidenceIds, undefined);
+  const input = parseClassifyFindingInput(basePayload());
+  assert.equal(input.evidenceIds, undefined);
 });
 
 test("evidenceIds is accepted and passed through when valid", () => {
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [
-      {...baseFinding("finding_1"), evidenceIds: ["evidence_1", "evidence_2"]},
-    ],
+  const input = parseClassifyFindingInput({
+    ...basePayload(),
+    evidenceIds: ["evidence_1", "evidence_2"],
   });
-  assert.deepEqual(input.findings[0].evidenceIds, [
-    "evidence_1",
-    "evidence_2",
-  ]);
+  assert.deepEqual(input.evidenceIds, ["evidence_1", "evidence_2"]);
 });
 
 test("evidenceIds rejects a non-array value", () => {
   assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: [{...baseFinding("finding_1"), evidenceIds: "not-an-array"}],
-    })
+    parseClassifyFindingInput({...basePayload(), evidenceIds: "not-an-array"})
   );
 });
 
 test("evidenceIds rejects a non-string entry", () => {
   assert.throws(() =>
-    parseAnalyzeInspectionInput({
-      inspectionId: "inspection_1",
-      propertyType: "highRise",
-      findings: [{...baseFinding("finding_1"), evidenceIds: [123]}],
-    })
+    parseClassifyFindingInput({...basePayload(), evidenceIds: [123]})
   );
 });
 
@@ -162,30 +97,14 @@ test("evidenceIds silently caps an excessive array at the per-finding " +
     {length: MAX_EVIDENCE_IDS_PER_FINDING + 10},
     (_, i) => `evidence_${i}`
   );
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [{...baseFinding("finding_1"), evidenceIds: ids}],
-  });
-  assert.equal(
-    input.findings[0].evidenceIds?.length,
-    MAX_EVIDENCE_IDS_PER_FINDING
-  );
+  const input = parseClassifyFindingInput({...basePayload(), evidenceIds: ids});
+  assert.equal(input.evidenceIds?.length, MAX_EVIDENCE_IDS_PER_FINDING);
 });
 
 test("evidenceIds drops duplicate ids within the same finding", () => {
-  const input = parseAnalyzeInspectionInput({
-    inspectionId: "inspection_1",
-    propertyType: "highRise",
-    findings: [
-      {
-        ...baseFinding("finding_1"),
-        evidenceIds: ["evidence_1", "evidence_1", "evidence_2"],
-      },
-    ],
+  const input = parseClassifyFindingInput({
+    ...basePayload(),
+    evidenceIds: ["evidence_1", "evidence_1", "evidence_2"],
   });
-  assert.deepEqual(input.findings[0].evidenceIds, [
-    "evidence_1",
-    "evidence_2",
-  ]);
+  assert.deepEqual(input.evidenceIds, ["evidence_1", "evidence_2"]);
 });

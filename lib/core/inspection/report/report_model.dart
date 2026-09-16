@@ -4,6 +4,7 @@
 /// suggestion when the inspector edited or rejected/corrected it.
 class ReportFinding {
   const ReportFinding({
+    required this.number,
     required this.elementName,
     this.componentName,
     this.defectType,
@@ -11,6 +12,10 @@ class ReportFinding {
     this.notes,
     this.evidenceFilePaths = const [],
   });
+
+  /// Sequential position across the *whole* report (not reset per
+  /// area) — the "No" column in the reference report format.
+  final int number;
 
   final String elementName;
   final String? componentName;
