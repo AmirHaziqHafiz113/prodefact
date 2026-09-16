@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../config/property_type.dart';
 import '../../providers/new_inspection_draft_providers.dart';
+import 'property_details_screen.dart';
 
 /// Entry point for Home Inspection: the inspector picks the property type
 /// before ProDefact shows the relevant inspection areas.
@@ -61,7 +62,7 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
     PropertyType propertyType,
   ) {
     ref.read(newInspectionDraftProvider.notifier).begin(propertyType);
-    context.push('/home-inspection/areas');
+    context.push(PropertyDetailsScreen.routePath);
   }
 }
 

@@ -11,12 +11,25 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('Start Home Inspection'));
-  await tester.pumpAndSettle();
   await tester.tap(find.text('New Inspection'));
   await tester.pumpAndSettle();
 
   await tester.tap(find.text('High Rise'));
+  await tester.pumpAndSettle();
+
+  // Property Details step — only the title is required.
+  await tester.enterText(find.byType(TextFormField).first, 'Test Property');
+  await tester.tap(find.text('Continue'));
+  await tester.pumpAndSettle();
+}
+
+/// From the area configuration screen, through Review Setup, to
+/// "Start Inspection" — the only place a draft actually becomes a
+/// persisted inspection (see `ReviewSetupScreen`).
+Future<void> _reviewAndStart(WidgetTester tester) async {
+  await tester.tap(find.text('Review & Start'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Start Inspection'));
   await tester.pumpAndSettle();
 }
 
@@ -176,8 +189,7 @@ void main() {
   ) async {
     await _startHighRiseSetup(tester);
 
-    await tester.tap(find.text('Start Inspection'));
-    await tester.pumpAndSettle();
+    await _reviewAndStart(tester);
 
     expect(find.text('Physical Inspection'), findsOneWidget);
   });
@@ -202,8 +214,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(kitchenSwitch).value, isFalse);
 
-      await tester.tap(find.text('Start Inspection'));
-      await tester.pumpAndSettle();
+      await _reviewAndStart(tester);
 
       expect(find.text('Physical Inspection'), findsOneWidget);
       expect(_within(find.text('Kitchen')), findsNothing);
@@ -212,16 +223,20 @@ void main() {
       // the (now-empty) setup screens all the way to the dashboard and
       // resuming the inspection is the realistic way to check the
       // exclusion actually persisted in the created session, rather
-      // than in the ephemeral setup screen.
+      // than in the ephemeral setup screen. Stack from the dashboard:
+      // property type -> property details -> area configuration ->
+      // review setup -> queue — 5 pops to unwind it all.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      navigator.pop();
-      navigator.pop();
-      navigator.pop();
+      for (var i = 0; i < 5; i++) {
+        navigator.pop();
+      }
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('High Rise'));
+      // Resume the created session by tapping its card (titled during
+      // Property Details setup), not by starting a new one.
+      await tester.tap(find.text('Test Property'));
       await tester.pumpAndSettle();
 
       expect(find.text('Physical Inspection'), findsOneWidget);
@@ -234,11 +249,14 @@ void main() {
     'behind (the defect this flow was rewritten to fix)',
     (tester) async {
       await _startHighRiseSetup(tester);
-      // Never tap "Start Inspection" — just leave setup.
+      // Never tap "Start Inspection" — just leave setup. Stack from the
+      // dashboard: property type -> property details -> area
+      // configuration — 3 pops to unwind it all.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      navigator.pop(); // area configuration -> property type selection
+      navigator.pop(); // area configuration -> property details
+      navigator.pop(); // property details -> property type selection
       navigator.pop(); // property type selection -> dashboard
       await tester.pumpAndSettle();
 
@@ -249,6 +267,8 @@ void main() {
   testWidgets('repeated taps on Start Inspection do not create duplicate '
       'inspections', (tester) async {
     await _startHighRiseSetup(tester);
+    await tester.tap(find.text('Review & Start'));
+    await tester.pumpAndSettle();
 
     // Fire multiple taps in quick succession before the first
     // navigation completes.
@@ -260,14 +280,15 @@ void main() {
     expect(find.text('Physical Inspection'), findsOneWidget);
 
     // Only one inspection was actually created — pop all the way
-    // back to the dashboard (queue -> areas -> property type ->
-    // dashboard) and confirm there's exactly one card, not several.
+    // back to the dashboard (queue -> review setup -> areas ->
+    // property details -> property type -> dashboard) and confirm
+    // there's exactly one card, not several.
     final navigator = tester.state<NavigatorState>(
       find.byType(Navigator).first,
     );
-    navigator.pop();
-    navigator.pop();
-    navigator.pop();
+    for (var i = 0; i < 5; i++) {
+      navigator.pop();
+    }
     await tester.pumpAndSettle();
     expect(find.text('Unfinished'), findsOneWidget);
   });

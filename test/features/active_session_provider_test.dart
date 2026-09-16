@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prodefact/core/inspection/entities/ai_finding_status.dart';
+import 'package:prodefact/core/inspection/entities/ai_review.dart';
+import 'package:prodefact/core/inspection/entities/defect_catalogue.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
 import 'package:prodefact/core/inspection/entities/section_status.dart';
 import 'package:prodefact/data/local/database_providers.dart';
@@ -98,6 +101,96 @@ void main() {
           .read(inspectionFindingsProvider)
           .firstWhere((f) => f.id == finding.id);
       expect(updated.evidence, isEmpty);
+    });
+  });
+
+  group('manual classification (Classify Manually on a failed finding)', () {
+    test('classifies a finding with no AI suggestion at all, marks it '
+        'completed, and preserves the manual value as final', () async {
+      final container = ProviderContainer(overrides: testOverrides());
+      addTearDown(container.dispose);
+      await container
+          .read(selectedPropertyTypeProvider.notifier)
+          .select(PropertyType.highRise);
+
+      final section = container.read(inspectionQueueProvider).first;
+      final photo = await container
+          .read(activeSessionProvider.notifier)
+          .captureFindingPhoto(source: EvidenceSource.camera);
+      final finding = container
+          .read(activeSessionProvider.notifier)
+          .saveCameraFinding(sectionId: section.id, photo: photo!);
+
+      // No AiSuggestion exists for this finding yet — the situation a
+      // `failed` classification attempt (nothing to Change against)
+      // leaves it in; "Classify Manually" must still work.
+      expect(
+        container
+            .read(activeSessionProvider)!
+            .aiSuggestions
+            .where((s) => s.findingId == finding.id),
+        isEmpty,
+      );
+
+      final entryId = DefectCatalogue.instance.entries.first.id;
+      container
+          .read(activeSessionProvider.notifier)
+          .manuallyClassifyFinding(finding.id, entryId);
+
+      final session = container.read(activeSessionProvider)!;
+      final updatedFinding = session.findings.firstWhere(
+        (f) => f.id == finding.id,
+      );
+      expect(updatedFinding.aiStatus, AiFindingStatus.completed);
+
+      final suggestion = session.aiSuggestions.firstWhere(
+        (s) => s.findingId == finding.id,
+      );
+      expect(suggestion.providerId, 'manual');
+      expect(suggestion.status, AiSuggestionStatus.edited);
+      expect(suggestion.suggestedCatalogueEntryId, isNull);
+      expect(suggestion.finalCatalogueEntryId, entryId);
+    });
+
+    test('is a no-op if a suggestion already exists for the finding', () async {
+      final container = ProviderContainer(overrides: testOverrides());
+      addTearDown(container.dispose);
+      await container
+          .read(selectedPropertyTypeProvider.notifier)
+          .select(PropertyType.highRise);
+
+      final section = container.read(inspectionQueueProvider).first;
+      final photo = await container
+          .read(activeSessionProvider.notifier)
+          .captureFindingPhoto(source: EvidenceSource.camera);
+      final finding = container
+          .read(activeSessionProvider.notifier)
+          .saveCameraFinding(sectionId: section.id, photo: photo!);
+
+      final entryId = DefectCatalogue.instance.entries.first.id;
+      // First manual classification creates the suggestion.
+      container
+          .read(activeSessionProvider.notifier)
+          .manuallyClassifyFinding(finding.id, entryId);
+      final firstCount = container
+          .read(activeSessionProvider)!
+          .aiSuggestions
+          .where((s) => s.findingId == finding.id)
+          .length;
+      expect(firstCount, 1);
+
+      // A second call for the same finding must not duplicate it.
+      final otherEntryId = DefectCatalogue.instance.entries[1].id;
+      container
+          .read(activeSessionProvider.notifier)
+          .manuallyClassifyFinding(finding.id, otherEntryId);
+      final suggestions = container
+          .read(activeSessionProvider)!
+          .aiSuggestions
+          .where((s) => s.findingId == finding.id)
+          .toList();
+      expect(suggestions, hasLength(1));
+      expect(suggestions.single.finalCatalogueEntryId, entryId);
     });
   });
 

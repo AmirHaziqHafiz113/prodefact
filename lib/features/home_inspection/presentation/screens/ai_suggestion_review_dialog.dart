@@ -27,6 +27,27 @@ Future<void> showAiSuggestionReviewDialog({
       .changeSuggestion(suggestion.id, chosenId);
 }
 
+/// The "Classify Manually" action on a `failed` finding — same
+/// searchable catalogue picker, but for a finding with no `AiSuggestion`
+/// at all yet (the classification attempt itself errored before AI
+/// returned anything) — see
+/// [ActiveInspectionSession.manuallyClassifyFinding].
+Future<void> showManualClassificationDialog({
+  required BuildContext context,
+  required WidgetRef ref,
+  required String findingId,
+}) async {
+  final chosenId = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => const _CataloguePickerSheet(),
+  );
+  if (chosenId == null) return;
+  ref
+      .read(activeSessionProvider.notifier)
+      .manuallyClassifyFinding(findingId, chosenId);
+}
+
 class _CataloguePickerSheet extends StatefulWidget {
   const _CataloguePickerSheet();
 

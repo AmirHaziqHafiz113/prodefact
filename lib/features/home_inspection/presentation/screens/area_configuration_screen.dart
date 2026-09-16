@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
+import 'review_setup_screen.dart';
 
 /// Lets the inspector configure which areas apply to this property
 /// before starting the inspection: include/exclude, rename, add/edit
@@ -128,8 +129,11 @@ class AreaConfigurationScreen extends ConsumerWidget {
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
-                child: _StartInspectionButton(
-                  enabled: sections.any((s) => s.isIncluded),
+                child: FilledButton(
+                  onPressed: sections.any((s) => s.isIncluded)
+                      ? () => context.push(ReviewSetupScreen.routePath)
+                      : null,
+                  child: const Text('Review & Start'),
                 ),
               ),
             ],
@@ -226,59 +230,6 @@ class _AreaEditDialogState extends State<_AreaEditDialog> {
         ),
       ],
     );
-  }
-}
-
-/// The explicit, final setup action — this is the only place a draft
-/// actually becomes a persisted, dashboard-visible inspection. Guards
-/// against a double-tap starting two sessions.
-class _StartInspectionButton extends ConsumerStatefulWidget {
-  const _StartInspectionButton({required this.enabled});
-
-  final bool enabled;
-
-  @override
-  ConsumerState<_StartInspectionButton> createState() =>
-      _StartInspectionButtonState();
-}
-
-class _StartInspectionButtonState
-    extends ConsumerState<_StartInspectionButton> {
-  bool _isStarting = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: widget.enabled && !_isStarting ? _start : null,
-      child: _isStarting
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(Colors.white),
-              ),
-            )
-          : const Text('Start Inspection'),
-    );
-  }
-
-  Future<void> _start() async {
-    setState(() => _isStarting = true);
-    final started = await ref
-        .read(newInspectionDraftProvider.notifier)
-        .startInspection();
-    if (!mounted) return;
-    if (!started) {
-      setState(() => _isStarting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not start the inspection. Please try again.'),
-        ),
-      );
-      return;
-    }
-    context.push('/home-inspection/inspection');
   }
 }
 

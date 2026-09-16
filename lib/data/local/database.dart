@@ -44,6 +44,18 @@ part 'database.g.dart';
 ///   nullability for camera-first findings is handled at the
 ///   application layer instead (`''` <-> `null`, see the table's doc
 ///   comment) — no schema change needed for that part at all.
+/// - v7: (product flow consolidation pass) added nine nullable property-
+///   details columns to `InspectionSessionRows` (title, address,
+///   project/development name, block/tower, unit number, client name,
+///   inspector name, developer name, contact number) and a nullable
+///   `inspectionDate`, all fed by the new Property Details setup step —
+///   see `PropertyDetails`. Added `ReportRows.version` (defaults to 1,
+///   correct for every pre-existing report) so regenerating after
+///   inspection data changed produces a visibly new version rather than
+///   a silent overwrite. Added the new `UserProfileRows` table (a
+///   single local row) for on-device inspector/company prefill data —
+///   see `UserProfile`. All additive; no existing column or table is
+///   altered or dropped.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -52,6 +64,7 @@ part 'database.g.dart';
     EvidenceRows,
     AiSuggestionRows,
     ReportRows,
+    UserProfileRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -62,7 +75,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -132,6 +145,33 @@ class AppDatabase extends _$AppDatabase {
           "UPDATE finding_rows SET ai_status = 'completed' "
           'WHERE id IN (SELECT finding_id FROM ai_suggestion_rows)',
         );
+      }
+      if (from < 7) {
+        for (final column in [
+          inspectionSessionRows.propertyTitle,
+          inspectionSessionRows.propertyAddress,
+          inspectionSessionRows.projectName,
+          inspectionSessionRows.blockTower,
+          inspectionSessionRows.unitNumber,
+          inspectionSessionRows.clientName,
+          inspectionSessionRows.inspectorName,
+          inspectionSessionRows.developerName,
+          inspectionSessionRows.contactNumber,
+          inspectionSessionRows.inspectionDate,
+        ]) {
+          await migrator.addColumn(inspectionSessionRows, column);
+        }
+        // `reportRows`/`userProfileRows` only need special handling the
+        // same way `aiSuggestionRows` did at v6: `createTable` for a
+        // brand-new table (from < 4, above) already builds it from the
+        // *current* Dart definition, which already includes `version` —
+        // adding it again in that case would be a duplicate-column
+        // error. Only a report row that already existed before this
+        // migration run needs the column added here.
+        if (from >= 4) {
+          await migrator.addColumn(reportRows, reportRows.version);
+        }
+        await migrator.createTable(userProfileRows);
       }
     },
   );

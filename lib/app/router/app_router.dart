@@ -8,9 +8,11 @@ import '../../features/home_inspection/presentation/screens/area_configuration_s
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
+import '../../features/home_inspection/presentation/screens/profile_screen.dart';
+import '../../features/home_inspection/presentation/screens/property_details_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
 import '../../features/home_inspection/presentation/screens/report_screen.dart';
-import '../presentation/home_shell_screen.dart';
+import '../../features/home_inspection/presentation/screens/review_setup_screen.dart';
 import 'go_router_refresh_stream.dart';
 
 /// Every route that requires a signed-in inspector once Firebase is
@@ -42,7 +44,7 @@ const _gatedPathPrefix = '/home-inspection';
 /// `docs/production_readiness.md` ("Offline-first guarantees").
 GoRouter buildAppRouter(WidgetRef ref) {
   return GoRouter(
-    initialLocation: HomeShellScreen.routePath,
+    initialLocation: InspectionSessionsScreen.routePath,
     refreshListenable: GoRouterRefreshStream(
       ref.read(authServiceProvider).authStateChanges(),
     ),
@@ -61,10 +63,6 @@ GoRouter buildAppRouter(WidgetRef ref) {
     },
     routes: [
       GoRoute(
-        path: HomeShellScreen.routePath,
-        builder: (context, state) => const HomeShellScreen(),
-      ),
-      GoRoute(
         path: SignInScreen.routePath,
         builder: (context, state) => const SignInScreen(),
       ),
@@ -73,12 +71,24 @@ GoRouter buildAppRouter(WidgetRef ref) {
         builder: (context, state) => const InspectionSessionsScreen(),
       ),
       GoRoute(
+        path: ProfileScreen.routePath,
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
         path: PropertyTypeSelectionScreen.routePath,
         builder: (context, state) => const PropertyTypeSelectionScreen(),
       ),
       GoRoute(
+        path: PropertyDetailsScreen.routePath,
+        builder: (context, state) => const PropertyDetailsScreen(),
+      ),
+      GoRoute(
         path: AreaConfigurationScreen.routePath,
         builder: (context, state) => const AreaConfigurationScreen(),
+      ),
+      GoRoute(
+        path: ReviewSetupScreen.routePath,
+        builder: (context, state) => const ReviewSetupScreen(),
       ),
       GoRoute(
         path: InspectionQueueScreen.routePath,

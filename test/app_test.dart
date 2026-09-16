@@ -6,20 +6,15 @@ import 'package:prodefact/app/app.dart';
 import 'support/test_repository.dart';
 
 void main() {
-  testWidgets('app boots to the shell and can navigate into Home Inspection', (
-    tester,
-  ) async {
+  testWidgets('app boots directly to the dashboard and can navigate into '
+      'Home Inspection', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('ProDefact'), findsOneWidget);
-    expect(find.text('Start Home Inspection'), findsOneWidget);
-
-    await tester.tap(find.text('Start Home Inspection'));
-    await tester.pumpAndSettle();
-
+    // No industry-picker splash — the dashboard is the app's initial
+    // route (see `buildAppRouter`).
     expect(find.text('Inspections'), findsOneWidget);
     expect(find.text('No saved inspections yet.'), findsOneWidget);
 
@@ -32,25 +27,32 @@ void main() {
   });
 
   testWidgets(
-    'selecting a property type shows its default areas, plumbing first',
+    'selecting a property type leads to Property Details, then shows its '
+    'default areas, plumbing first',
     (tester) async {
       await tester.pumpWidget(
         ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Start Home Inspection'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('New Inspection'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Landed'));
       await tester.pumpAndSettle();
 
+      expect(find.text('Property Details'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'Test Landed Property',
+      );
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Landed Areas'), findsOneWidget);
       expect(find.text('Master Bathroom'), findsOneWidget);
-      // Nothing is persisted yet — selecting a property type only
-      // starts an in-memory setup draft (see
+      // Nothing is persisted yet — property type/details setup only
+      // edits an in-memory setup draft (see
       // `NewInspectionDraftNotifier`); no inspection exists until
       // "Start Inspection" is tapped.
       expect(find.text('Plumbing area — inspect first'), findsWidgets);

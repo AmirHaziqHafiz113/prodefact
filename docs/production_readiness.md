@@ -932,3 +932,105 @@ features in this pass as pilot-ready, manually run through:
    without any extra action from the inspector.
 9. **Android + iOS parity.** Repeat at least steps 1, 3, and 6 on both
    an Android device/emulator and an iOS device/simulator.
+
+## Product flow consolidation pass
+
+This pass turned the existing, already-mature building blocks (Phases
+1-8 above) into one coherent lifecycle with a clear beginning, middle,
+and end — see `docs/home_inspection_product_flow.md` for the canonical,
+full description. It added no new industries and did not touch the AI/
+security/catalogue architecture (re-audited and found already correct:
+catalogue counts exactly 11/34/222, auth-gated evidence resolution,
+Secret-Manager-only provider key, deny-by-default Firestore/Storage
+rules — no functions code changed this pass).
+
+**Removed**: the vestigial `HomeShellScreen` splash screen (zero data,
+one pointless extra tap before the real dashboard) — the dashboard
+(`InspectionSessionsScreen`) is now the app's initial route.
+
+**Added**:
+
+- **Property Details** (New Inspection step 2) and **Review Setup**
+  (step 4, the sole place `startInspection()` is now called) screens —
+  see `docs/home_inspection_product_flow.md`.
+- **Profile screen** (on-device company/inspector-name prefill data,
+  sign out) — reached from the dashboard app bar.
+- Dashboard **"Needs attention"** section, **search**, and **status
+  filters** — all backed by real, already-computed counts, never
+  fabricated.
+- **"Add another photo"** wired to the existing (previously unused)
+  `ActiveInspectionSession.addEvidence` multi-photo capability.
+- **"Classify Manually"** on a `failed` AI finding (new
+  `ActiveInspectionSession.manuallyClassifyFinding`), alongside the
+  existing "Retry" — an inspector is never blocked by an AI failure
+  with no suggestion to fall back on.
+- AI Review grouped by area, with a photo thumbnail per card and
+  confidence/reason collapsed behind "AI details".
+- Report Readiness now shows the three progress axes (physical/AI/
+  review) plus an unresolved-findings count, not just aggregate stats.
+- **Report versioning** (`Report.version`) — regenerating after
+  inspection data changed is now visibly "v2", not a silent overwrite.
+
+**Database**: schema v6 -> v7, strictly additive (nine nullable
+property-details columns + `inspectionDate` on sessions, `version` on
+reports, a new single-row `UserProfileRows` table) — see the version
+history in `lib/data/local/database.dart` and
+`test/data/database_migration_test.dart` for the v5->v7/v6->v7 upgrade
+coverage.
+
+**Tests**: net +9 test cases across existing suites (multi-photo UI,
+manual classification x2, property details validation x2, dashboard
+search/filter, report-model property-details mapping x2, migration
+coverage for v7) plus every existing test updated for the two extra
+setup screens now in the New Inspection navigation stack. Full suite:
+221 passing, 0 failing (`flutter test`) as of this pass; Functions
+unaffected (57 passing, unchanged).
+
+**Known limitations / P1 backlog carried forward** (see
+`docs/home_inspection_product_flow.md` for the full list and reasoning
+for each): reference photos (no data model change made), area/
+inspection notes (no schema field exists yet), real connectivity
+detection (`isOnlineForAiProvider` is still a signed-in-status proxy,
+not `connectivity_plus`), cloud/push-delete sync (still local-delete-
+only, per the existing documented scope cut above), per-area AI/review
+counts on the Inspection Overview list, an editable pre-generate report
+metadata confirmation step, and a historical (v1/v2/v3) report PDF
+archive (only the current version's file is kept on disk; the version
+*number* is durable, the file history isn't).
+
+### Manual E2E additions for this pass
+
+Add these to the sequence above before treating the consolidated flow
+as pilot-ready — none of this has been exercised on a real device/
+simulator against a real Firebase project in this environment:
+
+1. **New Inspection through Property Details and Review Setup.** Start
+   a new inspection, pick a property type, and confirm "Continue" on
+   Property Details is blocked with a visible "Required" error until a
+   title is entered. Fill in title, address, unit, and client name,
+   continue to area configuration, configure areas, then confirm Review
+   Setup shows everything you entered correctly before tapping "Start
+   Inspection" — and that the dashboard card afterward shows your title
+   and unit, not the raw property type.
+2. **Multi-photo in the field.** Save a finding, then tap "Add another
+   photo" on its card and confirm a second photo attaches and the
+   finding's AI status returns to analysing (re-queued) rather than
+   staying at its previous terminal state.
+3. **AI failure with no fallback but Classify Manually.** Force an AI
+   classification to fail (e.g. simulate a provider outage), confirm
+   both "Retry" and "Classify Manually" appear, and that "Classify
+   Manually" opens the same searchable catalogue picker used elsewhere
+   and correctly marks the finding reviewed/completed.
+4. **Dashboard search/filter/Needs attention.** With several
+   inspections in different states, confirm search narrows by title/
+   unit/address, each status filter shows the expected subset, and any
+   inspection with a pending AI review or a failed classification
+   appears under "Needs attention" — and that this section is absent
+   entirely when nothing actually needs attention (never a fake/empty
+   placeholder item).
+5. **Report versioning.** Generate a report, edit a finding afterward,
+   confirm the stale banner explicitly names the next version number,
+   regenerate, and confirm the report screen now reads "Generated v2".
+6. **Profile prefill.** Set an inspector name in Profile, start a new
+   inspection, and confirm Property Details' inspector name field is
+   pre-filled with it (and can still be overridden per-inspection).

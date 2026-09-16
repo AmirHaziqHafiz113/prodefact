@@ -38,9 +38,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Start Home Inspection'));
-    await tester.pumpAndSettle();
-
     // Local-only before any sync.
     expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
 

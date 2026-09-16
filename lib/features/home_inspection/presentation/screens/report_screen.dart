@@ -53,10 +53,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
               onDismiss: () => setState(() => _errorMessage = null),
             ),
           if (isStale)
-            const AppInlineWarningBanner(
+            AppInlineWarningBanner(
               message:
-                  'Inspection data has changed since this report was '
-                  'generated. Regenerate for an up-to-date report.',
+                  'This inspection has an existing report (v${report!.version}). '
+                  'Inspection data has changed since it was generated — '
+                  'regenerating will create v${report.version + 1}.',
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -130,6 +131,12 @@ class _ReadinessCard extends StatelessWidget {
       0,
       (sum, f) => sum + f.evidence.length,
     );
+    final physical = PhysicalProgress.of(session);
+    final processing = AiProcessingProgress.of(session);
+    final review = AiReviewProgress.of(session);
+    final unresolved = session.aiSuggestions
+        .where((s) => s.status == AiSuggestionStatus.rejected)
+        .length;
 
     return Card(
       child: Padding(
@@ -162,6 +169,31 @@ class _ReadinessCard extends StatelessWidget {
                 ),
               ],
             ),
+            const Divider(height: AppSpacing.xl),
+            _ReadinessRow(
+              label: 'Physical inspection',
+              value: '${physical.completed}/${physical.totalAreas} complete',
+              done: physical.completed >= physical.totalAreas,
+            ),
+            _ReadinessRow(
+              label: 'AI analysis',
+              value:
+                  '${processing.processed}/${processing.totalEligible} '
+                  'processed',
+              done: processing.inFlight == 0,
+            ),
+            _ReadinessRow(
+              label: 'Review',
+              value: '${review.resolved}/${review.total} reviewed',
+              done: review.pending == 0,
+            ),
+            if (unresolved > 0)
+              _ReadinessRow(
+                label: 'Unresolved',
+                value: '$unresolved finding(s)',
+                done: false,
+                warningOnly: true,
+              ),
             const SizedBox(height: AppSpacing.md),
             report == null
                 ? const StatusPill(
@@ -173,7 +205,8 @@ class _ReadinessCard extends StatelessWidget {
                   )
                 : StatusPill(
                     label:
-                        'Generated ${_formatGeneratedAt(report!.generatedAt)}',
+                        'Generated v${report!.version} · '
+                        '${_formatGeneratedAt(report!.generatedAt)}',
                     icon: Icons.check_circle_outline,
                     foreground: AppColors.success,
                     background: AppColors.successBg,
@@ -189,6 +222,53 @@ class _ReadinessCard extends StatelessWidget {
     final local = dateTime.toLocal();
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)}';
+  }
+}
+
+class _ReadinessRow extends StatelessWidget {
+  const _ReadinessRow({
+    required this.label,
+    required this.value,
+    required this.done,
+    this.warningOnly = false,
+  });
+
+  final String label;
+  final String value;
+  final bool done;
+
+  /// An informational row (e.g. "Unresolved") that's never "done" but
+  /// also isn't an in-progress state — shown in warning color rather
+  /// than the pending/muted color the other rows use before they're
+  /// done.
+  final bool warningOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = done
+        ? AppColors.success
+        : (warningOnly ? AppColors.warning : AppColors.textMuted);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+            size: 16,
+            color: color,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -229,7 +309,7 @@ class _NotGeneratedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,

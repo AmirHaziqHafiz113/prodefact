@@ -80,10 +80,15 @@ class DefaultReportCoordinator implements ReportCoordinator {
     }
 
     final now = DateTime.now();
+    // A regenerated report is a new version, never a silent overwrite —
+    // surfaced to the inspector as "v2", "v3", etc. See
+    // `docs/home_inspection_product_flow.md` ("Report versioning").
+    final version = (session.report?.version ?? 0) + 1;
     final model = buildReportModel(
       session: session,
       propertyTypeLabel: propertyTypeLabel,
       generatedAt: now,
+      version: version,
     );
     final fileName = buildReportFileName(sessionId: sessionId, date: now);
 
@@ -109,6 +114,7 @@ class DefaultReportCoordinator implements ReportCoordinator {
         fileName: fileName,
         generatedAt: now,
         sourceUpdatedAt: session.updatedAt,
+        version: version,
       );
       await _local.saveReport(report);
       return ReportGenerationResult.success(report);

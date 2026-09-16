@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -9,9 +8,6 @@ import 'package:prodefact/features/home_inspection/presentation/screens/inspecti
 
 import '../support/fake_auth_service.dart';
 import '../support/test_repository.dart';
-
-Finder _within(Finder matching) =>
-    find.descendant(of: find.byType(Scaffold).last, matching: matching);
 
 void main() {
   testWidgets(
@@ -37,10 +33,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(_within(find.text('Start Home Inspection')));
-      await tester.pumpAndSettle();
-
-      // Redirected to Sign In — the dashboard never actually builds.
+      // The dashboard is the app's initial route — redirected to Sign
+      // In immediately, before it ever builds.
       expect(find.byType(InspectionSessionsScreen), findsNothing);
       expect(find.text('Sign in'), findsWidgets);
     },
@@ -69,8 +63,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(_within(find.text('Start Home Inspection')));
-      await tester.pumpAndSettle();
       expect(find.byType(InspectionSessionsScreen), findsOneWidget);
 
       // Manually navigating to Sign In while already signed in bounces
@@ -97,9 +89,6 @@ void main() {
         child: const ProDefactApp(),
       ),
     );
-    await tester.pumpAndSettle();
-
-    await tester.tap(_within(find.text('Start Home Inspection')));
     await tester.pumpAndSettle();
 
     expect(find.byType(InspectionSessionsScreen), findsOneWidget);

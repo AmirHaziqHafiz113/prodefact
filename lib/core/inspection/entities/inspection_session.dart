@@ -3,6 +3,7 @@ import 'ai_review_state.dart';
 import 'finding.dart';
 import 'industry.dart';
 import 'inspection.dart';
+import 'property_details.dart';
 import 'report.dart';
 import 'section.dart';
 import 'section_status.dart';
@@ -31,6 +32,7 @@ class InspectionSession {
     this.aiReviewState = AiReviewState.notStarted,
     this.aiSuggestions = const [],
     this.report,
+    this.propertyDetails = PropertyDetails.empty,
   });
 
   final String id;
@@ -39,6 +41,11 @@ class InspectionSession {
   /// Identifies the asset type within [industry] (for Home Inspection,
   /// the property type's name — see `PropertyType`).
   final String assetTypeId;
+
+  /// Property/report metadata captured during New Inspection setup —
+  /// see `PropertyDetails`. `PropertyDetails.empty` for a session
+  /// created before this existed (schema v6 and earlier).
+  final PropertyDetails propertyDetails;
 
   final List<Section> sections;
   final Map<String, SectionStatus> sectionStatuses;
@@ -84,6 +91,7 @@ class InspectionSession {
     AiReviewState? aiReviewState,
     List<AiSuggestion>? aiSuggestions,
     Report? report,
+    PropertyDetails? propertyDetails,
   }) {
     return InspectionSession(
       id: id,
@@ -100,6 +108,7 @@ class InspectionSession {
       aiReviewState: aiReviewState ?? this.aiReviewState,
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
       report: report ?? this.report,
+      propertyDetails: propertyDetails ?? this.propertyDetails,
     );
   }
 }
@@ -119,6 +128,10 @@ class InspectionSessionSummary {
     this.aiEligibleFindingsCount = 0,
     this.aiProcessedFindingsCount = 0,
     this.aiPendingReviewCount = 0,
+    this.aiFailedFindingsCount = 0,
+    this.propertyTitle,
+    this.propertyAddress,
+    this.unitNumber,
   });
 
   final String id;
@@ -139,5 +152,25 @@ class InspectionSessionSummary {
   final int aiProcessedFindingsCount;
   final int aiPendingReviewCount;
 
+  /// Findings whose AI classification attempt itself errored (safe to
+  /// retry) — the dashboard's "Needs attention" section surfaces a
+  /// session with any of these, alongside `aiPendingReviewCount`.
+  final int aiFailedFindingsCount;
+
+  /// A subset of `PropertyDetails`, mirrored here so the dashboard list
+  /// never needs to load a session's full details just to show its
+  /// title/unit — null for a session with no property details captured
+  /// (schema v6 and earlier, or an empty title).
+  final String? propertyTitle;
+  final String? propertyAddress;
+  final String? unitNumber;
+
   bool get isComplete => status != InspectionStatus.inProgress;
+
+  /// Whether this session has something the inspector should look at:
+  /// an AI suggestion pending review, or a failed classification safe
+  /// to retry. Never fabricated — both counts come from the same
+  /// real, per-finding state the area/review screens show.
+  bool get needsAttention =>
+      aiPendingReviewCount > 0 || aiFailedFindingsCount > 0;
 }

@@ -140,6 +140,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   Future<bool> startNew(
     PropertyType propertyType, {
     List<Section>? initialSections,
+    PropertyDetails propertyDetails = PropertyDetails.empty,
   }) async {
     final sections =
         initialSections ??
@@ -150,6 +151,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         assetTypeId: propertyType.name,
         initialSections: sections,
         ownerUid: ref.read(authServiceProvider).currentUser?.uid,
+        propertyDetails: propertyDetails,
       );
       state = session;
       ref.read(activeSessionErrorProvider.notifier).clear();
@@ -857,6 +859,68 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       status: AiSuggestionStatus.rejected,
       finalCatalogueEntryId: (_) => '',
     );
+  }
+
+  /// Classifies a finding that has **no** `AiSuggestion` yet — the
+  /// `failed` case, where the classification attempt itself errored
+  /// before AI ever returned anything to review. This is the "Classify
+  /// Manually" fallback alongside "Retry": the inspector is never
+  /// blocked from finishing an inspection just because AI couldn't run.
+  /// A no-op if a suggestion already exists for [findingId] (the
+  /// `needsReview`/`completed` cases already have one to Change
+  /// instead — see `ai_suggestion_review_dialog.dart`).
+  void manuallyClassifyFinding(String findingId, String catalogueEntryId) {
+    final session = state;
+    if (session == null) return;
+    if (session.aiSuggestions.any((s) => s.findingId == findingId)) return;
+
+    final now = DateTime.now();
+    final suggestion = AiSuggestion(
+      id: 'suggestion_$findingId',
+      sessionId: session.id,
+      findingId: findingId,
+      providerId: 'manual',
+      generatedAt: now,
+      finalCatalogueEntryId: catalogueEntryId,
+      status: AiSuggestionStatus.edited,
+      reviewedAt: now,
+    );
+
+    final findings = [
+      for (final finding in session.findings)
+        if (finding.id == findingId)
+          finding.copyWith(aiStatus: AiFindingStatus.completed)
+        else
+          finding,
+    ];
+    final suggestions = [...session.aiSuggestions, suggestion];
+    final reviewProgress = AiReviewProgress.forSuggestions(suggestions);
+    final allResolved = reviewProgress.pending == 0;
+
+    state = session.copyWith(
+      findings: findings,
+      aiSuggestions: suggestions,
+      updatedAt: now,
+      aiReviewState: allResolved
+          ? AiReviewState.completed
+          : session.aiReviewState,
+      status: allResolved ? InspectionStatus.aiReviewComplete : session.status,
+    );
+    unawaited(
+      _persist(
+        () async {
+          await _repository.setFindingAiStatus(
+            session.id,
+            findingId,
+            AiFindingStatus.completed,
+          );
+          await _repository.saveAiSuggestion(suggestion);
+        },
+        previous: session,
+        action: 'classify finding manually',
+      ),
+    );
+    ref.invalidate(sessionSummariesProvider);
   }
 
   void _reviewSuggestion(

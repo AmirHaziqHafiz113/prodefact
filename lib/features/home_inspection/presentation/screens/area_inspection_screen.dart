@@ -9,6 +9,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import 'ai_suggestion_review_dialog.dart';
 
 /// Camera-first physical inspection of a single area: "Take Defect
 /// Photo" is the primary, most prominent action — no element/component
@@ -334,6 +335,16 @@ class _FindingCard extends ConsumerWidget {
               ),
             ),
             IconButton(
+              tooltip: 'Add another photo',
+              icon: const Icon(Icons.add_a_photo_outlined),
+              onPressed: () => ref
+                  .read(activeSessionProvider.notifier)
+                  .addEvidence(
+                    findingId: finding.id,
+                    source: EvidenceSource.camera,
+                  ),
+            ),
+            IconButton(
               tooltip: 'Edit note',
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => _editNote(context, ref),
@@ -415,20 +426,31 @@ class _AiStatusLine extends ConsumerWidget {
           text: 'AI analysing…',
         );
       case AiFindingStatus.failed:
-        return Row(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Expanded(
-              child: _StatusText(
-                icon: Icons.error_outline,
-                color: AppColors.danger,
-                text: 'AI analysis failed',
-              ),
+            const _StatusText(
+              icon: Icons.error_outline,
+              color: AppColors.danger,
+              text: 'AI analysis failed',
             ),
-            TextButton(
-              onPressed: () => ref
-                  .read(activeSessionProvider.notifier)
-                  .retryAiClassification(finding.id),
-              child: const Text('Retry'),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => ref
+                      .read(activeSessionProvider.notifier)
+                      .retryAiClassification(finding.id),
+                  child: const Text('Retry'),
+                ),
+                TextButton(
+                  onPressed: () => showManualClassificationDialog(
+                    context: context,
+                    ref: ref,
+                    findingId: finding.id,
+                  ),
+                  child: const Text('Classify Manually'),
+                ),
+              ],
             ),
           ],
         );

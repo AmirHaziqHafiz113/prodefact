@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,14 +66,13 @@ class AiReviewOverviewScreen extends ConsumerWidget {
             )
           else ...[
             const SizedBox(height: AppSpacing.lg),
-            for (final suggestion in suggestions)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: _SuggestionCard(
-                  session: session,
-                  suggestion: suggestion,
-                ),
-              ),
+            for (final section in session.sections.where((s) => s.isIncluded))
+              ..._sectionGroup(context, session, section, suggestions),
+            // A suggestion whose finding's area was since excluded/removed
+            // from the draft still needs to be reviewable — never
+            // silently dropped from this screen just because its area
+            // no longer appears in the configured list.
+            ..._ungroupedSuggestions(session, suggestions),
           ],
         ],
       ),
@@ -88,6 +89,62 @@ class AiReviewOverviewScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// One area's worth of suggestion cards, headed by the area name — see
+/// `docs/home_inspection_product_flow.md` ("AI Review UX"). Returns an
+/// empty list (no header rendered) for an area with no AI-eligible
+/// findings yet.
+List<Widget> _sectionGroup(
+  BuildContext context,
+  InspectionSession session,
+  Section section,
+  List<AiSuggestion> suggestions,
+) {
+  final sectionSuggestions = suggestions.where((s) {
+    final finding = session.findings.firstWhereOrNull(
+      (f) => f.id == s.findingId,
+    );
+    return finding?.sectionId == section.id;
+  }).toList();
+  if (sectionSuggestions.isEmpty) return const [];
+
+  return [
+    Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Text(section.name, style: Theme.of(context).textTheme.titleMedium),
+    ),
+    for (final suggestion in sectionSuggestions)
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: _SuggestionCard(session: session, suggestion: suggestion),
+      ),
+  ];
+}
+
+List<Widget> _ungroupedSuggestions(
+  InspectionSession session,
+  List<AiSuggestion> suggestions,
+) {
+  final includedIds = session.sections
+      .where((s) => s.isIncluded)
+      .map((s) => s.id)
+      .toSet();
+  final orphaned = suggestions.where((s) {
+    final finding = session.findings.firstWhereOrNull(
+      (f) => f.id == s.findingId,
+    );
+    return finding == null || !includedIds.contains(finding.sectionId);
+  }).toList();
+  if (orphaned.isEmpty) return const [];
+
+  return [
+    for (final suggestion in orphaned)
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: _SuggestionCard(session: session, suggestion: suggestion),
+      ),
+  ];
 }
 
 class _StatusPanel extends StatelessWidget {
@@ -193,28 +250,50 @@ class _SuggestionCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            _AttributedBlock(
-              label: 'Your note',
-              icon: Icons.person_outline,
-              color: AppColors.textSecondary,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    finding?.description?.isNotEmpty == true
-                        ? finding!.description!
-                        : '(No note)',
-                  ),
-                  if (finding != null && finding.evidence.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${finding.evidence.length} photo(s) attached.',
-                        style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (finding != null && finding.evidence.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      child: SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: Image.file(
+                          File(finding.evidence.first.filePath),
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+                Expanded(
+                  child: _AttributedBlock(
+                    label: 'Your note',
+                    icon: Icons.person_outline,
+                    color: AppColors.textSecondary,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          finding?.description?.isNotEmpty == true
+                              ? finding!.description!
+                              : '(No note)',
+                        ),
+                        if (finding != null && finding.evidence.length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              '${finding.evidence.length} photos attached.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.sm),
             _AttributedBlock(
@@ -235,11 +314,9 @@ class _SuggestionCard extends ConsumerWidget {
                             'Recommendation: '
                             '${suggestedEntry.correctiveAction}',
                           ),
-                        if (suggestion.suggestedShortReason != null)
-                          Text(
-                            suggestion.suggestedShortReason!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                        if (suggestion.suggestedShortReason != null ||
+                            suggestion.suggestedConfidence != null)
+                          _AiDetailsToggle(suggestion: suggestion),
                       ],
                     ),
             ),
@@ -341,6 +418,55 @@ class _AttributedBlock extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+/// A lightweight "AI details" expand/collapse for confidence + reason —
+/// deliberately not `ExpansionTile` (it renders a `ListTile` internally,
+/// which asserts when placed on a colored `Container` background like
+/// `_AttributedBlock`'s without its own `Material` ancestor).
+class _AiDetailsToggle extends StatefulWidget {
+  const _AiDetailsToggle({required this.suggestion});
+
+  final AiSuggestion suggestion;
+
+  @override
+  State<_AiDetailsToggle> createState() => _AiDetailsToggleState();
+}
+
+class _AiDetailsToggleState extends State<_AiDetailsToggle> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('AI details', style: Theme.of(context).textTheme.bodySmall),
+              Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16),
+            ],
+          ),
+        ),
+        if (_expanded) ...[
+          if (widget.suggestion.suggestedShortReason != null)
+            Text(
+              widget.suggestion.suggestedShortReason!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (widget.suggestion.suggestedConfidence != null)
+            Text(
+              'Confidence: '
+              '${(widget.suggestion.suggestedConfidence! * 100).round()}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+        ],
+      ],
     );
   }
 }

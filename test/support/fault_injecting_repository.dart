@@ -27,6 +27,7 @@ class FaultInjectingRepository implements InspectionRepository {
     required String assetTypeId,
     required List<Section> initialSections,
     String? ownerUid,
+    PropertyDetails propertyDetails = PropertyDetails.empty,
   }) {
     _maybeFail('createSession');
     return _inner.createSession(
@@ -34,6 +35,7 @@ class FaultInjectingRepository implements InspectionRepository {
       assetTypeId: assetTypeId,
       initialSections: initialSections,
       ownerUid: ownerUid,
+      propertyDetails: propertyDetails,
     );
   }
 
@@ -153,6 +155,18 @@ class FaultInjectingRepository implements InspectionRepository {
   Future<void> saveReport(Report report) {
     _maybeFail('saveReport');
     return _inner.saveReport(report);
+  }
+
+  @override
+  Future<UserProfile> loadUserProfile() {
+    _maybeFail('loadUserProfile');
+    return _inner.loadUserProfile();
+  }
+
+  @override
+  Future<void> saveUserProfile(UserProfile profile) {
+    _maybeFail('saveUserProfile');
+    return _inner.saveUserProfile(profile);
   }
 
   @override

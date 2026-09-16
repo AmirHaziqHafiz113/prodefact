@@ -32,11 +32,17 @@ Future<ProviderContainer> _pumpToReportScreen(
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(_within(find.text('Start Home Inspection')));
-  await tester.pumpAndSettle();
   await tester.tap(_within(find.text('New Inspection')));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('High Rise')));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    _within(find.byType(TextFormField)).first,
+    'Test Property',
+  );
+  await tester.tap(_within(find.text('Continue')));
+  await tester.pumpAndSettle();
+  await tester.tap(_within(find.text('Review & Start')));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();

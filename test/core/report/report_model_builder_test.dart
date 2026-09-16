@@ -125,6 +125,7 @@ InspectionSession _session({
   required List<Finding> findings,
   Map<String, SectionStatus> sectionStatuses = const {},
   List<AiSuggestion> aiSuggestions = const [],
+  PropertyDetails propertyDetails = PropertyDetails.empty,
 }) {
   final now = DateTime(2026, 1, 1);
   return InspectionSession(
@@ -137,6 +138,7 @@ InspectionSession _session({
     createdAt: now,
     updatedAt: now,
     aiSuggestions: aiSuggestions,
+    propertyDetails: propertyDetails,
   );
 }
 
@@ -475,6 +477,59 @@ void main() {
       final finding = model.areas.single.findings.single;
       expect(finding.evidenceFilePaths, ['/fake/e1.jpg', '/fake/e2.jpg']);
       expect(model.totalEvidence, 2);
+    });
+  });
+
+  group('property details / report metadata mapping', () {
+    test('property details captured at setup flow into the report model', () {
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: const [],
+        propertyDetails: PropertyDetails(
+          title: 'Residensi Vista',
+          address: '1 Jalan Test',
+          projectName: 'Vista Development',
+          blockTower: 'Block A',
+          unitNumber: 'A-12-08',
+          clientName: 'Jane Client',
+          inspectorName: 'John Inspector',
+          inspectionDate: DateTime(2026, 3, 1),
+        ),
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+        version: 2,
+      );
+
+      expect(model.propertyTitle, 'Residensi Vista');
+      expect(model.propertyAddress, '1 Jalan Test');
+      expect(model.projectName, 'Vista Development');
+      expect(model.blockTower, 'Block A');
+      expect(model.unitNumber, 'A-12-08');
+      expect(model.clientName, 'Jane Client');
+      expect(model.inspectorName, 'John Inspector');
+      expect(model.inspectionDate, DateTime(2026, 3, 1));
+      expect(model.version, 2);
+    });
+
+    test('a session with no property details (legacy/pre-v7) falls back to '
+        'the property type label and session creation date, with default '
+        'version 1', () {
+      final session = _session(sections: [_bathroomSection()], findings: []);
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      expect(model.propertyTitle, isNull);
+      expect(model.propertyTypeLabel, 'High Rise');
+      expect(model.inspectionDate, session.createdAt);
+      expect(model.version, 1);
     });
   });
 }

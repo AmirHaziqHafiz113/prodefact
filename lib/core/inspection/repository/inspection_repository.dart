@@ -6,10 +6,12 @@ import '../entities/finding.dart';
 import '../entities/industry.dart';
 import '../entities/inspection.dart';
 import '../entities/inspection_session.dart';
+import '../entities/property_details.dart';
 import '../entities/report.dart';
 import '../entities/section.dart';
 import '../entities/section_status.dart';
 import '../entities/sync_status.dart';
+import '../entities/user_profile.dart';
 
 /// Durable storage for [InspectionSession]s, generic across industries.
 ///
@@ -27,6 +29,7 @@ abstract class InspectionRepository {
     required String assetTypeId,
     required List<Section> initialSections,
     String? ownerUid,
+    PropertyDetails propertyDetails = PropertyDetails.empty,
   });
 
   /// Loads a previously-created session by id, or null if it doesn't
@@ -110,6 +113,12 @@ abstract class InspectionRepository {
   /// [Report.sessionId] — "latest report per inspection"; see
   /// `docs/report.md`).
   Future<void> saveReport(Report report);
+
+  /// The single on-device inspector profile — see `UserProfile`.
+  /// `UserProfile.empty` if nothing has been saved yet.
+  Future<UserProfile> loadUserProfile();
+
+  Future<void> saveUserProfile(UserProfile profile);
 
   Future<void> close();
 }

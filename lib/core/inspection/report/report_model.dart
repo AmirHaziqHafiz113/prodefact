@@ -56,6 +56,14 @@ class ReportModel {
     required this.totalFindings,
     required this.totalEvidence,
     required this.areas,
+    this.version = 1,
+    this.propertyTitle,
+    this.propertyAddress,
+    this.projectName,
+    this.blockTower,
+    this.unitNumber,
+    this.clientName,
+    this.inspectorName,
   });
 
   final String sessionId;
@@ -67,4 +75,18 @@ class ReportModel {
   final int totalFindings;
   final int totalEvidence;
   final List<ReportAreaSection> areas;
+
+  /// This report's version number — see `Report.version`.
+  final int version;
+
+  // ---- property/report metadata (from `PropertyDetails`) — all null
+  // for a session with none captured (schema v6 and earlier); the
+  // renderer falls back to [propertyTypeLabel] in that case.
+  final String? propertyTitle;
+  final String? propertyAddress;
+  final String? projectName;
+  final String? blockTower;
+  final String? unitNumber;
+  final String? clientName;
+  final String? inspectorName;
 }

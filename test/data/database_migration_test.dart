@@ -271,6 +271,15 @@ void main() {
         generated_at INTEGER NOT NULL,
         reviewed_at INTEGER
       );
+      CREATE TABLE report_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL PRIMARY KEY REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        generated_at INTEGER NOT NULL,
+        source_updated_at INTEGER NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly'
+      );
       CREATE INDEX idx_finding_rows_session_id ON finding_rows (session_id);
       CREATE INDEX idx_ai_suggestion_rows_finding_id ON ai_suggestion_rows (finding_id);
     ''');
@@ -313,9 +322,80 @@ void main() {
     expect(suggestionRow.finalCatalogueEntryId, isNull);
     // The legacy free-text columns are completely untouched.
     expect(suggestionRow.finalDefectType, 'Cracked tile');
+
+    // v7's new property-details columns are present with their default
+    // (null), and the pre-existing report row's new `version` column
+    // defaults to 1 rather than the row being dropped/recreated.
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_5'))).getSingle();
+    expect(sessionRow.propertyTitle, isNull);
+    expect(sessionRow.inspectionDate, isNull);
+    final userProfiles = await db.select(db.userProfileRows).get();
+    expect(userProfiles, isEmpty);
   });
 
-  test('a fresh install (onCreate) also gets the v5 indexes', () async {
+  test('upgrading from v6 adds the v7 property-details/report-version '
+      'columns and the user_profile_rows table', () async {
+    final dbFile = File('${tempDir.path}/v6.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        owner_uid TEXT,
+        ai_review_state TEXT NOT NULL DEFAULT 'notStarted'
+      );
+      CREATE TABLE report_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL PRIMARY KEY REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        generated_at INTEGER NOT NULL,
+        source_updated_at INTEGER NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly'
+      );
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, created_at, updated_at)
+      VALUES
+        ('session_6', 'homeInspection', 'highRise', 'inProgress', 6000, 6000);
+      INSERT INTO report_rows
+        (id, session_id, file_path, file_name, generated_at, source_updated_at)
+      VALUES
+        ('report_1', 'session_6', '/fake/report.pdf', 'report.pdf', 6000, 6000);
+    ''');
+    raw.execute('PRAGMA user_version = 6');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_6'))).getSingle();
+    expect(sessionRow.propertyTitle, isNull);
+
+    // A pre-existing report row is backfilled to version 1 rather than
+    // the row being dropped/recreated.
+    final reportRow = await (db.select(
+      db.reportRows,
+    )..where((t) => t.sessionId.equals('session_6'))).getSingle();
+    expect(reportRow.version, 1);
+    expect(reportRow.filePath, '/fake/report.pdf');
+
+    final userProfiles = await db.select(db.userProfileRows).get();
+    expect(userProfiles, isEmpty);
+  });
+
+  test('a fresh install (onCreate) also gets the v5 indexes and the v7 '
+      'table', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -330,5 +410,9 @@ void main() {
         .get();
     final names = indexNames.map((r) => r.data['name'] as String).toSet();
     expect(names, contains('idx_finding_rows_session_id'));
+
+    // v7's new table exists and is queryable on a fresh install too.
+    final userProfiles = await db.select(db.userProfileRows).get();
+    expect(userProfiles, isEmpty);
   });
 }

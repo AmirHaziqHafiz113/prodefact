@@ -1,5 +1,13 @@
 # Home Inspection Workflow
 
+**See `docs/home_inspection_product_flow.md` for the current, canonical
+end-to-end lifecycle** (New Inspection now also has a Property Details
+and a Review Setup step, the dashboard has search/filter/"Needs
+attention", and there's a Profile screen) — that document is the
+implementation source of truth as of the product-flow-consolidation
+pass. This document remains useful detail on the camera-first/AI
+mechanics below, which are otherwise unchanged.
+
 This is ProDefact's end-to-end Home Inspection workflow as implemented
 today — **camera-first**, with AI running progressively per finding
 against a controlled defect catalogue. See `docs/ai_provider_architecture.md`
@@ -12,19 +20,26 @@ with.
    create an inspection, physically inspect a property, or view a
    report — see "Authentication" below. Local-only/demo builds (no
    Firebase project configured) have no gate to enforce and work
-   fully offline, unauthenticated, exactly as before.
-2. **Inspector chooses a property type**: High Rise or Landed.
-   ProDefact shows the default inspection areas for that property type
+   fully offline, unauthenticated, exactly as before. The dashboard is
+   now the app's initial route (the old unguarded splash screen was
+   removed as vestigial — see `docs/home_inspection_product_flow.md`),
+   so the gate now applies from the very first frame.
+2. **Inspector chooses a property type**: High Rise or Landed, then
+   fills in Property Details (title required; address/project/unit/
+   client/inspector/date optional) — see
+   `docs/home_inspection_product_flow.md` for this step. ProDefact then
+   shows the default inspection areas for that property type
    (Entrance/Foyer, Kitchen, Living Room, Master Bathroom, etc. — see
    `lib/features/home_inspection/config/home_inspection_config.dart`).
-   This step, and the next, only ever edit an **in-memory draft**
+   Every setup step only ever edits an **in-memory draft**
    (`NewInspectionDraftNotifier`) — nothing is persisted and nothing
    appears on the dashboard yet.
 3. **Inspector configures areas**: include/exclude, rename, add a
-   custom area (with a "contains plumbing" flag), edit, or remove.
-   Only tapping **"Start Inspection"** turns the draft into a real,
-   persisted, dashboard-visible inspection — backing out at any point
-   before that discards the draft with nothing left behind.
+   custom area (with a "contains plumbing" flag), edit, or remove, then
+   reviews everything on the Review Setup summary screen. Only tapping
+   **"Start Inspection"** there turns the draft into a real, persisted,
+   dashboard-visible inspection — backing out at any point before that
+   discards the draft with nothing left behind.
 4. **Physical inspection begins.** Areas flagged as plumbing areas are
    ordered first, since leakage/ponding tests need time to run while
    the inspector covers other areas.

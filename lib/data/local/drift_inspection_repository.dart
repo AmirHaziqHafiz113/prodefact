@@ -39,6 +39,7 @@ class DriftInspectionRepository implements InspectionRepository {
     required String assetTypeId,
     required List<Section> initialSections,
     String? ownerUid,
+    PropertyDetails propertyDetails = PropertyDetails.empty,
   }) async {
     final now = DateTime.now();
     final id = _newId('session');
@@ -55,6 +56,18 @@ class DriftInspectionRepository implements InspectionRepository {
               createdAt: now,
               updatedAt: now,
               ownerUid: Value(ownerUid),
+              propertyTitle: Value(
+                propertyDetails.title.isEmpty ? null : propertyDetails.title,
+              ),
+              propertyAddress: Value(propertyDetails.address),
+              projectName: Value(propertyDetails.projectName),
+              blockTower: Value(propertyDetails.blockTower),
+              unitNumber: Value(propertyDetails.unitNumber),
+              clientName: Value(propertyDetails.clientName),
+              inspectorName: Value(propertyDetails.inspectorName),
+              developerName: Value(propertyDetails.developerName),
+              contactNumber: Value(propertyDetails.contactNumber),
+              inspectionDate: Value(propertyDetails.inspectionDate),
             ),
           );
 
@@ -78,6 +91,7 @@ class DriftInspectionRepository implements InspectionRepository {
       createdAt: now,
       updatedAt: now,
       ownerUid: ownerUid,
+      propertyDetails: propertyDetails,
     );
   }
 
@@ -236,7 +250,26 @@ class DriftInspectionRepository implements InspectionRepository {
               generatedAt: reportRow.generatedAt,
               sourceUpdatedAt: reportRow.sourceUpdatedAt,
               syncStatus: SyncStatus.values.byName(reportRow.syncStatus),
+              version: reportRow.version,
             ),
+      propertyDetails: _propertyDetailsFromRow(sessionRow),
+    );
+  }
+
+  PropertyDetails _propertyDetailsFromRow(InspectionSessionRow row) {
+    final title = row.propertyTitle;
+    if (title == null || title.isEmpty) return PropertyDetails.empty;
+    return PropertyDetails(
+      title: title,
+      address: row.propertyAddress,
+      projectName: row.projectName,
+      blockTower: row.blockTower,
+      unitNumber: row.unitNumber,
+      clientName: row.clientName,
+      inspectorName: row.inspectorName,
+      developerName: row.developerName,
+      contactNumber: row.contactNumber,
+      inspectionDate: row.inspectionDate,
     );
   }
 
@@ -281,6 +314,13 @@ class DriftInspectionRepository implements InspectionRepository {
       'GROUP BY session_id',
       sessionIds,
     );
+    final failed = await _countPerSession(
+      "SELECT session_id, COUNT(*) as c FROM finding_rows f "
+      'WHERE f.session_id IN (${_placeholders(sessionIds.length)}) '
+      "AND f.ai_status = 'failed' "
+      'GROUP BY session_id',
+      sessionIds,
+    );
 
     return rows
         .map(
@@ -296,6 +336,10 @@ class DriftInspectionRepository implements InspectionRepository {
             aiEligibleFindingsCount: eligible[row.id] ?? 0,
             aiProcessedFindingsCount: processed[row.id] ?? 0,
             aiPendingReviewCount: pendingReview[row.id] ?? 0,
+            aiFailedFindingsCount: failed[row.id] ?? 0,
+            propertyTitle: row.propertyTitle,
+            propertyAddress: row.propertyAddress,
+            unitNumber: row.unitNumber,
           ),
         )
         .toList();
@@ -562,9 +606,38 @@ class DriftInspectionRepository implements InspectionRepository {
             generatedAt: report.generatedAt,
             sourceUpdatedAt: report.sourceUpdatedAt,
             syncStatus: Value(report.syncStatus.name),
+            version: Value(report.version),
           ),
         );
   }
+
+  @override
+  Future<UserProfile> loadUserProfile() async {
+    final row = await (_db.select(
+      _db.userProfileRows,
+    )..where((t) => t.id.equals(_localProfileId))).getSingleOrNull();
+    if (row == null) return UserProfile.empty;
+    return UserProfile(
+      companyName: row.companyName,
+      inspectorName: row.inspectorName,
+    );
+  }
+
+  @override
+  Future<void> saveUserProfile(UserProfile profile) async {
+    await _db
+        .into(_db.userProfileRows)
+        .insertOnConflictUpdate(
+          UserProfileRowsCompanion.insert(
+            id: _localProfileId,
+            companyName: Value(profile.companyName),
+            inspectorName: Value(profile.inspectorName),
+            updatedAt: DateTime.now(),
+          ),
+        );
+  }
+
+  static const _localProfileId = 'local';
 
   Future<void> _touchSession(String sessionId, DateTime timestamp) {
     return (_db.update(_db.inspectionSessionRows)

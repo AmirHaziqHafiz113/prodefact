@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
+import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/test_repository.dart';
@@ -48,13 +49,20 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(_within(find.text('Start Home Inspection')));
-  await tester.pumpAndSettle();
-
   await tester.tap(_within(find.text('New Inspection')));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('High Rise')));
+  await tester.pumpAndSettle();
+
+  await tester.enterText(
+    _within(find.byType(TextFormField)).first,
+    'Test Property',
+  );
+  await tester.tap(_within(find.text('Continue')));
+  await tester.pumpAndSettle();
+
+  await tester.tap(_within(find.text('Review & Start')));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('Start Inspection')));
@@ -108,6 +116,31 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_within(find.text('Cracked tile')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '"Add another photo" attaches a second photo to an existing finding '
+    'and re-queues it for AI',
+    (tester) async {
+      final container = await _pumpToInspectionQueue(tester);
+      final firstAreaName = container.read(inspectionQueueProvider).first.name;
+
+      await tester.tap(_within(find.text(firstAreaName)));
+      await tester.pumpAndSettle();
+
+      await _takePhotoAndSave(tester, 'Leaking tap');
+
+      await tester.tap(_within(find.byIcon(Icons.add_a_photo_outlined)));
+      await tester.pumpAndSettle();
+
+      expect(_within(find.text('2 photos')), findsOneWidget);
+
+      final finding = container
+          .read(activeSessionProvider)!
+          .findings
+          .singleWhere((f) => f.description == 'Leaking tap');
+      expect(finding.evidence, hasLength(2));
     },
   );
 

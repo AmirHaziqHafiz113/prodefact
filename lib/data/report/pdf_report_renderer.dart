@@ -64,10 +64,31 @@ class PdfReportRenderer implements ReportRenderer {
         pw.SizedBox(height: 16),
         pw.Divider(color: _dividerColor),
         pw.SizedBox(height: 12),
-        _buildCoverRow('Inspection ID', model.sessionId),
+        _buildCoverRow(
+          'Property',
+          model.propertyTitle ?? model.propertyTypeLabel,
+        ),
+        if (model.projectName != null)
+          _buildCoverRow('Project / Development', model.projectName!),
+        if (model.blockTower != null || model.unitNumber != null)
+          _buildCoverRow(
+            'Block / Unit',
+            [
+              model.blockTower,
+              model.unitNumber,
+            ].whereType<String>().join(' / '),
+          ),
+        if (model.propertyAddress != null)
+          _buildCoverRow('Address', model.propertyAddress!),
         _buildCoverRow('Property type', model.propertyTypeLabel),
+        if (model.clientName != null)
+          _buildCoverRow('Client', model.clientName!),
+        if (model.inspectorName != null)
+          _buildCoverRow('Inspector', model.inspectorName!),
+        _buildCoverRow('Inspection ID', model.sessionId),
         _buildCoverRow('Inspection date', _formatDate(model.inspectionDate)),
         _buildCoverRow('Report generated', _formatDate(model.generatedAt)),
+        _buildCoverRow('Report version', 'v${model.version}'),
       ],
     );
   }

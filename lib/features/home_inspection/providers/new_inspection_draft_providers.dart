@@ -24,15 +24,26 @@ class NewInspectionDraft {
   const NewInspectionDraft({
     required this.propertyType,
     required this.sections,
+    this.propertyDetails,
   });
 
   final PropertyType propertyType;
   final List<Section> sections;
 
-  NewInspectionDraft copyWith({List<Section>? sections}) {
+  /// Filled in by the Property Details step (the screen right after
+  /// property type selection) — null only if that step is somehow
+  /// skipped, in which case `ReviewSetupScreen`/`startInspection` fall
+  /// back to `PropertyDetails.empty`.
+  final PropertyDetails? propertyDetails;
+
+  NewInspectionDraft copyWith({
+    List<Section>? sections,
+    PropertyDetails? propertyDetails,
+  }) {
     return NewInspectionDraft(
       propertyType: propertyType,
       sections: sections ?? this.sections,
+      propertyDetails: propertyDetails ?? this.propertyDetails,
     );
   }
 }
@@ -58,6 +69,14 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
   /// Abandons the current draft without starting an inspection. Safe
   /// to call any number of times, including when there is no draft.
   void discard() => state = null;
+
+  /// Records the Property Details step's result on the draft — purely
+  /// in-memory, exactly like every other setup-time edit here.
+  void updatePropertyDetails(PropertyDetails details) {
+    final draft = state;
+    if (draft == null) return;
+    state = draft.copyWith(propertyDetails: details);
+  }
 
   void resetToDefaults() {
     final draft = state;
@@ -143,7 +162,11 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
     try {
       final started = await ref
           .read(activeSessionProvider.notifier)
-          .startNew(draft.propertyType, initialSections: draft.sections);
+          .startNew(
+            draft.propertyType,
+            initialSections: draft.sections,
+            propertyDetails: draft.propertyDetails ?? PropertyDetails.empty,
+          );
       if (started) {
         state = null;
       }

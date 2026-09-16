@@ -22,6 +22,20 @@ class InspectionSessionRows extends Table {
   TextColumn get aiReviewState =>
       text().withDefault(const Constant('notStarted'))();
 
+  // ---- property details (added in schema v7) — see `PropertyDetails`.
+  // All nullable: a pre-v7 session has none of these and falls back to
+  // `assetTypeId`'s property-type label wherever this would be shown.
+  TextColumn get propertyTitle => text().nullable()();
+  TextColumn get propertyAddress => text().nullable()();
+  TextColumn get projectName => text().nullable()();
+  TextColumn get blockTower => text().nullable()();
+  TextColumn get unitNumber => text().nullable()();
+  TextColumn get clientName => text().nullable()();
+  TextColumn get inspectorName => text().nullable()();
+  TextColumn get developerName => text().nullable()();
+  TextColumn get contactNumber => text().nullable()();
+  DateTimeColumn get inspectionDate => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -206,6 +220,26 @@ class ReportRows extends Table {
   TextColumn get syncStatus =>
       text().withDefault(const Constant('localOnly'))();
 
+  /// Incremented each time this session's report is regenerated (added
+  /// in schema v7) — surfaced to the inspector as "v2", "v3", etc., so
+  /// regenerating after inspection data changed is visibly a new
+  /// version rather than a silent overwrite. Starts at 1.
+  IntColumn get version => integer().withDefault(const Constant(1))();
+
   @override
   Set<Column> get primaryKey => {sessionId};
+}
+
+/// A single, on-device inspector profile (added in schema v7) — not
+/// synced to Firebase; purely local prefill data for report metadata
+/// (company name) and new-inspection setup (inspector name). Always one
+/// row, keyed by the constant id `'local'` — see `UserProfile`.
+class UserProfileRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get companyName => text().nullable()();
+  TextColumn get inspectorName => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }

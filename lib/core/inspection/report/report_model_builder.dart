@@ -30,6 +30,7 @@ ReportModel buildReportModel({
   required InspectionSession session,
   required String propertyTypeLabel,
   required DateTime generatedAt,
+  int version = 1,
 }) {
   final includedSections = session.sections
       .where((section) => section.isIncluded)
@@ -58,16 +59,25 @@ ReportModel buildReportModel({
       )
       .length;
 
+  final details = session.propertyDetails;
   return ReportModel(
     sessionId: session.id,
     propertyTypeLabel: propertyTypeLabel,
-    inspectionDate: session.createdAt,
+    inspectionDate: details.inspectionDate ?? session.createdAt,
     generatedAt: generatedAt,
     totalAreas: includedSections.length,
     completedAreas: completedAreas,
     totalFindings: totalFindings,
     totalEvidence: totalEvidence,
     areas: areas,
+    version: version,
+    propertyTitle: details.isEmpty ? null : details.title,
+    propertyAddress: details.address,
+    projectName: details.projectName,
+    blockTower: details.blockTower,
+    unitNumber: details.unitNumber,
+    clientName: details.clientName,
+    inspectorName: details.inspectorName,
   );
 }
 

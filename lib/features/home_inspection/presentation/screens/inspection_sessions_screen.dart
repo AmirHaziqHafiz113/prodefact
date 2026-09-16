@@ -10,6 +10,7 @@ import '../../../auth/presentation/sign_in_screen.dart';
 import '../../config/property_type.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/session_list_providers.dart';
+import 'profile_screen.dart';
 import 'property_type_selection_screen.dart';
 
 /// ProDefact's dashboard: active/recent inspection cards, a strong
@@ -28,7 +29,14 @@ class InspectionSessionsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inspections'),
-        actions: [_AuthAction(authState: authState)],
+        actions: [
+          IconButton(
+            tooltip: 'Profile',
+            icon: const Icon(Icons.person_outline),
+            onPressed: () => context.push(ProfileScreen.routePath),
+          ),
+          _AuthAction(authState: authState),
+        ],
       ),
       body: SafeArea(
         child: summaries.when(
@@ -49,14 +57,32 @@ class InspectionSessionsScreen extends ConsumerWidget {
   }
 }
 
-class _DashboardBody extends StatelessWidget {
+enum _DashboardFilter { all, inProgress, needsReview, reportReady, completed }
+
+class _DashboardBody extends StatefulWidget {
   const _DashboardBody({required this.sessions, required this.ref});
 
   final List<InspectionSessionSummary> sessions;
   final WidgetRef ref;
 
   @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+class _DashboardBodyState extends State<_DashboardBody> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  _DashboardFilter _filter = _DashboardFilter.all;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sessions = widget.sessions;
     if (sessions.isEmpty) {
       return const AppEmptyView(
         icon: Icons.assignment_outlined,
@@ -65,8 +91,37 @@ class _DashboardBody extends StatelessWidget {
       );
     }
 
-    final active = sessions.where((s) => !s.isComplete).toList();
-    final recent = sessions.where((s) => s.isComplete).toList();
+    final attention = sessions.where((s) => s.needsAttention).toList();
+
+    bool matchesQuery(InspectionSessionSummary s) {
+      if (_query.isEmpty) return true;
+      final propertyType = PropertyType.values.firstWhereOrNull(
+        (p) => p.name == s.assetTypeId,
+      );
+      final haystack = [
+        s.propertyTitle,
+        s.propertyAddress,
+        s.unitNumber,
+        propertyType?.label,
+        s.assetTypeId,
+      ].whereType<String>().join(' ').toLowerCase();
+      return haystack.contains(_query.toLowerCase());
+    }
+
+    bool matchesFilter(InspectionSessionSummary s) {
+      return switch (_filter) {
+        _DashboardFilter.all => true,
+        _DashboardFilter.inProgress => s.status == InspectionStatus.inProgress,
+        _DashboardFilter.needsReview => s.aiPendingReviewCount > 0,
+        _DashboardFilter.reportReady =>
+          s.status == InspectionStatus.aiReviewComplete,
+        _DashboardFilter.completed => s.status == InspectionStatus.reported,
+      };
+    }
+
+    final filtered = sessions.where(matchesQuery).where(matchesFilter).toList();
+    final active = filtered.where((s) => !s.isComplete).toList();
+    final recent = filtered.where((s) => s.isComplete).toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -76,6 +131,48 @@ class _DashboardBody extends StatelessWidget {
         96,
       ),
       children: [
+        TextField(
+          controller: _searchController,
+          onChanged: (value) => setState(() => _query = value),
+          decoration: InputDecoration(
+            hintText: 'Search by title, unit, address…',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          children: [
+            for (final option in _DashboardFilter.values)
+              ChoiceChip(
+                label: Text(_filterLabel(option)),
+                selected: _filter == option,
+                onSelected: (_) => setState(() => _filter = option),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (attention.isNotEmpty) ...[
+          AppSectionHeader(
+            title: 'Needs attention',
+            subtitle: '${attention.length} inspection(s)',
+          ),
+          for (final summary in attention)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: _SessionCard(summary: summary, ref: widget.ref),
+            ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         if (active.isNotEmpty) ...[
           AppSectionHeader(
             title: 'Active inspections',
@@ -84,7 +181,7 @@ class _DashboardBody extends StatelessWidget {
           for (final summary in active)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _SessionCard(summary: summary, ref: ref),
+              child: _SessionCard(summary: summary, ref: widget.ref),
             ),
           const SizedBox(height: AppSpacing.lg),
         ],
@@ -93,12 +190,30 @@ class _DashboardBody extends StatelessWidget {
           for (final summary in recent)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _SessionCard(summary: summary, ref: ref),
+              child: _SessionCard(summary: summary, ref: widget.ref),
             ),
         ],
+        if (active.isEmpty && recent.isEmpty && attention.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Text(
+              'No inspections match this search/filter.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.textMuted),
+            ),
+          ),
       ],
     );
   }
+
+  String _filterLabel(_DashboardFilter filter) => switch (filter) {
+    _DashboardFilter.all => 'All',
+    _DashboardFilter.inProgress => 'In Progress',
+    _DashboardFilter.needsReview => 'Needs Review',
+    _DashboardFilter.reportReady => 'Report Ready',
+    _DashboardFilter.completed => 'Completed',
+  };
 }
 
 class _SessionCard extends StatelessWidget {
@@ -145,9 +260,22 @@ class _SessionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      propertyType?.label ?? summary.assetTypeId,
+                      summary.propertyTitle?.isNotEmpty == true
+                          ? summary.propertyTitle!
+                          : (propertyType?.label ?? summary.assetTypeId),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    if (summary.unitNumber != null ||
+                        summary.propertyAddress != null)
+                      Text(
+                        [
+                          summary.unitNumber,
+                          summary.propertyAddress,
+                        ].whereType<String>().join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     const SizedBox(height: 4),
                     Text(
                       _formatUpdatedAt(summary.updatedAt),
@@ -174,6 +302,16 @@ class _SessionCard extends StatelessWidget {
                           dense: true,
                         ),
                         SyncStatusPill(status: summary.syncStatus, dense: true),
+                        if (summary.needsAttention)
+                          StatusPill(
+                            label: summary.aiFailedFindingsCount > 0
+                                ? '${summary.aiFailedFindingsCount} AI failed'
+                                : '${summary.aiPendingReviewCount} need review',
+                            icon: Icons.priority_high,
+                            foreground: AppColors.danger,
+                            background: AppColors.dangerBg,
+                            dense: true,
+                          ),
                       ],
                     ),
                     if (summary.aiEligibleFindingsCount > 0) ...[

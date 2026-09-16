@@ -16,6 +16,7 @@ class Report {
     required this.generatedAt,
     required this.sourceUpdatedAt,
     this.syncStatus = SyncStatus.localOnly,
+    this.version = 1,
   });
 
   final String id;
@@ -34,6 +35,13 @@ class Report {
   final DateTime sourceUpdatedAt;
 
   final SyncStatus syncStatus;
+
+  /// Incremented each time this session's report is regenerated —
+  /// starts at 1. Surfaced to the inspector ("v2", "v3", ...) so
+  /// regenerating after inspection data changed is visibly a new
+  /// version, never a silent overwrite. See
+  /// `docs/home_inspection_product_flow.md` ("Report versioning").
+  final int version;
 
   /// Whether the inspection has changed since this report was
   /// generated — i.e. this report should be regenerated before being
