@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/remote/remote_providers.dart';
 import '../../../auth/presentation/sign_in_screen.dart';
@@ -11,14 +12,9 @@ import '../../providers/active_session_providers.dart';
 import '../../providers/session_list_providers.dart';
 import 'property_type_selection_screen.dart';
 
-/// Lists locally-saved Home Inspection sessions so the inspector can
-/// resume an unfinished one or start a new inspection. This is the
-/// minimal "home screen" Phase 4 needs to make resume behavior usable
-/// and testable — not a full dashboard.
-///
-/// Phase 5 adds a minimal sign-in affordance and a per-session sync
-/// status/"Sync now" action. Neither is required to use the app —
-/// sessions save and work fully offline either way.
+/// ProDefact's dashboard: active/recent inspection cards, a strong
+/// "New Inspection" call to action, and a minimal sign-in affordance.
+/// Sessions save and work fully offline — sign-in only unlocks sync.
 class InspectionSessionsScreen extends ConsumerWidget {
   const InspectionSessionsScreen({super.key});
 
@@ -31,68 +27,18 @@ class InspectionSessionsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Home Inspections'),
+        title: const Text('Inspections'),
         actions: [_AuthAction(authState: authState)],
       ),
-      body: summaries.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) =>
-            Center(child: Text('Could not load saved inspections: $error')),
-        data: (sessions) => sessions.isEmpty
-            ? const Center(child: Text('No saved inspections yet.'))
-            : ListView.builder(
-                itemCount: sessions.length,
-                itemBuilder: (context, index) {
-                  final summary = sessions[index];
-                  final propertyTypeLabel = PropertyType.values
-                      .firstWhereOrNull((p) => p.name == summary.assetTypeId)
-                      ?.label;
-                  final canSync =
-                      authState.value != null &&
-                      (summary.ownerUid == null ||
-                          summary.ownerUid == authState.value!.uid);
-                  return ListTile(
-                    title: Text(propertyTypeLabel ?? summary.assetTypeId),
-                    subtitle: Text(_formatUpdatedAt(summary.updatedAt)),
-                    leading: _SyncStatusIcon(status: summary.syncStatus),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Chip(
-                          label: Text(
-                            summary.isComplete ? 'Completed' : 'Unfinished',
-                          ),
-                          backgroundColor:
-                              (summary.isComplete
-                                      ? Colors.green
-                                      : Colors.orange)
-                                  .withValues(alpha: 0.15),
-                        ),
-                        IconButton(
-                          tooltip: canSync
-                              ? 'Sync now'
-                              : 'Sign in to sync this inspection',
-                          icon: const Icon(Icons.cloud_sync_outlined),
-                          onPressed: canSync
-                              ? () => _syncOne(context, ref, summary.id)
-                              : null,
-                        ),
-                        IconButton(
-                          tooltip: 'Delete inspection',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _confirmDelete(
-                            context,
-                            ref,
-                            summary.id,
-                            propertyTypeLabel ?? summary.assetTypeId,
-                          ),
-                        ),
-                      ],
-                    ),
-                    onTap: () => _resume(context, ref, summary.id),
-                  );
-                },
-              ),
+      body: SafeArea(
+        child: summaries.when(
+          loading: () => const AppLoadingView(message: 'Loading inspections…'),
+          error: (error, stackTrace) => AppErrorView(
+            message: 'Could not load saved inspections.',
+            onRetry: () => ref.invalidate(sessionSummariesProvider),
+          ),
+          data: (sessions) => _DashboardBody(sessions: sessions, ref: ref),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(PropertyTypeSelectionScreen.routePath),
@@ -101,15 +47,165 @@ class InspectionSessionsScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  Future<void> _resume(
-    BuildContext context,
-    WidgetRef ref,
-    String sessionId,
-  ) async {
+class _DashboardBody extends StatelessWidget {
+  const _DashboardBody({required this.sessions, required this.ref});
+
+  final List<InspectionSessionSummary> sessions;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    if (sessions.isEmpty) {
+      return const AppEmptyView(
+        icon: Icons.assignment_outlined,
+        title: 'No saved inspections yet.',
+        message: 'Tap "New Inspection" below to get started.',
+      );
+    }
+
+    final active = sessions.where((s) => !s.isComplete).toList();
+    final recent = sessions.where((s) => s.isComplete).toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        96,
+      ),
+      children: [
+        if (active.isNotEmpty) ...[
+          AppSectionHeader(
+            title: 'Active inspections',
+            subtitle: '${active.length} in progress',
+          ),
+          for (final summary in active)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: _SessionCard(summary: summary, ref: ref),
+            ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+        if (recent.isNotEmpty) ...[
+          const AppSectionHeader(title: 'Completed'),
+          for (final summary in recent)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: _SessionCard(summary: summary, ref: ref),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({required this.summary, required this.ref});
+
+  final InspectionSessionSummary summary;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final propertyType = PropertyType.values.firstWhereOrNull(
+      (p) => p.name == summary.assetTypeId,
+    );
+    final authState = ref.watch(authStateProvider);
+    final canSync =
+        authState.value != null &&
+        (summary.ownerUid == null || summary.ownerUid == authState.value!.uid);
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => _resume(context, ref),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(
+                  propertyType == PropertyType.highRise
+                      ? Icons.apartment_outlined
+                      : Icons.house_outlined,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      propertyType?.label ?? summary.assetTypeId,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatUpdatedAt(summary.updatedAt),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        StatusPill(
+                          label: summary.isComplete
+                              ? 'Completed'
+                              : 'Unfinished',
+                          icon: summary.isComplete
+                              ? Icons.check_circle_outline
+                              : Icons.pending_outlined,
+                          foreground: summary.isComplete
+                              ? AppColors.success
+                              : AppColors.warning,
+                          background: summary.isComplete
+                              ? AppColors.successBg
+                              : AppColors.warningBg,
+                          dense: true,
+                        ),
+                        SyncStatusPill(status: summary.syncStatus, dense: true),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: canSync
+                    ? 'Sync now'
+                    : 'Sign in to sync this inspection',
+                icon: const Icon(Icons.cloud_sync_outlined),
+                onPressed: canSync ? () => _syncOne(context, ref) : null,
+              ),
+              IconButton(
+                tooltip: 'Delete inspection',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _confirmDelete(
+                  context,
+                  ref,
+                  propertyType?.label ?? summary.assetTypeId,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resume(BuildContext context, WidgetRef ref) async {
     final resumed = await ref
         .read(activeSessionProvider.notifier)
-        .resume(sessionId);
+        .resume(summary.id);
     if (!context.mounted) return;
     if (!resumed) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,14 +218,10 @@ class InspectionSessionsScreen extends ConsumerWidget {
     context.push('/home-inspection/inspection');
   }
 
-  Future<void> _syncOne(
-    BuildContext context,
-    WidgetRef ref,
-    String sessionId,
-  ) async {
+  Future<void> _syncOne(BuildContext context, WidgetRef ref) async {
     final result = await ref
         .read(syncCoordinatorProvider)
-        .syncSession(sessionId);
+        .syncSession(summary.id);
     ref.invalidate(sessionSummariesProvider);
     if (!context.mounted) return;
     final message = result.isSuccess
@@ -142,7 +234,6 @@ class InspectionSessionsScreen extends ConsumerWidget {
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
-    String sessionId,
     String label,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -167,7 +258,7 @@ class InspectionSessionsScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    await ref.read(activeSessionProvider.notifier).deleteSession(sessionId);
+    await ref.read(activeSessionProvider.notifier).deleteSession(summary.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Inspection deleted.')));
@@ -200,38 +291,6 @@ class _AuthAction extends ConsumerWidget {
       tooltip: 'Signed in as ${user.email ?? user.uid} — Sign out',
       icon: const Icon(Icons.logout),
       onPressed: () => ref.read(authServiceProvider).signOut(),
-    );
-  }
-}
-
-class _SyncStatusIcon extends StatelessWidget {
-  const _SyncStatusIcon({required this.status});
-
-  final SyncStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, tooltip, color) = switch (status) {
-      SyncStatus.localOnly => (
-        Icons.cloud_off_outlined,
-        'Local only',
-        Colors.grey,
-      ),
-      SyncStatus.pendingCreate || SyncStatus.pendingUpdate => (
-        Icons.cloud_sync_outlined,
-        'Sync pending',
-        Colors.orange,
-      ),
-      SyncStatus.pendingDelete => (
-        Icons.cloud_sync_outlined,
-        'Delete pending',
-        Colors.orange,
-      ),
-      SyncStatus.synced => (Icons.cloud_done_outlined, 'Synced', Colors.green),
-    };
-    return Tooltip(
-      message: tooltip,
-      child: Icon(icon, color: color),
     );
   }
 }

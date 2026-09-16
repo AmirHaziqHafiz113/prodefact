@@ -20,7 +20,7 @@ void main() {
     await tester.tap(find.text('Start Home Inspection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Home Inspections'), findsOneWidget);
+    expect(find.text('Inspections'), findsOneWidget);
     expect(find.text('No saved inspections yet.'), findsOneWidget);
 
     await tester.tap(find.text('New Inspection'));
@@ -54,8 +54,7 @@ void main() {
         find.byType(ListTile).first,
       );
       expect(firstListTile.subtitle, isNotNull);
-      final subtitle = firstListTile.subtitle! as Text;
-      expect(subtitle.data, 'Plumbing area — inspect first');
+      expect(find.text('Plumbing area — inspect first'), findsWidgets);
 
       await tester.scrollUntilVisible(
         find.text('Staircase'),

@@ -89,6 +89,15 @@ void main() {
       final session = container.read(activeSessionProvider)!;
       expect(session.aiSuggestions, hasLength(1));
 
+      await tester.scrollUntilVisible(
+        _within(find.text('Accept')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      // The bottom nav bar floats over the tail of the scrollable body
+      // — nudge further so the button clears it before tapping.
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
+      await tester.pumpAndSettle();
       await tester.tap(_within(find.text('Accept')));
       await tester.pumpAndSettle();
 

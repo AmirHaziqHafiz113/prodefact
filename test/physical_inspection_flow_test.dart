@@ -16,12 +16,14 @@ import 'support/test_repository.dart';
 Finder _within(Finder matching) =>
     find.descendant(of: find.byType(Scaffold).last, matching: matching);
 
+// The add/edit finding UI is a modal bottom sheet (not an AlertDialog)
+// — see finding_dialog.dart.
 Finder _dialogTextFieldAt(int index) => find
-    .descendant(of: find.byType(AlertDialog), matching: find.byType(TextField))
+    .descendant(of: find.byType(BottomSheet), matching: find.byType(TextField))
     .at(index);
 
 Finder _dialogButton(String label) =>
-    find.descendant(of: find.byType(AlertDialog), matching: find.text(label));
+    find.descendant(of: find.byType(BottomSheet), matching: find.text(label));
 
 Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   final container = ProviderContainer(overrides: testOverrides());
@@ -108,6 +110,14 @@ void main() {
       await tester.tap(_within(find.text(firstAreaName)));
       await tester.pumpAndSettle();
 
+      // The area screen's overview (stats, status control, element
+      // grid) now takes more vertical space than the findings list
+      // below it — scroll to reveal it, as with any long screen.
+      await tester.scrollUntilVisible(
+        _within(find.text('Cracked tile')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(_within(find.text('Cracked tile')), findsOneWidget);
     },
   );

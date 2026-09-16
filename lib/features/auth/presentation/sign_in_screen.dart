@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/design_system.dart';
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../data/remote/remote_providers.dart';
 
@@ -36,59 +37,100 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(_isSignUp ? 'Create account' : 'Sign in')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!firebaseReady)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  'Cloud sync isn\'t configured for this build yet, so '
-                  'sign-in is unavailable. Inspections still save and work '
-                  'fully offline.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: const Icon(
+                      Icons.cloud_sync_outlined,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    _isSignUp ? 'Create your account' : 'Welcome back',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Sign in to sync inspections across devices. Everything '
+                    'still works fully offline without an account.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  if (!firebaseReady)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      child: AppInlineWarningBanner(
+                        message:
+                            'Cloud sync isn\'t configured for this '
+                            'build yet, so sign-in is unavailable.',
+                      ),
+                    ),
+                  TextField(
+                    controller: _emailController,
+                    enabled: firebaseReady && !_isSubmitting,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.mail_outline),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _passwordController,
+                    enabled: firebaseReady && !_isSubmitting,
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                    obscureText: true,
+                  ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppInlineErrorBanner(message: _errorMessage!),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+                  FilledButton(
+                    onPressed: firebaseReady && !_isSubmitting ? _submit : null,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          )
+                        : Text(_isSignUp ? 'Create account' : 'Sign in'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  TextButton(
+                    onPressed: firebaseReady && !_isSubmitting
+                        ? () => setState(() => _isSignUp = !_isSignUp)
+                        : null,
+                    child: Text(
+                      _isSignUp
+                          ? 'Already have an account? Sign in'
+                          : 'New here? Create an account',
+                    ),
+                  ),
+                ],
               ),
-            TextField(
-              controller: _emailController,
-              enabled: firebaseReady && !_isSubmitting,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              enabled: firebaseReady && !_isSubmitting,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: firebaseReady && !_isSubmitting ? _submit : null,
-              child: Text(_isSignUp ? 'Create account' : 'Sign in'),
-            ),
-            TextButton(
-              onPressed: firebaseReady && !_isSubmitting
-                  ? () => setState(() => _isSignUp = !_isSignUp)
-                  : null,
-              child: Text(
-                _isSignUp
-                    ? 'Already have an account? Sign in'
-                    : 'New here? Create an account',
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

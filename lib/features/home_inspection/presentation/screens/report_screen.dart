@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 
@@ -32,7 +33,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     if (session == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Report')),
-        body: const Center(child: Text('No active inspection.')),
+        body: const AppEmptyView(
+          icon: Icons.error_outline,
+          title: 'No active inspection.',
+        ),
       );
     }
 
@@ -44,27 +48,25 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       body: Column(
         children: [
           if (_errorMessage != null)
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.errorContainer,
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Report generation failed: $_errorMessage',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
+            AppInlineErrorBanner(
+              message: 'Report generation failed: $_errorMessage',
+              onDismiss: () => setState(() => _errorMessage = null),
             ),
           if (isStale)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.withValues(alpha: 0.15),
-              padding: const EdgeInsets.all(12),
-              child: const Text(
-                'Inspection data has changed since this report was '
-                'generated. Regenerate for an up-to-date report.',
-              ),
+            const AppInlineWarningBanner(
+              message:
+                  'Inspection data has changed since this report was '
+                  'generated. Regenerate for an up-to-date report.',
             ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
+            child: _ReadinessCard(session: session, report: report),
+          ),
           Expanded(
             child: report == null
                 ? _NotGeneratedView(
@@ -114,6 +116,107 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   }
 }
 
+class _ReadinessCard extends StatelessWidget {
+  const _ReadinessCard({required this.session, required this.report});
+
+  final InspectionSession session;
+  final Report? report;
+
+  @override
+  Widget build(BuildContext context) {
+    final areaCount = session.sections.where((s) => s.isIncluded).length;
+    final findingCount = session.findings.length;
+    final photoCount = session.findings.fold<int>(
+      0,
+      (sum, f) => sum + f.evidence.length,
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _ReadinessStat(
+                    icon: Icons.map_outlined,
+                    value: '$areaCount',
+                    label: 'Areas',
+                  ),
+                ),
+                Expanded(
+                  child: _ReadinessStat(
+                    icon: Icons.report_gmailerrorred_outlined,
+                    value: '$findingCount',
+                    label: 'Findings',
+                  ),
+                ),
+                Expanded(
+                  child: _ReadinessStat(
+                    icon: Icons.photo_camera_outlined,
+                    value: '$photoCount',
+                    label: 'Photos',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            report == null
+                ? const StatusPill(
+                    label: 'Not generated',
+                    icon: Icons.description_outlined,
+                    foreground: AppColors.textSecondary,
+                    background: AppColors.neutralBg,
+                    dense: true,
+                  )
+                : StatusPill(
+                    label:
+                        'Generated ${_formatGeneratedAt(report!.generatedAt)}',
+                    icon: Icons.check_circle_outline,
+                    foreground: AppColors.success,
+                    background: AppColors.successBg,
+                    dense: true,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatGeneratedAt(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)}';
+  }
+}
+
+class _ReadinessStat extends StatelessWidget {
+  const _ReadinessStat({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(height: 4),
+        Text(value, style: Theme.of(context).textTheme.titleSmall),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+  }
+}
+
 class _NotGeneratedView extends StatelessWidget {
   const _NotGeneratedView({
     required this.isGenerating,
@@ -127,16 +230,30 @@ class _NotGeneratedView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.description_outlined,
+                size: 30,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
             const Text(
               'AI review is complete. Generate the Home Inspection '
               'report using the inspector-approved findings.',
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             FilledButton(
               onPressed: isGenerating ? null : onGenerate,
               child: isGenerating
@@ -186,7 +303,7 @@ class _ReportReadyView extends StatelessWidget {
         ),
         SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Row(
               children: [
                 Expanded(
@@ -201,7 +318,7 @@ class _ReportReadyView extends StatelessWidget {
                         : const Text('Regenerate'),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: FilledButton(
                     onPressed: onShare,

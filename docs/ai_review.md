@@ -220,28 +220,24 @@ production AI. It:
   (`lib/data/ai/ai_providers.dart`) — swapping in a real backend later
   is an override of that one provider, not a rework of anything else.
 
-## Production backend gateway design (future)
+## Production backend gateway (implemented, Phase 9)
 
-```
-Flutter (AiInspectionService.analyze)
-  -> authenticated HTTPS callable Cloud Function / Cloud Run endpoint
-       - verifies the caller's Firebase ID token
-       - validates the request against the AiAnalysisRequest shape
-       - rate-limits per user
-       - selects and calls the actual AI provider (OpenAI/Gemini/etc.)
-       - validates the provider's raw response against AiAnalysisResponse
-         before returning anything to the client
-       - logs/monitors the call (latency, provider errors, token/cost)
-  -> Flutter parses the typed AiAnalysisResponse and persists it exactly
-     the same way the fake's response is persisted today
-```
+The design once described here as "future" is now live:
+`FirebaseAiInspectionService` (`lib/data/ai/firebase_ai_inspection_service.dart`)
+calls the `analyzeInspection` Firebase callable function
+(`functions/src/index.ts`, region `asia-southeast1`), which depends on a
+provider-neutral gateway (`functions/src/ai/`) currently backed by
+DeepSeek. Full detail — request/response contract, provider swap
+process, secret handling, cost/abuse protections — lives in
+`docs/ai_provider_architecture.md`; this section only covers how it
+plugs into the Flutter-side flow described above.
 
-The backend owns: the provider API key, request validation, auth
-enforcement, rate limiting, logging/monitoring, provider selection, and
-structured-response validation. **No provider secret is ever present in
-the Flutter app** — `test/architecture/repository_boundary_test.dart`
-scans `lib/` for common provider key shapes (`sk-...`, `AIzaSy...`, a
-hardcoded `*_API_KEY` assignment) and fails the build if one appears.
+`aiInspectionServiceProvider` (`lib/data/ai/ai_providers.dart`) selects
+`FirebaseAiInspectionService` when Firebase is configured and falls
+back to `FakeAiInspectionService` otherwise — the same
+"local-first, Firebase optional" pattern used everywhere else in the
+app. Nothing about the AI timing rule, the gate, or the
+accept/edit/reject review flow changes based on which one is active.
 
 ## Future provider interchangeability
 

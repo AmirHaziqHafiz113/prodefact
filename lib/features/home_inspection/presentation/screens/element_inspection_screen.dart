@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
@@ -32,8 +33,9 @@ class ElementInspectionScreen extends ConsumerWidget {
     if (section == null || element == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Element')),
-        body: const Center(
-          child: Text('This element is no longer configured.'),
+        body: const AppEmptyView(
+          icon: Icons.error_outline,
+          title: 'This element is no longer configured.',
         ),
       );
     }
@@ -46,71 +48,72 @@ class ElementInspectionScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text('${section.name} · ${element.name}')),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
         children: [
-          ListTile(
-            title: const Text('Finding for this element'),
-            subtitle: const Text('Not tied to a specific component'),
-            trailing: FilledButton(
-              onPressed: () => showFindingDialog(
-                context: context,
-                ref: ref,
-                sectionId: sectionId,
-                elementId: elementId,
-              ),
-              child: const Text('Add'),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Components',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          for (final component in element.components)
-            ListTile(
-              title: Text(component.name),
-              trailing: OutlinedButton(
+          Card(
+            child: ListTile(
+              title: const Text('Finding for this element'),
+              subtitle: const Text('Not tied to a specific component'),
+              trailing: FilledButton(
                 onPressed: () => showFindingDialog(
                   context: context,
                   ref: ref,
                   sectionId: sectionId,
                   elementId: elementId,
-                  componentId: component.id,
                 ),
-                child: const Text('Add finding'),
-              ),
-            ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Findings recorded so far',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                child: const Text('Add'),
               ),
             ),
           ),
+          if (element.components.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            const AppSectionHeader(title: 'Components'),
+            for (final component in element.components)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Card(
+                  child: ListTile(
+                    title: Text(component.name),
+                    trailing: OutlinedButton(
+                      onPressed: () => showFindingDialog(
+                        context: context,
+                        ref: ref,
+                        sectionId: sectionId,
+                        elementId: elementId,
+                        componentId: component.id,
+                      ),
+                      child: const Text('Add finding'),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          const AppSectionHeader(title: 'Findings recorded so far'),
           if (elementFindings.isEmpty)
             const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               child: Text('No findings recorded yet.'),
             )
           else
             for (final finding in elementFindings)
-              _FindingTile(element: element, finding: finding),
-          const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _FindingCard(element: element, finding: finding),
+              ),
         ],
       ),
     );
   }
 }
 
-class _FindingTile extends ConsumerWidget {
-  const _FindingTile({required this.element, required this.finding});
+class _FindingCard extends ConsumerWidget {
+  const _FindingCard({required this.element, required this.finding});
 
   final InspectionElement element;
   final Finding finding;
@@ -121,38 +124,40 @@ class _FindingTile extends ConsumerWidget {
       (c) => c.id == finding.componentId,
     );
 
-    return ListTile(
-      title: Text(
-        finding.description?.isNotEmpty == true
-            ? finding.description!
-            : '(No description)',
-      ),
-      subtitle: Text(
-        [
-          component?.name ?? 'Element only',
-          '${finding.evidence.length} photo(s)',
-        ].join(' · '),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Edit',
-            icon: const Icon(Icons.edit),
-            onPressed: () => showFindingDialog(
-              context: context,
-              ref: ref,
-              existing: finding,
+    return Card(
+      child: ListTile(
+        title: Text(
+          finding.description?.isNotEmpty == true
+              ? finding.description!
+              : '(No description)',
+        ),
+        subtitle: Text(
+          [
+            component?.name ?? 'Element only',
+            '${finding.evidence.length} photo(s)',
+          ].join(' · '),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Edit',
+              icon: const Icon(Icons.edit),
+              onPressed: () => showFindingDialog(
+                context: context,
+                ref: ref,
+                existing: finding,
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => ref
-                .read(inspectionFindingsProvider.notifier)
-                .removeFinding(finding.id),
-          ),
-        ],
+            IconButton(
+              tooltip: 'Remove',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => ref
+                  .read(inspectionFindingsProvider.notifier)
+                  .removeFinding(finding.id),
+            ),
+          ],
+        ),
       ),
     );
   }

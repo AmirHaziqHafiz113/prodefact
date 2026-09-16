@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/home_inspection_providers.dart';
 
@@ -18,6 +19,10 @@ class AreaConfigurationScreen extends ConsumerWidget {
     final propertyType = ref.watch(selectedPropertyTypeProvider);
     final sections = ref.watch(configuredAreasProvider);
     final notifier = ref.read(configuredAreasProvider.notifier);
+    final includedCount = sections.where((s) => s.isIncluded).length;
+    final plumbingCount = sections
+        .where((s) => s.isIncluded && s.isPlumbing)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -35,22 +40,71 @@ class AreaConfigurationScreen extends ConsumerWidget {
         ],
       ),
       body: sections.isEmpty
-          ? const Center(child: Text('No property type selected.'))
-          : ListView.builder(
-              itemCount: sections.length,
-              itemBuilder: (context, index) {
-                final section = sections[index];
-                return _AreaTile(
-                  section: section,
-                  onToggleIncluded: () => notifier.toggleIncluded(section.id),
-                  onRename: () => _showRenameDialog(context, notifier, section),
-                  onRemove: () => notifier.remove(section.id),
-                );
-              },
+          ? const AppEmptyView(
+              icon: Icons.home_work_outlined,
+              title: 'No property type selected.',
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: StatusPill(
+                          label:
+                              '$includedCount of ${sections.length} '
+                              'areas selected',
+                          icon: Icons.check_circle_outline,
+                          foreground: AppColors.primary,
+                          background: AppColors.primary.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      if (plumbingCount > 0)
+                        StatusPill(
+                          label: '$plumbingCount plumbing-first',
+                          icon: Icons.plumbing_outlined,
+                          foreground: AppColors.plumbing,
+                          background: AppColors.plumbingBg,
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      0,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                    ),
+                    itemCount: sections.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      final section = sections[index];
+                      return _AreaCard(
+                        section: section,
+                        onToggleIncluded: () =>
+                            notifier.toggleIncluded(section.id),
+                        onRename: () =>
+                            _showRenameDialog(context, notifier, section),
+                        onRemove: () => notifier.remove(section.id),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
               Expanded(
@@ -62,7 +116,7 @@ class AreaConfigurationScreen extends ConsumerWidget {
                   label: const Text('Add area'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: FilledButton(
                   onPressed: sections.any((s) => s.isIncluded)
@@ -142,8 +196,8 @@ class AreaConfigurationScreen extends ConsumerWidget {
   }
 }
 
-class _AreaTile extends StatelessWidget {
-  const _AreaTile({
+class _AreaCard extends StatelessWidget {
+  const _AreaCard({
     required this.section,
     required this.onToggleIncluded,
     required this.onRename,
@@ -157,34 +211,51 @@ class _AreaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(
-        section.name,
-        style: section.isIncluded
-            ? null
-            : TextStyle(color: Theme.of(context).disabledColor),
-      ),
-      subtitle: section.isPlumbing
-          ? const Text('Plumbing area — inspect first')
-          : null,
-      leading: Switch(
-        value: section.isIncluded,
-        onChanged: (_) => onToggleIncluded(),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Rename',
-            icon: const Icon(Icons.edit),
-            onPressed: onRename,
-          ),
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: onRemove,
-          ),
-        ],
+    return Card(
+      color: section.isIncluded ? null : AppColors.surfaceAlt,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 2,
+        ),
+        title: Text(
+          section.name,
+          style: section.isIncluded
+              ? Theme.of(context).textTheme.titleMedium
+              : Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(color: AppColors.textMuted),
+        ),
+        subtitle: section.isPlumbing
+            ? const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: StatusPill(
+                  label: 'Plumbing area — inspect first',
+                  icon: Icons.plumbing_outlined,
+                  foreground: AppColors.plumbing,
+                  background: AppColors.plumbingBg,
+                  dense: true,
+                ),
+              )
+            : null,
+        leading: Switch(
+          value: section.isIncluded,
+          onChanged: (_) => onToggleIncluded(),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Rename',
+              icon: const Icon(Icons.edit),
+              onPressed: onRename,
+            ),
+            IconButton(
+              tooltip: 'Remove',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: onRemove,
+            ),
+          ],
+        ),
       ),
     );
   }

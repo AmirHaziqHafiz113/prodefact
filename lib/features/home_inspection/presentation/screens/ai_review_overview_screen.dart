@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
@@ -23,7 +24,10 @@ class AiReviewOverviewScreen extends ConsumerWidget {
     if (session == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('AI Review')),
-        body: const Center(child: Text('No active inspection.')),
+        body: const AppEmptyView(
+          icon: Icons.error_outline,
+          title: 'No active inspection.',
+        ),
       );
     }
 
@@ -31,46 +35,103 @@ class AiReviewOverviewScreen extends ConsumerWidget {
     final pendingCount = suggestions
         .where((s) => s.status == AiSuggestionStatus.pending)
         .length;
+    final acceptedCount = suggestions
+        .where((s) => s.status == AiSuggestionStatus.accepted)
+        .length;
+    final editedCount = suggestions
+        .where((s) => s.status == AiSuggestionStatus.edited)
+        .length;
+    final rejectedCount = suggestions
+        .where((s) => s.status == AiSuggestionStatus.rejected)
+        .length;
     final reviewedCount = suggestions.length - pendingCount;
     final canContinue = session.aiReviewState == AiReviewState.completed;
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Review')),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          96,
+        ),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: _StatusPanel(session: session),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: _StatusPanel(session: session),
+            ),
           ),
           if (suggestions.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${suggestions.length} suggestion(s) · $pendingCount pending · '
-                    '$reviewedCount reviewed',
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: suggestions.isEmpty
-                        ? 0
-                        : reviewedCount / suggestions.length,
-                  ),
-                ],
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppProgressBar(
+                      value: suggestions.isEmpty
+                          ? 0
+                          : reviewedCount / suggestions.length,
+                      label: 'Review progress',
+                      valueLabel: '$reviewedCount of ${suggestions.length}',
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        StatusPill(
+                          label: '$pendingCount pending',
+                          icon: Icons.hourglass_empty,
+                          foreground: AppColors.warning,
+                          background: AppColors.warningBg,
+                          dense: true,
+                        ),
+                        StatusPill(
+                          label: '$acceptedCount accepted',
+                          icon: Icons.check_circle_outline,
+                          foreground: AppColors.success,
+                          background: AppColors.successBg,
+                          dense: true,
+                        ),
+                        StatusPill(
+                          label: '$editedCount edited',
+                          icon: Icons.edit_outlined,
+                          foreground: AppColors.info,
+                          background: AppColors.infoBg,
+                          dense: true,
+                        ),
+                        StatusPill(
+                          label: '$rejectedCount rejected',
+                          icon: Icons.cancel_outlined,
+                          foreground: AppColors.danger,
+                          background: AppColors.dangerBg,
+                          dense: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.lg),
             for (final suggestion in suggestions)
-              _SuggestionCard(session: session, suggestion: suggestion),
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: _SuggestionCard(
+                  session: session,
+                  suggestion: suggestion,
+                ),
+              ),
           ],
-          const SizedBox(height: 24),
         ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: FilledButton(
             onPressed: canContinue
                 ? () => context.push('/home-inspection/report')
@@ -95,12 +156,21 @@ class _StatusPanel extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Physical inspection is complete. Findings and photos can '
-              'now be analyzed — AI never looks at photos before this '
-              'point.',
+            Row(
+              children: [
+                const Icon(Icons.smart_toy_outlined, color: AppColors.primary),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Physical inspection is complete. Findings and photos '
+                    'can now be analyzed — AI never looks at photos before '
+                    'this point.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
             FilledButton(
               onPressed: () => _runAnalysis(context, ref),
               child: const Text('Start AI Analysis'),
@@ -115,7 +185,7 @@ class _StatusPanel extends ConsumerWidget {
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 12),
+            SizedBox(width: AppSpacing.md),
             Text('Analyzing findings…'),
           ],
         );
@@ -123,12 +193,20 @@ class _StatusPanel extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'AI analysis failed. Your physical inspection data is safe '
-              'and unaffected — you can retry.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            Row(
+              children: [
+                const Icon(Icons.error_outline, color: AppColors.danger),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'AI analysis failed. Your physical inspection data is '
+                    'safe and unaffected — you can retry.',
+                    style: const TextStyle(color: AppColors.danger),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
             FilledButton(
               onPressed: () => _runAnalysis(context, ref),
               child: const Text('Retry AI Analysis'),
@@ -138,8 +216,16 @@ class _StatusPanel extends ConsumerWidget {
       case AiReviewState.readyForReview:
         return const Text('Review each AI suggestion below.');
       case AiReviewState.completed:
-        return const Text(
-          'AI review is complete. You may continue to the report.',
+        return Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: AppColors.success),
+            const SizedBox(width: AppSpacing.sm),
+            const Expanded(
+              child: Text(
+                'AI review is complete. You may continue to the report.',
+              ),
+            ),
+          ],
         );
     }
   }
@@ -182,9 +268,8 @@ class _SuggestionCard extends ConsumerWidget {
     );
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -197,48 +282,73 @@ class _SuggestionCard extends ConsumerWidget {
                       element?.name,
                       component?.name,
                     ].whereType<String>().join(' / '),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 _StatusChip(status: suggestion.status),
               ],
             ),
-            if (finding?.description?.isNotEmpty == true) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Inspector finding: ${finding!.description}',
-                style: Theme.of(context).textTheme.bodySmall,
+            const SizedBox(height: AppSpacing.md),
+            _AttributedBlock(
+              label: 'Inspector finding',
+              icon: Icons.person_outline,
+              color: AppColors.textSecondary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    finding?.description?.isNotEmpty == true
+                        ? finding!.description!
+                        : '(No description)',
+                  ),
+                  if (finding != null && finding.evidence.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${finding.evidence.length} photo(s) attached.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
               ),
-            ],
-            if (finding != null && finding.evidence.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                '${finding.evidence.length} photo(s) attached.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            const Divider(),
-            Text(
-              'AI suggests: ${suggestion.suggestedDefectType ?? '(no defect type)'}',
             ),
-            if (suggestion.suggestedRecommendation != null)
-              Text(suggestion.suggestedRecommendation!),
-            if (suggestion.suggestedNotes != null)
-              Text(
-                suggestion.suggestedNotes!,
-                style: Theme.of(context).textTheme.bodySmall,
+            const SizedBox(height: AppSpacing.sm),
+            _AttributedBlock(
+              label: 'AI suggestion (advisory)',
+              icon: Icons.smart_toy_outlined,
+              color: AppColors.info,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(suggestion.suggestedDefectType ?? '(no defect type)'),
+                  if (suggestion.suggestedRecommendation != null)
+                    Text(suggestion.suggestedRecommendation!),
+                  if (suggestion.suggestedNotes != null)
+                    Text(
+                      suggestion.suggestedNotes!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
               ),
+            ),
             if (suggestion.isResolved) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Final: ${suggestion.finalDefectType?.isNotEmpty == true ? suggestion.finalDefectType : '(none)'}',
-                style: const TextStyle(fontStyle: FontStyle.italic),
+              const SizedBox(height: AppSpacing.sm),
+              _AttributedBlock(
+                label: 'Inspector final decision',
+                icon: Icons.fact_check_outlined,
+                color: AppColors.success,
+                child: Text(
+                  suggestion.finalDefectType?.isNotEmpty == true
+                      ? suggestion.finalDefectType!
+                      : '(none)',
+                ),
               ),
             ],
-            const SizedBox(height: 8),
-            if (!suggestion.isResolved)
+            if (!suggestion.isResolved) ...[
+              const SizedBox(height: AppSpacing.md),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
                 children: [
                   FilledButton(
                     onPressed: () => ref
@@ -272,8 +382,61 @@ class _SuggestionCard extends ConsumerWidget {
                   ),
                 ],
               ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Visually attributes a block of text to who/what produced it —
+/// inspector, AI, or the inspector's final decision — so the three
+/// never blur together.
+class _AttributedBlock extends StatelessWidget {
+  const _AttributedBlock({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.child,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border(left: BorderSide(color: color, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          child,
+        ],
       ),
     );
   }
@@ -286,16 +449,32 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      AiSuggestionStatus.pending => ('Pending', Colors.orange),
-      AiSuggestionStatus.accepted => ('Accepted', Colors.green),
-      AiSuggestionStatus.edited => ('Edited', Colors.blue),
-      AiSuggestionStatus.rejected => ('Rejected', Colors.red),
+    final (label, icon, fg, bg) = switch (status) {
+      AiSuggestionStatus.pending => (
+        'Pending',
+        Icons.hourglass_empty,
+        AppColors.warning,
+        AppColors.warningBg,
+      ),
+      AiSuggestionStatus.accepted => (
+        'Accepted',
+        Icons.check_circle_outline,
+        AppColors.success,
+        AppColors.successBg,
+      ),
+      AiSuggestionStatus.edited => (
+        'Edited',
+        Icons.edit_outlined,
+        AppColors.info,
+        AppColors.infoBg,
+      ),
+      AiSuggestionStatus.rejected => (
+        'Rejected',
+        Icons.cancel_outlined,
+        AppColors.danger,
+        AppColors.dangerBg,
+      ),
     };
-    return Chip(
-      label: Text(label),
-      backgroundColor: color.withValues(alpha: 0.15),
-      side: BorderSide(color: color),
-    );
+    return StatusPill(label: label, icon: icon, foreground: fg, background: bg);
   }
 }

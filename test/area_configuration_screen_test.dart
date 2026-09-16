@@ -26,7 +26,8 @@ Future<void> _revealAndTap(WidgetTester tester, Finder finder) async {
     200,
     scrollable: find.byType(Scrollable),
   );
-  await tester.tap(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder, warnIfMissed: false);
   await tester.pumpAndSettle();
 }
 

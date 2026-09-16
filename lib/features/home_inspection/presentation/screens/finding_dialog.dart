@@ -4,17 +4,18 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
 
-/// Shows the add/edit finding dialog. Pass [sectionId] and [elementId]
+/// Shows the add/edit finding sheet. Pass [sectionId] and [elementId]
 /// (and, optionally, [componentId]) to add a new finding; pass
 /// [existing] to edit one — its description/notes are pre-filled and
 /// its area/element/component references are left untouched.
 ///
 /// Evidence (photos) can only be attached once a finding already exists
-/// — the "Add finding" dialog saves description/notes first; reopen the
+/// — the "Add finding" sheet saves description/notes first; reopen the
 /// finding via "Edit" to attach or remove photos.
 Future<void> showFindingDialog({
   required BuildContext context,
@@ -29,9 +30,11 @@ Future<void> showFindingDialog({
     'sectionId and elementId are required when adding a new finding',
   );
 
-  await showDialog<void>(
+  await showModalBottomSheet<void>(
     context: context,
-    builder: (_) => _FindingDialog(
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _FindingSheet(
       sectionId: sectionId,
       elementId: elementId,
       componentId: componentId,
@@ -40,8 +43,8 @@ Future<void> showFindingDialog({
   );
 }
 
-class _FindingDialog extends ConsumerStatefulWidget {
-  const _FindingDialog({
+class _FindingSheet extends ConsumerStatefulWidget {
+  const _FindingSheet({
     this.sectionId,
     this.elementId,
     this.componentId,
@@ -54,10 +57,10 @@ class _FindingDialog extends ConsumerStatefulWidget {
   final Finding? existing;
 
   @override
-  ConsumerState<_FindingDialog> createState() => _FindingDialogState();
+  ConsumerState<_FindingSheet> createState() => _FindingSheetState();
 }
 
-class _FindingDialogState extends ConsumerState<_FindingDialog> {
+class _FindingSheetState extends ConsumerState<_FindingSheet> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _notesController;
 
@@ -85,51 +88,96 @@ class _FindingDialogState extends ConsumerState<_FindingDialog> {
   Widget build(BuildContext context) {
     // Re-read the finding from provider state (rather than
     // widget.existing) so evidence add/remove is reflected live while
-    // this dialog stays open.
+    // this sheet stays open.
     final liveFinding = _isNew
         ? null
         : ref
               .watch(inspectionFindingsProvider)
               .firstWhereOrNull((f) => f.id == widget.existing!.id);
 
-    return AlertDialog(
-      title: Text(_isNew ? 'Add finding' : 'Edit finding'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _descriptionController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Defect / observation',
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(labelText: 'Inspector notes'),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            if (_isNew)
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                'Save this finding to attach photos.',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            else
-              _EvidenceSection(finding: liveFinding ?? widget.existing!),
-          ],
+                _isNew ? 'Add finding' : 'Edit finding',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (_isNew)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.add_a_photo_outlined,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Save this finding to attach photos.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _EvidenceSection(finding: liveFinding ?? widget.existing!),
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                controller: _descriptionController,
+                autofocus: _isNew,
+                decoration: const InputDecoration(
+                  labelText: 'Defect / observation',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _notesController,
+                decoration: const InputDecoration(labelText: 'Inspector notes'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _save,
+                      child: Text(_isNew ? 'Add' : 'Save'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: Text(_isNew ? 'Add' : 'Save')),
-      ],
     );
   }
 
@@ -168,8 +216,7 @@ class _EvidenceSection extends ConsumerWidget {
           children: [
             Text(
               'Photos (${finding.evidence.length})',
-              style: Theme.of(context).textTheme.labelLarge
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleSmall,
             ),
             const Spacer(),
             TextButton.icon(
@@ -179,27 +226,39 @@ class _EvidenceSection extends ConsumerWidget {
             ),
           ],
         ),
-        if (finding.evidence.isNotEmpty)
-          SizedBox(
-            height: 88,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: finding.evidence.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final evidence = finding.evidence[index];
-                return _EvidenceThumbnail(
-                  evidence: evidence,
-                  onRemove: () => ref
-                      .read(activeSessionProvider.notifier)
-                      .removeEvidence(
-                        findingId: finding.id,
-                        evidenceId: evidence.id,
-                      ),
-                );
-              },
-            ),
-          ),
+        SizedBox(
+          height: 104,
+          child: finding.evidence.isEmpty
+              ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'No photos yet',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: finding.evidence.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final evidence = finding.evidence[index];
+                    return _EvidenceThumbnail(
+                      evidence: evidence,
+                      onRemove: () => ref
+                          .read(activeSessionProvider.notifier)
+                          .removeEvidence(
+                            findingId: finding.id,
+                            evidenceId: evidence.id,
+                          ),
+                    );
+                  },
+                ),
+        ),
       ],
     );
   }
@@ -250,16 +309,14 @@ class _EvidenceThumbnail extends StatelessWidget {
               : 'Evidence photo unavailable — the file is missing',
           image: true,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             child: SizedBox(
-              width: 72,
-              height: 72,
+              width: 96,
+              height: 96,
               child: fileExists
                   ? Image.file(file, fit: BoxFit.cover)
                   : Container(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      color: AppColors.surfaceMuted,
                       child: const Icon(Icons.broken_image_outlined),
                     ),
             ),

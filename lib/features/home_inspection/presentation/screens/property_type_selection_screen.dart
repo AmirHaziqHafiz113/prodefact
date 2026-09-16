@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/design_system.dart';
 import '../../config/property_type.dart';
 import '../../providers/home_inspection_providers.dart';
 
@@ -15,31 +16,30 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Home Inspection')),
-      body: Center(
+      appBar: AppBar(title: const Text('New Inspection')),
+      body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Select property type',
-                style: TextStyle(fontSize: 18),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'ProDefact tailors inspection areas to the property type.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.xl),
               for (final propertyType in PropertyType.values)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: FilledButton(
-                    onPressed: () =>
+                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                  child: _PropertyTypeCard(
+                    propertyType: propertyType,
+                    onTap: () =>
                         _selectPropertyType(context, ref, propertyType),
-                    child: SizedBox(
-                      width: 200,
-                      child: Text(
-                        propertyType.label,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
                   ),
                 ),
             ],
@@ -67,5 +67,67 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
       return;
     }
     context.push('/home-inspection/areas');
+  }
+}
+
+class _PropertyTypeCard extends StatelessWidget {
+  const _PropertyTypeCard({required this.propertyType, required this.onTap});
+
+  final PropertyType propertyType;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, description) = switch (propertyType) {
+      PropertyType.highRise => (
+        Icons.apartment_outlined,
+        'Condos, apartments, and strata high-rise units.',
+      ),
+      PropertyType.landed => (
+        Icons.house_outlined,
+        'Terrace, semi-detached, and bungalow landed homes.',
+      ),
+    };
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(icon, color: AppColors.primary, size: 28),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      propertyType.label,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
