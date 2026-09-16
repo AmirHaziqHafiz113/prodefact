@@ -14,6 +14,7 @@ class AiFindingContext {
     this.description,
     this.notes,
     this.evidenceFilePaths = const [],
+    this.evidenceIds = const [],
   });
 
   final String findingId;
@@ -31,10 +32,20 @@ class AiFindingContext {
   /// The inspector's free-form notes.
   final String? notes;
 
-  /// Local file paths for this finding's evidence photos. A real
-  /// backend would fetch/inspect these (or their cloud counterparts);
-  /// the fake implementation only uses the count, never file contents.
+  /// Local file paths for this finding's evidence photos. Never sent
+  /// to any backend — the fake implementation only uses the count,
+  /// never file contents, and [FirebaseAiInspectionService] sends
+  /// [evidenceIds] instead (opaque ids the callable resolves to actual
+  /// images itself, server-side, from the caller's own cloud storage —
+  /// see `docs/ai_provider_architecture.md`, "Multimodal evidence
+  /// resolution"). Kept for the fake/local-only path and for the
+  /// evidence *count* the request also carries.
   final List<String> evidenceFilePaths;
+
+  /// This finding's evidence record ids, in the same order as
+  /// [evidenceFilePaths] — the only evidence-related data a real
+  /// backend actually receives; never a path, a URL, or bytes.
+  final List<String> evidenceIds;
 }
 
 /// One session's worth of AI analysis input — a batch of findings that

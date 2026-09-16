@@ -38,7 +38,7 @@ Future<ProviderContainer> _pumpToReportScreen(
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('High Rise')));
   await tester.pumpAndSettle();
-  await tester.tap(_within(find.text('Continue')));
+  await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
 
   final queue = container.read(inspectionQueueProvider);

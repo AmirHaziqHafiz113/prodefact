@@ -36,12 +36,24 @@ class StatusPill extends StatelessWidget {
         children: [
           Icon(icon, size: dense ? 13 : 15, color: foreground),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: dense ? 11.5 : 12.5,
-              fontWeight: FontWeight.w700,
-              color: foreground,
+          // Flexible (not a bare Text) so that when a parent gives this
+          // pill less width than its label naturally wants (e.g. a
+          // ListTile-style row squeezed between a leading control and
+          // trailing action buttons), the label ellipsizes instead of
+          // overflowing past the pill — see
+          // `docs/production_readiness.md` ("Area configuration overflow
+          // fix"), which this same fix also covers for every other
+          // screen that uses `StatusPill`/`SyncStatusPill`.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: dense ? 11.5 : 12.5,
+                fontWeight: FontWeight.w700,
+                color: foreground,
+              ),
             ),
           ),
         ],

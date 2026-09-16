@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../config/property_type.dart';
-import '../../providers/home_inspection_providers.dart';
+import '../../providers/new_inspection_draft_providers.dart';
 
 /// Entry point for Home Inspection: the inspector picks the property type
 /// before ProDefact shows the relevant inspection areas.
@@ -49,23 +49,18 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _selectPropertyType(
+  /// Starts an in-memory setup draft only — see
+  /// [NewInspectionDraftNotifier]. Nothing is persisted and no
+  /// inspection exists yet, so backing out of the area configuration
+  /// screen that follows leaves no trace: this is purely local state
+  /// that a future property-type pick (or app restart) simply
+  /// overwrites/discards.
+  void _selectPropertyType(
     BuildContext context,
     WidgetRef ref,
     PropertyType propertyType,
-  ) async {
-    final started = await ref
-        .read(selectedPropertyTypeProvider.notifier)
-        .select(propertyType);
-    if (!context.mounted) return;
-    if (!started) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not start a new inspection. Please try again.'),
-        ),
-      );
-      return;
-    }
+  ) {
+    ref.read(newInspectionDraftProvider.notifier).begin(propertyType);
     context.push('/home-inspection/areas');
   }
 }

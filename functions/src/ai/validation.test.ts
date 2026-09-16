@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {
+  MAX_EVIDENCE_IDS_PER_FINDING,
   MAX_FINDINGS_PER_REQUEST,
   MAX_TEXT_FIELD_LENGTH,
   parseAnalyzeInspectionInput,
@@ -110,4 +111,81 @@ test("clamps a negative/absurd evidenceCount rather than throwing", () => {
     findings: [{...baseFinding("finding_1"), evidenceCount: -5}],
   });
   assert.equal(input.findings[0].evidenceCount, 0);
+});
+
+test("evidenceIds is optional and omitted when not provided", () => {
+  const input = parseAnalyzeInspectionInput({
+    inspectionId: "inspection_1",
+    propertyType: "highRise",
+    findings: [baseFinding("finding_1")],
+  });
+  assert.equal(input.findings[0].evidenceIds, undefined);
+});
+
+test("evidenceIds is accepted and passed through when valid", () => {
+  const input = parseAnalyzeInspectionInput({
+    inspectionId: "inspection_1",
+    propertyType: "highRise",
+    findings: [
+      {...baseFinding("finding_1"), evidenceIds: ["evidence_1", "evidence_2"]},
+    ],
+  });
+  assert.deepEqual(input.findings[0].evidenceIds, [
+    "evidence_1",
+    "evidence_2",
+  ]);
+});
+
+test("evidenceIds rejects a non-array value", () => {
+  assert.throws(() =>
+    parseAnalyzeInspectionInput({
+      inspectionId: "inspection_1",
+      propertyType: "highRise",
+      findings: [{...baseFinding("finding_1"), evidenceIds: "not-an-array"}],
+    })
+  );
+});
+
+test("evidenceIds rejects a non-string entry", () => {
+  assert.throws(() =>
+    parseAnalyzeInspectionInput({
+      inspectionId: "inspection_1",
+      propertyType: "highRise",
+      findings: [{...baseFinding("finding_1"), evidenceIds: [123]}],
+    })
+  );
+});
+
+test("evidenceIds silently caps an excessive array at the per-finding " +
+  "limit rather than rejecting the whole request", () => {
+  const ids = Array.from(
+    {length: MAX_EVIDENCE_IDS_PER_FINDING + 10},
+    (_, i) => `evidence_${i}`
+  );
+  const input = parseAnalyzeInspectionInput({
+    inspectionId: "inspection_1",
+    propertyType: "highRise",
+    findings: [{...baseFinding("finding_1"), evidenceIds: ids}],
+  });
+  assert.equal(
+    input.findings[0].evidenceIds?.length,
+    MAX_EVIDENCE_IDS_PER_FINDING
+  );
+});
+
+test("evidenceIds drops duplicate ids within the same finding", () => {
+  const input = parseAnalyzeInspectionInput({
+    inspectionId: "inspection_1",
+    propertyType: "highRise",
+    findings: [
+      {
+        ...baseFinding("finding_1"),
+        evidenceIds: ["evidence_1", "evidence_1", "evidence_2"],
+      },
+    ],
+  });
+  assert.deepEqual(input.findings[0].evidenceIds, [
+    "evidence_1",
+    "evidence_2",
+  ]);
 });

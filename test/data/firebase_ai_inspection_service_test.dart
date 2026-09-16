@@ -21,6 +21,7 @@ AiAnalysisRequest _requestWithOneFinding() {
         description: 'Cracked tile',
         notes: 'Near the drain',
         evidenceFilePaths: ['/fake/e1.jpg', '/fake/e2.jpg'],
+        evidenceIds: ['evidence_1', 'evidence_2'],
       ),
     ],
   );
@@ -46,6 +47,9 @@ void main() {
       // Evidence *count* only — never file paths/bytes.
       expect(finding['evidenceCount'], 2);
       expect(finding.containsKey('evidenceFilePaths'), isFalse);
+      // Opaque evidence ids only — the callable resolves these to
+      // actual images itself, server-side.
+      expect(finding['evidenceIds'], ['evidence_1', 'evidence_2']);
     });
 
     test('never includes account/user data (no such field exists to '
@@ -54,6 +58,33 @@ void main() {
       expect(payload.containsKey('ownerUid'), isFalse);
       expect(payload.containsKey('email'), isFalse);
       expect(payload.toString(), isNot(contains('@')));
+    });
+
+    test('never includes local evidence file paths — only ids', () {
+      final payload = buildAnalyzeInspectionPayload(_requestWithOneFinding());
+      expect(payload.toString(), isNot(contains('/fake/e1.jpg')));
+      expect(payload.toString(), isNot(contains('/fake/e2.jpg')));
+    });
+
+    test('omits evidenceIds entirely for a finding with no evidence', () {
+      const request = AiAnalysisRequest(
+        sessionId: 'session_1',
+        industry: 'homeInspection',
+        assetTypeId: 'highRise',
+        findings: [
+          AiFindingContext(
+            findingId: 'finding_1',
+            sectionId: 'master_bathroom',
+            sectionName: 'Master Bathroom',
+            sectionIsPlumbing: true,
+            elementId: 'floor',
+            elementName: 'Floor',
+          ),
+        ],
+      );
+      final payload = buildAnalyzeInspectionPayload(request);
+      final finding = (payload['findings'] as List).single as Map;
+      expect(finding.containsKey('evidenceIds'), isFalse);
     });
   });
 

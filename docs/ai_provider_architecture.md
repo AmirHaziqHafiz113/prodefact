@@ -38,7 +38,8 @@ functions/src/ai/
   types.ts               — shared request/response shapes
   provider.ts             — AiProvider interface + AiProviderError
   gateway.ts               — provider selection + output validation
-  deepseek_provider.ts     — real, active DeepSeek adapter
+  deepseek_provider.ts     — real, active DeepSeek adapter (multimodal)
+  evidence.ts              — secure, server-side evidence photo resolution
   openai_provider.ts       — clean stub for a future OpenAI integration
   gemini_provider.ts       — clean stub for a future Gemini integration
   anthropic_provider.ts    — clean stub for a future Anthropic integration
@@ -50,10 +51,18 @@ functions/src/ai/
 ```ts
 interface AiProvider {
   readonly id: string;
-  analyzeInspection(input: AnalyzeInspectionInput): Promise<AnalyzeInspectionResult>;
+  readonly supportsImages: boolean;
+  analyzeInspection(
+    input: AnalyzeInspectionInput,
+    images: FindingImages[]
+  ): Promise<AnalyzeInspectionResult>;
 }
 ```
 
+`images` is always passed to every adapter, even a text-only one (which
+simply ignores it via its own `supportsImages: false`) — this keeps
+every adapter's method signature identical regardless of capability, so
+a future multimodal provider is a drop-in swap, not a contract change.
 `analyzeInspection` (`index.ts`) depends only on this interface via
 `gateway.createProvider(providerId, apiKey)` — it never references
 DeepSeek (or any other provider) by name outside of that one gateway
@@ -67,22 +76,43 @@ environment/function-config value (`deepseek` | `openai` | `gemini` |
 Flutter never sees or chooses this — it's a server-side decision only,
 exactly as requested.
 
-### Active provider: DeepSeek
+### Active provider: DeepSeek (multimodal — text + images)
 
-`deepseek_provider.ts` calls `deepseek-chat` (DeepSeek-V3), a stable,
-text-capable, JSON-mode model well suited to structured inspection
-analysis:
+`deepseek_provider.ts` calls **`deepseek-flash`**, DeepSeek's current
+multimodal chat model — it accepts both text and image input in the
+same request, verified directly against DeepSeek's official API
+reference at the time this was implemented (not assumed from an older
+model name). This replaced the earlier text-only `deepseek-chat`
+integration.
+
+Request shape, per finding: a text block with the finding's structured
+context (area, element, component, inspector description/notes,
+whether the area is a plumbing area), followed by zero or more
+`image_url` content blocks — one per resolved evidence photo, sent as
+a `data:<mime>;base64,...` URL (see "Secure evidence delivery" below;
+no photo is ever fetched by DeepSeek from a URL ProDefact hosts).
+Supported formats: JPEG, PNG, GIF, WebP (matching what
+`evidence.ts`/`sharp` will decode and normalize).
 
 - `temperature: 0.2` — low, for consistent, non-creative output.
 - `response_format: {type: "json_object"}` — structured JSON output.
 - A strict system prompt that states the contract (exactly one
   suggestion per requested `findingId`, JSON-only, advisory-only,
-  grounded in the supplied context, conservative when uncertain).
-- A 30-second request timeout via `AbortController`.
+  grounded in the supplied context and photos, conservative when
+  uncertain) **and** explicitly instructs the model to distinguish, in
+  its notes, what is directly visible in a photo from what is inferred
+  from context, and to say so rather than invent a defect when a photo
+  is unclear, irrelevant, corrupted, or missing. A finding with no
+  usable photo is explicitly marked as such in the request so the model
+  relies on the inspector's text alone rather than guessing.
+- A 45-second request timeout via `AbortController` (raised from the
+  earlier text-only phase's 30s to accommodate image processing).
 - One bounded retry, and only for a *transient* failure (network error,
-  our own timeout, HTTP 5xx/429) — a validation failure (bad JSON, no
-  suggestions array) is never retried, since retrying would just fail
-  identically.
+  our own timeout, HTTP 5xx/429) — a 4xx validation-style failure or a
+  malformed-output failure (bad JSON, no suggestions array) is never
+  retried, since retrying would just fail identically. Covered directly
+  by `functions/src/ai/deepseek_provider.test.ts` (fake `fetch`,
+  no live DeepSeek calls).
 - Structural validation of the raw response before it's trusted at all:
   must be a JSON object, must have a `suggestions` array, and each
   entry must at least have a string `findingId` — anything else is
@@ -143,13 +173,23 @@ response body.
   - `evidenceCount` is clamped to a sane range rather than trusted
     as-is.
 - **Cost/scale bounds**: `setGlobalOptions({maxInstances: 10})` caps
-  concurrent instances; `timeoutSeconds: 60` and `memory: "256MiB"`
-  bound per-invocation cost; the client-side idempotency/duplicate-run
-  guards from Phase 8 (`DefaultAiReviewCoordinator`'s in-flight lock,
-  and its refusal to re-run analysis once suggestions already exist)
-  mean AI analysis is never re-triggered on a screen rebuild or a
-  double-tap — a request only reaches the function when the inspector
-  deliberately starts or retries analysis.
+  concurrent instances; `timeoutSeconds: 180` and `memory: "512MiB"`
+  (raised from the text-only phase's 60s/256MiB to accommodate
+  downloading, decoding, and resizing several evidence photos per
+  request) bound per-invocation cost. Evidence is only ever resolved
+  for a provider that can use it (`provider.supportsImages`) — no
+  wasted Storage reads/CPU for a text-only provider. Per-finding (4) and
+  per-request (24) evidence caps plus bounded resolution concurrency
+  (4 at a time) keep both request size sent to DeepSeek and function
+  memory/CPU use predictable regardless of how many photos an inspector
+  attached. The client-side idempotency/duplicate-run guards from Phase
+  8 (`DefaultAiReviewCoordinator`'s in-flight lock, and its refusal to
+  re-run analysis once suggestions already exist) mean AI analysis is
+  never re-triggered on a screen rebuild or a double-tap — a request
+  only reaches the function when the inspector deliberately starts or
+  retries analysis, and the strict gating described in
+  `docs/ai_review.md` means it's never reachable until every included
+  area is complete.
 - **Response validation**: `gateway.validateAndNormalize` rejects a
   suggestion referencing a `findingId` that wasn't in the request,
   drops a duplicate `findingId` (first occurrence wins), and coerces a
@@ -190,52 +230,155 @@ element/component id (matched back by `findingId`) rather than trying
 to resolve the AI's name back to an id — AI is advisory on the defect/
 recommendation, never on where a finding structurally lives.
 
-## Image/evidence capability (limitation)
+## Image/evidence capability
 
-**DeepSeek's `deepseek-chat` model is text-only** — it does not accept
-image input. This phase's evidence handling therefore stays consistent
-with Phase 6: `evidenceCount` (a number) is sent, never image bytes,
-paths, or URLs. No fake/simulated image analysis exists anywhere in the
-gateway or the fake service.
+**The DeepSeek integration is multimodal, not text-only** — as of the
+`deepseek-flash` upgrade, findings' photos are analyzed alongside their
+structured text context. `AiFindingContext.evidenceIds` (Flutter) and
+`FindingInput.evidenceIds` (functions) carry opaque evidence ids only;
+Flutter never sends a Storage path, a download URL, or image bytes —
+the callable resolves each id to an actual image itself, entirely
+server-side.
 
-The gateway's `AiProvider` interface and `AnalyzeInspectionInput` shape
-are intentionally provider-neutral and impose no text-only constraint
-themselves — a future multimodal provider (e.g. an OpenAI GPT-4o-class
-model, Gemini, or a current Claude model, all of which accept image
-input) can be added as a new adapter that additionally sends image
-content, without changing the callable's contract, `AiInspectionService`,
-or any Flutter domain type. Enabling that would also require deciding
-how the backend accesses evidence images (authenticated server-side
-read from Cloud Storage after a sync, or a short-lived signed URL) —
-evidence Storage objects must never be made public just to enable this,
-and local file paths must never be sent to an external provider. This
-is documented here as the deliberate scope boundary for this phase, not
-an oversight.
+### Secure evidence delivery (never a client-supplied path)
+
+Flutter's payload includes only `evidenceIds: string[]` per finding —
+opaque ids already known to belong to that finding locally. The
+callable (`ai/evidence.ts`) does the rest, and never trusts anything
+about *where* the corresponding photo lives from the client:
+
+1. For each `(findingId, evidenceId)`, it derives the Storage object
+   path itself: `users/{callerUid}/inspections/{inspectionId}/findings/
+   {findingId}/{evidenceId}.jpg` — always built from the authenticated
+   caller's own `uid` (from verified `request.auth`, never from the
+   payload) plus the request's own `inspectionId`/`findingId`. A client
+   cannot make the function read anyone else's evidence, or evidence
+   from a different inspection, no matter what it sends.
+2. It independently re-verifies ownership via a Firestore existence
+   check at `users/{callerUid}/inspections/{inspectionId}/findings/
+   {findingId}/evidence/{evidenceId}` before ever touching Storage —
+   belt-and-suspenders on top of deriving the path from the caller's
+   own uid in the first place.
+3. It downloads the Storage object directly via the Admin SDK
+   (server-side credentials; no signed URL is ever generated, and no
+   evidence object is ever made publicly readable).
+4. The downloaded bytes are decoded, validated, and normalized (see
+   "Image preprocessing" below) before being base64-embedded directly
+   in the DeepSeek request as a `data:` URL — the image never touches
+   any third-party storage or URL that DeepSeek fetches from.
+
+An evidence id with no matching synced photo (never synced to the
+cloud, or since deleted) simply resolves to `null` for that image and
+is skipped — it does not fail the finding or the request. This is also
+why the multimodal upgrade is fully backward-compatible with a session
+that has never been synced to the cloud: it just gets text-only
+analysis, identical to the pre-upgrade behavior.
+
+### Image preprocessing (`resolveEvidenceImage`, via `sharp`)
+
+Every resolved photo is decoded and re-encoded before it ever reaches
+DeepSeek — a derived copy only; the original Storage object and the
+original local file are never modified:
+
+- **Orientation**: auto-rotated from EXIF so a photo taken sideways
+  isn't analyzed sideways.
+- **Resize**: downscaled to fit within 1568px on the long edge (a
+  practical ceiling past which more resolution doesn't meaningfully
+  help a vision model, while keeping request size and cost bounded).
+- **Format normalization**: re-encoded to JPEG (quality 82) regardless
+  of the original format — so DeepSeek always receives one consistent,
+  predictable format even though inspectors' photos may be JPEG, PNG,
+  GIF, or WebP.
+- **Corruption handling**: if `sharp` cannot decode the downloaded
+  bytes at all (corrupted upload, truncated transfer, non-image file),
+  `resolveEvidenceImage` returns `null` for that image rather than
+  throwing — the finding proceeds with its remaining photos (or
+  text-only, if that was its only one).
+
+### Multiple photos, with server-side limits (`resolveAllEvidence`)
+
+- Up to **4 resolved images per finding**, and **24 per request**
+  overall — an excessively long `evidenceIds` array beyond either cap
+  is truncated, not rejected outright, so a request with too many
+  photos still returns a partial, useful analysis.
+- Resolution runs with **bounded concurrency (4 at a time)** — so a
+  finding with many photos doesn't spike memory/CPU or DeepSeek request
+  size all at once.
+- Partial evidence failure (some ids resolve, others don't) never fails
+  the finding or the whole request — see `evidence.test.ts` for direct
+  coverage of duplicate/missing/corrupted/unsynced evidence ids.
+
+### Provider-neutral by design
+
+The gateway's `AiProvider` interface and `AnalyzeInspectionInput`/
+`FindingImages` shapes are intentionally provider-neutral — a future
+multimodal provider (an OpenAI GPT-4o-class model, Gemini, or a current
+Claude model) is added as a new adapter implementing the same
+`analyzeInspection(input, images)` signature and its own
+`supportsImages: true`, without changing the callable's contract,
+`AiInspectionService`, evidence resolution, or any Flutter domain type.
+A text-only stub adapter simply declares `supportsImages: false` and
+the callable never bothers resolving evidence for it at all.
 
 ## Testing
 
-Normal test runs never call DeepSeek or any live provider:
+Normal test runs never call DeepSeek or any live provider, and never
+touch real Cloud Storage/Firestore:
 
 - `functions/src/ai/gateway.test.ts` / `validation.test.ts` — pure unit
   tests (`node --test`, via `npm run test` in `functions/`) covering
   provider selection defaults, output validation/normalization
   (unknown/duplicate `findingId`, non-string field coercion), and input
-  validation (size limits, malformed payloads).
+  validation (size limits, malformed payloads, `evidenceIds` shape and
+  per-finding cap).
+- `functions/src/ai/deepseek_provider.test.ts` — a fake `global.fetch`
+  (no live DeepSeek calls) exercising a successful multimodal response,
+  a 400 (fails immediately, no retry), a 500 and a 429 (retried once),
+  a network/abort failure (retried once), malformed/non-JSON model
+  output, and an empty model response.
+- `functions/src/ai/evidence.test.ts` — hand-rolled fake
+  Firestore/Storage clients proving: a real image round-trips through
+  decode/rotate/resize/re-encode correctly; an evidence id that isn't
+  actually owned by the caller (per the Firestore check) resolves to
+  `null`; an id with no synced Storage object resolves to `null`;
+  corrupted/undecodable bytes resolve to `null` rather than throwing;
+  the resolved path is always derived from uid/inspectionId/findingId/
+  evidenceId, never a client-supplied path; the per-finding/per-request
+  caps are enforced; partial failure never discards the whole finding.
 - `test/data/firebase_ai_inspection_service_test.dart` — Flutter-side
-  unit tests for the request payload mapping, response parsing, and
-  error-message mapping, all against in-memory data (no
+  unit tests for the request payload mapping (confirming `evidenceIds`
+  — ids only — are sent, and no local file path/byte ever is), response
+  parsing, and error-message mapping, all against in-memory data (no
   `cloud_functions` platform channel involved).
+- `test/features/ai_gating_regression_test.dart` — proves photo
+  capture, saving/editing a finding, and completing one or every area
+  never call the AI provider at all (a spy provider's call count stays
+  0 through all of that), and that only the explicit "Start AI
+  Analysis" action ever does.
+- `test/features/ai_review_provider_test.dart` — confirms an edited
+  suggestion's original AI values and the inspector's final/edited
+  values both survive a simulated app restart (fresh notifier, reload
+  from the same repository).
 - `test/security_test.dart` and
   `test/architecture/repository_boundary_test.dart` — confirm the AI
   request excludes account data structurally, and that no provider
   secret/hardcoded bearer token exists in Flutter source (see "Security
   test fix" below).
 
-**Manual/live test path** (not run automatically, requires the real
-deployed function and a signed-in test user): sign in, complete a
-physical inspection with at least one finding, tap "Start AI Analysis,"
-and confirm a real DeepSeek-backed suggestion appears. See
-`docs/production_readiness.md`'s pilot-readiness checklist.
+**Manual/live test path** (not run automatically — no automated test
+suite here has taken a real photo through a real device, uploaded it,
+and confirmed the deployed function returns a photo-grounded
+suggestion; that gap is real and is not closed by any test count in
+this document): sign in, complete a physical inspection that includes
+at least one finding with an attached photo, complete every included
+area, tap "Start AI Analysis," and confirm a real DeepSeek-backed
+suggestion appears whose notes actually reference something visible in
+the photo (not just the text description). Also manually verify: a
+finding with a photo that was never synced to the cloud still produces
+a text-only-grounded suggestion without erroring; a finding with
+multiple photos is analyzed using more than just the first one. See
+`docs/production_readiness.md`'s pilot-readiness checklist and manual
+E2E sequence.
 
 ## Security-test fix (Firebase client key vs. AI provider secret)
 

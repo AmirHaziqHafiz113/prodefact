@@ -49,11 +49,10 @@ void main() {
 
       expect(find.text('Landed Areas'), findsOneWidget);
       expect(find.text('Master Bathroom'), findsOneWidget);
-
-      final firstListTile = tester.widget<ListTile>(
-        find.byType(ListTile).first,
-      );
-      expect(firstListTile.subtitle, isNotNull);
+      // Nothing is persisted yet — selecting a property type only
+      // starts an in-memory setup draft (see
+      // `NewInspectionDraftNotifier`); no inspection exists until
+      // "Start Inspection" is tapped.
       expect(find.text('Plumbing area — inspect first'), findsWidgets);
 
       await tester.scrollUntilVisible(

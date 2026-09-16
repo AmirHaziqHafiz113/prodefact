@@ -10,6 +10,10 @@ import {AnalyzeInspectionInput, FindingInput} from "./types";
 export const MAX_FINDINGS_PER_REQUEST = 60;
 export const MAX_TEXT_FIELD_LENGTH = 4_000;
 export const MAX_SHORT_FIELD_LENGTH = 200;
+/** Mirrors `evidence.ts`'s own per-finding cap — validated here too so
+ * an oversized array is rejected with a clear error rather than
+ * silently truncated deep inside evidence resolution. */
+export const MAX_EVIDENCE_IDS_PER_FINDING = 4;
 
 /**
  * @param {unknown} value the candidate field value.
@@ -54,6 +58,50 @@ function requireShortString(value: unknown, field: string): string {
     );
   }
   return value;
+}
+
+/**
+ * Validates an optional `evidenceIds` array: each entry must be a
+ * short, non-empty string, duplicates within the same finding are
+ * dropped, and the list is capped at
+ * [MAX_EVIDENCE_IDS_PER_FINDING] entries (extras are simply not sent
+ * for resolution — this is a cost bound, not a hard failure, since a
+ * finding can legitimately have more photos than we choose to send to
+ * the model).
+ * @param {unknown} value the candidate `evidenceIds` field.
+ * @param {number} index the finding's index, for the error message.
+ * @return {string[] | undefined} the validated, capped id list.
+ */
+function parseEvidenceIds(value: unknown, index: number): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `findings[${index}].evidenceIds must be an array.`
+    );
+  }
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string" || raw.trim().length === 0) {
+      throw new HttpsError(
+        "invalid-argument",
+        `findings[${index}].evidenceIds must contain only non-empty strings.`
+      );
+    }
+    if (raw.length > MAX_SHORT_FIELD_LENGTH) {
+      throw new HttpsError(
+        "invalid-argument",
+        `findings[${index}].evidenceIds entries exceed the maximum length.`
+      );
+    }
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    if (ids.length < MAX_EVIDENCE_IDS_PER_FINDING) {
+      ids.push(raw);
+    }
+  }
+  return ids;
 }
 
 /**
@@ -139,6 +187,7 @@ export function parseAnalyzeInspectionInput(
         typeof f.evidenceCount === "number" && f.evidenceCount >= 0 ?
           Math.min(Math.floor(f.evidenceCount), 999) :
           0,
+      evidenceIds: parseEvidenceIds(f.evidenceIds, index),
     };
   });
 

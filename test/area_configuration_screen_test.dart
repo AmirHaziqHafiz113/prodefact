@@ -31,6 +31,12 @@ Future<void> _revealAndTap(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+/// Area rows are `Card`s (not `ListTile`s — see the overflow-fix
+/// rewrite of `_AreaCard` in area_configuration_screen.dart), so a row
+/// is found by walking up from its name `Text` to the enclosing `Card`.
+Finder _areaCard(String name) =>
+    find.ancestor(of: find.text(name), matching: find.byType(Card));
+
 /// go_router keeps every previously pushed screen mounted, so once the
 /// inspection queue screen is pushed on top of the area configuration
 /// screen, both may show the same area name ("Kitchen"). Scope lookups
@@ -42,15 +48,15 @@ void main() {
   testWidgets('toggling an area include/exclude switch works', (tester) async {
     await _startHighRiseSetup(tester);
 
-    final kitchenTile = find.widgetWithText(ListTile, 'Kitchen');
+    final kitchenCard = _areaCard('Kitchen');
     await tester.scrollUntilVisible(
-      kitchenTile,
+      kitchenCard,
       200,
       scrollable: find.byType(Scrollable),
     );
 
     final kitchenSwitch = find.descendant(
-      of: kitchenTile,
+      of: kitchenCard,
       matching: find.byType(Switch),
     );
     expect(tester.widget<Switch>(kitchenSwitch).value, isTrue);
@@ -65,11 +71,12 @@ void main() {
     await _startHighRiseSetup(tester);
 
     final editButton = find.descendant(
-      of: find.widgetWithText(ListTile, 'Bedroom 2'),
+      of: _areaCard('Bedroom 2'),
       matching: find.byIcon(Icons.edit),
     );
     await _revealAndTap(tester, editButton);
 
+    expect(find.text('Edit area'), findsOneWidget);
     await tester.enterText(find.byType(TextField), "Son's Room");
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -78,11 +85,43 @@ void main() {
     expect(find.text('Bedroom 2'), findsNothing);
   });
 
+  testWidgets(
+    'editing an area can also mark/unmark it as a plumbing area, which '
+    'moves it into plumbing-first ordering',
+    (tester) async {
+      await _startHighRiseSetup(tester);
+
+      final editButton = find.descendant(
+        of: _areaCard('Living Room'),
+        matching: find.byIcon(Icons.edit),
+      );
+      await _revealAndTap(tester, editButton);
+
+      expect(find.text('Edit area'), findsOneWidget);
+      expect(find.text('Contains plumbing'), findsOneWidget);
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      // Now flagged as plumbing — the card shows the "inspect first"
+      // indicator.
+      final livingRoomCard = _areaCard('Living Room');
+      expect(
+        find.descendant(
+          of: livingRoomCard,
+          matching: find.text('Plumbing area — inspect first'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('adding a custom area appends it to the list', (tester) async {
     await _startHighRiseSetup(tester);
 
     await tester.tap(find.text('Add area'));
     await tester.pumpAndSettle();
+    expect(find.text('Add area'), findsWidgets);
     await tester.enterText(find.byType(TextField), 'Home Office');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -95,11 +134,36 @@ void main() {
     expect(find.text('Home Office'), findsOneWidget);
   });
 
+  testWidgets('adding a custom area as a plumbing area participates in '
+      'plumbing-first ordering once the inspection starts', (tester) async {
+    await _startHighRiseSetup(tester);
+
+    await tester.tap(find.text('Add area'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Wet Kitchen');
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Wet Kitchen'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(
+      find.descendant(
+        of: _areaCard('Wet Kitchen'),
+        matching: find.text('Plumbing area — inspect first'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('removing an area deletes it from the list', (tester) async {
     await _startHighRiseSetup(tester);
 
     final removeButton = find.descendant(
-      of: find.widgetWithText(ListTile, 'Bedroom 4'),
+      of: _areaCard('Bedroom 4'),
       matching: find.byIcon(Icons.delete_outline),
     );
     await _revealAndTap(tester, removeButton);
@@ -107,12 +171,12 @@ void main() {
     expect(find.text('Bedroom 4'), findsNothing);
   });
 
-  testWidgets('Continue navigates to the physical inspection queue', (
+  testWidgets('Start Inspection navigates to the physical inspection queue', (
     tester,
   ) async {
     await _startHighRiseSetup(tester);
 
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Start Inspection'));
     await tester.pumpAndSettle();
 
     expect(find.text('Physical Inspection'), findsOneWidget);
@@ -120,47 +184,91 @@ void main() {
 
   testWidgets(
     'excluding an area in setup keeps it out of the inspection queue, '
-    'and the exclusion survives navigating back',
+    'and the exclusion survives resuming the inspection later',
     (tester) async {
       await _startHighRiseSetup(tester);
 
-      final kitchenTile = find.widgetWithText(ListTile, 'Kitchen');
+      final kitchenCard = _areaCard('Kitchen');
       await tester.scrollUntilVisible(
-        kitchenTile,
+        kitchenCard,
         200,
         scrollable: find.byType(Scrollable),
       );
       final kitchenSwitch = find.descendant(
-        of: kitchenTile,
+        of: kitchenCard,
         matching: find.byType(Switch),
       );
       await tester.tap(kitchenSwitch);
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(kitchenSwitch).value, isFalse);
 
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Start Inspection'));
       await tester.pumpAndSettle();
 
       expect(find.text('Physical Inspection'), findsOneWidget);
       expect(_within(find.text('Kitchen')), findsNothing);
 
+      // Once started, the setup draft is gone — popping back out of
+      // the (now-empty) setup screens all the way to the dashboard and
+      // resuming the inspection is the realistic way to check the
+      // exclusion actually persisted in the created session, rather
+      // than in the ephemeral setup screen.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
       navigator.pop();
+      navigator.pop();
+      navigator.pop();
       await tester.pumpAndSettle();
 
-      final kitchenTileAfter = find.widgetWithText(ListTile, 'Kitchen');
-      await tester.scrollUntilVisible(
-        kitchenTileAfter,
-        200,
-        scrollable: find.byType(Scrollable),
-      );
-      final kitchenSwitchAfter = find.descendant(
-        of: kitchenTileAfter,
-        matching: find.byType(Switch),
-      );
-      expect(tester.widget<Switch>(kitchenSwitchAfter).value, isFalse);
+      await tester.tap(find.text('High Rise'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(_within(find.text('Kitchen')), findsNothing);
     },
   );
+
+  testWidgets(
+    'backing out of setup before Start Inspection leaves no inspection '
+    'behind (the defect this flow was rewritten to fix)',
+    (tester) async {
+      await _startHighRiseSetup(tester);
+      // Never tap "Start Inspection" — just leave setup.
+      final navigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      navigator.pop(); // area configuration -> property type selection
+      navigator.pop(); // property type selection -> dashboard
+      await tester.pumpAndSettle();
+
+      expect(find.text('No saved inspections yet.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('repeated taps on Start Inspection do not create duplicate '
+      'inspections', (tester) async {
+    await _startHighRiseSetup(tester);
+
+    // Fire multiple taps in quick succession before the first
+    // navigation completes.
+    await tester.tap(find.text('Start Inspection'));
+    await tester.tap(find.text('Start Inspection'));
+    await tester.tap(find.text('Start Inspection'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Physical Inspection'), findsOneWidget);
+
+    // Only one inspection was actually created — pop all the way
+    // back to the dashboard (queue -> areas -> property type ->
+    // dashboard) and confirm there's exactly one card, not several.
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.pop();
+    navigator.pop();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Unfinished'), findsOneWidget);
+  });
 }

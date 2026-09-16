@@ -122,8 +122,24 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
-  Future<bool> startNew(PropertyType propertyType) async {
-    final sections = HomeInspectionConfig.defaultSectionsFor(propertyType);
+  /// Persists a brand-new session and makes it the active one — this is
+  /// the exact moment an inspection becomes "intentionally created," so
+  /// callers should only invoke this from an explicit, final user
+  /// action (e.g. "Start Inspection"), never merely from picking a
+  /// property type — see `NewInspectionDraftNotifier`, which holds
+  /// everything before that point in memory only, with no database row
+  /// and nothing visible on the dashboard until this succeeds.
+  ///
+  /// [initialSections] lets a caller pass an already-configured area
+  /// list (include/exclude, renames, custom areas) rather than the
+  /// property type's untouched defaults.
+  Future<bool> startNew(
+    PropertyType propertyType, {
+    List<Section>? initialSections,
+  }) async {
+    final sections =
+        initialSections ??
+        HomeInspectionConfig.defaultSectionsFor(propertyType);
     try {
       final session = await _repository.createSession(
         industry: Industry.homeInspection,

@@ -1,5 +1,9 @@
 import {AiProvider, AiProviderError} from "./provider";
-import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
+import {
+  AnalyzeInspectionInput,
+  AnalyzeInspectionResult,
+  FindingImages,
+} from "./types";
 
 /**
  * Clean adapter shell for a future Google Gemini integration.
@@ -19,6 +23,10 @@ import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
  */
 export class GeminiProvider implements AiProvider {
   readonly id = "gemini";
+  // Set to true once a real multimodal implementation is added below —
+  // Gemini's current models accept image input, so this would become
+  // true rather than needing a separate capability class.
+  readonly supportsImages = false;
 
   /** @param {string} apiKey the Gemini API key, once configured. */
   constructor(private readonly apiKey: string) {
@@ -27,9 +35,11 @@ export class GeminiProvider implements AiProvider {
 
   /** @inheritdoc */
   analyzeInspection(
-    input: AnalyzeInspectionInput
+    input: AnalyzeInspectionInput,
+    images: FindingImages[]
   ): Promise<AnalyzeInspectionResult> {
     void input;
+    void images;
     throw new AiProviderError(
       "The Gemini provider is not yet implemented/configured."
     );

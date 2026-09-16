@@ -6,6 +6,72 @@ of the inspection flow. This document covers the reliability, security,
 and operational behavior added or confirmed this phase, plus what still
 requires manual, external configuration before a real pilot.
 
+## Live-testing fix pass (Auth, New Inspection flow, custom areas, UI overflow)
+
+A round of hands-on testing surfaced four issues, fixed in this pass —
+none required weakening or removing an existing test.
+
+**Auth error messaging.** "The supplied auth credential is malformed or
+expired" persisting after a successful password reset was traced to
+Firebase's own intentional anti-enumeration behavior: Firebase merges
+`invalid-credential`, `wrong-password`, and `user-not-found` into the
+same error code so an attacker can't learn which part of a login
+attempt was wrong. This was a messaging problem, not an auth-state bug
+— `friendlyMessageForAuthError` (`lib/data/remote/firebase_auth_service.dart`)
+now maps every credential-related code to one clear, honest message
+("The email or password you entered is incorrect.") instead of
+surfacing Firebase's literal, confusing wording. Separately, the
+"already authenticated on a fresh install" report was confirmed (by
+exhaustive grep — no anonymous/guest-auth code exists anywhere in the
+app) to be expected iOS Keychain session persistence across a reinstall,
+not silent/fake authentication; this is standard platform behavior, not
+a defect. See `test/data/firebase_auth_error_mapping_test.dart`.
+
+**New Inspection phantom-inspection fix.** Selecting a property type
+used to call `startNew()` immediately — creating and persisting a real,
+dashboard-visible inspection before the inspector had configured
+anything or confirmed they wanted to proceed. Backing out at that point
+left a phantom, half-configured inspection behind. The flow now runs
+entirely through a separate, ephemeral, non-persisted
+`NewInspectionDraftNotifier` (`lib/features/home_inspection/providers/new_inspection_draft_providers.dart`):
+property type selection and area configuration only edit an in-memory
+draft, and the *only* place an inspection is actually created is the
+explicit "Start Inspection" button
+(`_StartInspectionButton`,`area_configuration_screen.dart`), which is
+guarded against a double-tap starting two sessions. Backing out at any
+point before that simply discards the draft — nothing is ever written
+to the database. See `test/area_configuration_screen_test.dart` and
+`test/inspection_sessions_screen_test.dart` for the regression coverage
+(select a property type then back out; configure areas then back out;
+reopen and resume a draft; repeated taps on Start Inspection; no
+duplicate inspections created).
+
+**Custom area plumbing metadata.** Custom areas previously had no way
+to mark "contains plumbing" / "inspect first" — only the built-in
+default areas carried that metadata. `Section.copyWith` gained an
+`isPlumbing` parameter, `HomeInspectionConfig.customSection` accepts
+`isPlumbing`, and the area configuration screen's single add/edit
+dialog (`_AreaEditDialog`) now exposes a "Contains plumbing" switch for
+both new custom areas and edits to any existing area (built-in or
+custom) — using Home Inspection terminology throughout ("area",
+"plumbing", "inspect first"), not generic asset-management language. A
+plumbing custom area participates in plumbing-first ordering exactly
+like a built-in one, since it's the same `Section.isPlumbing` flag the
+rest of the domain already reads.
+
+**Area configuration overflow fix.** The "Plumbing area — inspect
+first" pill was colliding with/overflowing past the edit/delete icon
+buttons on narrow phones (a `RenderFlex` overflow inside the old
+`ListTile`-based card). `_AreaCard` was restructured from `ListTile` to
+an explicit `Row(Switch, Expanded(Column(name, pill)), edit, delete)` —
+the `Expanded` guarantees the name/pill column always yields space to
+the action buttons rather than fighting them for it, the area name gets
+`maxLines: 2` + ellipsis for long custom names, and the pill itself
+(`StatusPill`, `lib/app/theme/widgets/status_pill.dart`) now wraps its
+label in `Flexible` + `TextOverflow.ellipsis` — a global fix, since
+every other screen's status/sync pills share the same widget and were
+equally at risk of the same overflow on a narrow device.
+
 ## Offline-first guarantees
 
 The local Drift database (`AppDatabase`, `lib/data/local/database.dart`)
@@ -569,12 +635,17 @@ itself documents as non-sensitive.
 
 ## Known limitations (pilot-readiness caveats)
 
-- **Firebase/AI are not "live"** in this repository as delivered: no
-  real Firebase project is configured (placeholders only), and AI
-  review runs against `FakeAiInspectionService` (deterministic, no
-  network). Both are fully scaffolded to swap in real implementations
-  behind their existing abstractions without touching the domain, UI,
-  or persistence layers — see `docs/ai_review.md`/`docs/firebase.md`.
+- **Firebase/AI are not "live" against a real pilot project** as
+  delivered: no real Firebase project is configured in this repository
+  (placeholders only), so `aiInspectionServiceProvider` resolves to
+  `FakeAiInspectionService` (deterministic, no network) until
+  `flutterfire configure` points it at a real project. The real,
+  provider-neutral, multimodal (`deepseek-flash`) implementation itself
+  exists (`FirebaseAiInspectionService` → `analyzeInspection` callable
+  → the DeepSeek gateway) — see `docs/ai_provider_architecture.md` —
+  but it has not been exercised against a real signed-in user and a
+  real synced photo in this environment; that is the manual E2E gap
+  called out below.
 - **Cloud deletion is not implemented** — deleting a session locally
   never deletes a previously-synced remote copy (see "Session
   deletion").
@@ -625,3 +696,54 @@ Use this before a real pilot inspection:
 - [ ] Confirm pilot inspectors understand: cloud data currently only
       ever grows (no delete-sync), and AI suggestions are demo-quality
       unless a real backend has been connected.
+
+### Manual E2E test sequence (required — not covered by automated tests)
+
+None of this has been exercised on a real device/simulator against a
+real Firebase project in this environment. Before treating any of the
+fixes/features in this pass as pilot-ready, manually run through:
+
+1. **Fresh install, sign-up, sign-in.** Uninstall and reinstall the app
+   (or use a fresh simulator). Confirm the app opens to a genuine
+   signed-out state — no phantom/anonymous session. Register a new
+   account, sign out, sign back in with the correct password (succeeds)
+   and then with a deliberately wrong password (shows the clear "email
+   or password is incorrect" message, not a raw Firebase code). Trigger
+   a password reset email and confirm signing in with the new password
+   works and the old one no longer does.
+2. **New Inspection — no phantom inspections.** From the dashboard,
+   start New Inspection, pick a property type, then back out (device
+   back button and the app bar back arrow) before touching the areas
+   screen — confirm nothing appears on the dashboard. Repeat, this time
+   configuring areas (toggle a couple off, rename one, add a custom
+   plumbing area) and backing out before "Start Inspection" — confirm
+   again nothing was created. Finally, go through the flow and actually
+   tap "Start Inspection" once — confirm exactly one inspection appears,
+   including the custom area and your include/exclude/rename choices.
+3. **Area configuration on a narrow phone.** On the smallest real/
+   simulated device available, open area configuration and confirm the
+   "Plumbing area — inspect first" pill never visually collides with or
+   hides the edit/delete buttons, for both a short default area name
+   and a long custom one.
+4. **Physical inspection, photos, gating.** Complete a full inspection
+   with at least one finding carrying two or more photos in a plumbing
+   area. Confirm no AI call happens merely from taking a photo or
+   completing an area (no network indicator/spinner tied to AI
+   appears). Confirm "Start AI Analysis" is unavailable until every
+   included area is marked complete.
+5. **Real AI Vision review.** With a real Firebase project and deployed
+   function (`DEEPSEEK_API_KEY` bound), sign in, sync, and run "Start AI
+   Analysis." Confirm a suggestion for the photographed finding actually
+   references something specific to the photo (not a generic template
+   answer) and that its notes clearly separate what's directly visible
+   from what's inferred. Edit one suggestion's defect/recommendation,
+   confirm the PDF report reflects your edited value, then force-quit
+   and reopen the app and confirm both the original AI suggestion and
+   your edited final value are still present (not overwritten).
+6. **AI failure paths.** With airplane mode on, attempt "Start AI
+   Analysis" and confirm a clear, non-technical connectivity message
+   appears rather than a hang or crash; confirm the physical inspection
+   data is untouched afterward and analysis can be retried once back
+   online.
+7. **Android + iOS parity.** Repeat at least steps 1, 2, and 4 on both
+   an Android device/emulator and an iOS device/simulator.

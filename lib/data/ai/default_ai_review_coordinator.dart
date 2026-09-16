@@ -167,6 +167,7 @@ class DefaultAiReviewCoordinator implements AiReviewCoordinator {
       description: finding.description,
       notes: finding.notes,
       evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
+      evidenceIds: finding.evidence.map((e) => e.id).toList(),
     );
   }
 }

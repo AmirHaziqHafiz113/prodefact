@@ -146,15 +146,21 @@ abstract final class HomeInspectionConfig {
     ];
   }
 
-  /// Builds a section for a custom area the inspector adds at setup time.
-  /// Custom areas start included, non-plumbing, and with the same
-  /// standard element set as default areas so they can participate in
-  /// findings/evidence/AI review/reporting the same way.
-  static Section customSection(String name) {
+  /// Builds a section for a custom area the inspector adds at setup
+  /// time. Custom areas start included and with the same standard
+  /// element set as default areas so they can participate in findings/
+  /// evidence/AI review/reporting the same way. [isPlumbing] controls
+  /// whether this area contains plumbing fixtures and should therefore
+  /// participate in plumbing-first inspection ordering (see
+  /// `HomeInspectionConfig.defaultSectionsFor`'s sort) — the same single
+  /// flag drives both "contains plumbing" and "inspect first" for a
+  /// custom area, exactly as it does for a default one.
+  static Section customSection(String name, {bool isPlumbing = false}) {
     return Section(
       id: 'custom_${_slugify(name)}_${DateTime.now().microsecondsSinceEpoch}',
       name: name,
       elements: defaultElements(),
+      isPlumbing: isPlumbing,
     );
   }
 

@@ -1,5 +1,9 @@
 import {AiProvider, AiProviderError} from "./provider";
-import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
+import {
+  AnalyzeInspectionInput,
+  AnalyzeInspectionResult,
+  FindingImages,
+} from "./types";
 
 /**
  * Clean adapter shell for a future Anthropic (Claude) integration.
@@ -20,6 +24,10 @@ import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
  */
 export class AnthropicProvider implements AiProvider {
   readonly id = "anthropic";
+  // Set to true once a real multimodal implementation is added below —
+  // Anthropic's current models accept image input, so this would become
+  // true rather than needing a separate capability class.
+  readonly supportsImages = false;
 
   /** @param {string} apiKey the Anthropic API key, once configured. */
   constructor(private readonly apiKey: string) {
@@ -28,9 +36,11 @@ export class AnthropicProvider implements AiProvider {
 
   /** @inheritdoc */
   analyzeInspection(
-    input: AnalyzeInspectionInput
+    input: AnalyzeInspectionInput,
+    images: FindingImages[]
   ): Promise<AnalyzeInspectionResult> {
     void input;
+    void images;
     throw new AiProviderError(
       "The Anthropic provider is not yet implemented/configured."
     );

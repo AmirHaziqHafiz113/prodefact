@@ -1,5 +1,9 @@
 import {AiProvider, AiProviderError} from "./provider";
-import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
+import {
+  AnalyzeInspectionInput,
+  AnalyzeInspectionResult,
+  FindingImages,
+} from "./types";
 
 /**
  * Clean adapter shell for a future OpenAI/ChatGPT integration.
@@ -23,6 +27,10 @@ import {AnalyzeInspectionInput, AnalyzeInspectionResult} from "./types";
  */
 export class OpenAiProvider implements AiProvider {
   readonly id = "openai";
+  // Set to true once a real multimodal implementation is added below —
+  // OpenAI's current models accept image input, so this would become
+  // true rather than needing a separate capability class.
+  readonly supportsImages = false;
 
   /** @param {string} apiKey the OpenAI API key, once configured. */
   constructor(private readonly apiKey: string) {
@@ -31,9 +39,11 @@ export class OpenAiProvider implements AiProvider {
 
   /** @inheritdoc */
   analyzeInspection(
-    input: AnalyzeInspectionInput
+    input: AnalyzeInspectionInput,
+    images: FindingImages[]
   ): Promise<AnalyzeInspectionResult> {
     void input;
+    void images;
     throw new AiProviderError(
       "The OpenAI provider is not yet implemented/configured."
     );

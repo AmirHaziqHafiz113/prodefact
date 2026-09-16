@@ -4,11 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
-import '../../providers/home_inspection_providers.dart';
+import '../../providers/new_inspection_draft_providers.dart';
 
-/// Lets the inspector configure which areas apply to this property before
-/// physical inspection begins: include/exclude, rename, remove, add
-/// custom areas, or reset back to the property type's defaults.
+/// Lets the inspector configure which areas apply to this property
+/// before starting the inspection: include/exclude, rename, add/edit
+/// custom areas (with a plumbing/inspect-first flag), remove, or reset
+/// back to the property type's defaults.
+///
+/// Everything here edits an in-memory [NewInspectionDraft] — nothing is
+/// persisted, and no inspection exists, until the inspector taps
+/// "Start Inspection". Backing out of this screen at any point simply
+/// discards the draft; see `docs/production_readiness.md` ("New
+/// Inspection flow").
 class AreaConfigurationScreen extends ConsumerWidget {
   const AreaConfigurationScreen({super.key});
 
@@ -16,9 +23,9 @@ class AreaConfigurationScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final propertyType = ref.watch(selectedPropertyTypeProvider);
-    final sections = ref.watch(configuredAreasProvider);
-    final notifier = ref.read(configuredAreasProvider.notifier);
+    final draft = ref.watch(newInspectionDraftProvider);
+    final notifier = ref.read(newInspectionDraftProvider.notifier);
+    final sections = draft?.sections ?? const <Section>[];
     final includedCount = sections.where((s) => s.isIncluded).length;
     final plumbingCount = sections
         .where((s) => s.isIncluded && s.isPlumbing)
@@ -27,19 +34,19 @@ class AreaConfigurationScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          propertyType == null
+          draft == null
               ? 'Configure Areas'
-              : '${propertyType.label} Areas',
+              : '${draft.propertyType.label} Areas',
         ),
         actions: [
           IconButton(
             tooltip: 'Reset to defaults',
             icon: const Icon(Icons.restore),
-            onPressed: propertyType == null ? null : notifier.resetToDefaults,
+            onPressed: draft == null ? null : notifier.resetToDefaults,
           ),
         ],
       ),
-      body: sections.isEmpty
+      body: draft == null
           ? const AppEmptyView(
               icon: Icons.home_work_outlined,
               title: 'No property type selected.',
@@ -93,8 +100,11 @@ class AreaConfigurationScreen extends ConsumerWidget {
                         section: section,
                         onToggleIncluded: () =>
                             notifier.toggleIncluded(section.id),
-                        onRename: () =>
-                            _showRenameDialog(context, notifier, section),
+                        onEdit: () => _showEditAreaDialog(
+                          context,
+                          notifier,
+                          section: section,
+                        ),
                         onRemove: () => notifier.remove(section.id),
                       );
                     },
@@ -109,20 +119,17 @@ class AreaConfigurationScreen extends ConsumerWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: propertyType == null
+                  onPressed: draft == null
                       ? null
-                      : () => _showAddAreaDialog(context, notifier),
+                      : () => _showEditAreaDialog(context, notifier),
                   icon: const Icon(Icons.add),
                   label: const Text('Add area'),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
-                child: FilledButton(
-                  onPressed: sections.any((s) => s.isIncluded)
-                      ? () => context.push('/home-inspection/inspection')
-                      : null,
-                  child: const Text('Continue'),
+                child: _StartInspectionButton(
+                  enabled: sections.any((s) => s.isIncluded),
                 ),
               ),
             ],
@@ -132,67 +139,146 @@ class AreaConfigurationScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showRenameDialog(
+  /// One dialog for both "Add area" (no [section]) and "Edit area"
+  /// (existing [section]) — both need the same fields: a name, and
+  /// whether the area contains plumbing and should be inspected first.
+  Future<void> _showEditAreaDialog(
     BuildContext context,
-    ConfiguredAreas notifier,
-    Section section,
-  ) async {
-    final controller = TextEditingController(text: section.name);
-    final newName = await showDialog<String>(
+    NewInspectionDraftNotifier notifier, {
+    Section? section,
+  }) async {
+    final controller = TextEditingController(text: section?.name ?? '');
+    final result = await showDialog<({String name, bool isPlumbing})>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename area'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Area name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => _AreaEditDialog(
+        controller: controller,
+        initialIsPlumbing: section?.isPlumbing ?? false,
+        isNew: section == null,
       ),
     );
-    if (newName != null) {
-      notifier.rename(section.id, newName);
+    if (result == null) return;
+
+    if (section == null) {
+      notifier.addCustom(result.name, isPlumbing: result.isPlumbing);
+    } else {
+      notifier.updateArea(
+        section.id,
+        name: result.name,
+        isPlumbing: result.isPlumbing,
+      );
     }
   }
+}
 
-  Future<void> _showAddAreaDialog(
-    BuildContext context,
-    ConfiguredAreas notifier,
-  ) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add area'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Area name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+class _AreaEditDialog extends StatefulWidget {
+  const _AreaEditDialog({
+    required this.controller,
+    required this.initialIsPlumbing,
+    required this.isNew,
+  });
+
+  final TextEditingController controller;
+  final bool initialIsPlumbing;
+  final bool isNew;
+
+  @override
+  State<_AreaEditDialog> createState() => _AreaEditDialogState();
+}
+
+class _AreaEditDialogState extends State<_AreaEditDialog> {
+  late bool _isPlumbing = widget.initialIsPlumbing;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.isNew ? 'Add area' : 'Edit area'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: widget.controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Area name'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Add'),
+          const SizedBox(height: AppSpacing.sm),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Contains plumbing'),
+            subtitle: const Text(
+              'Inspected first (e.g. leakage/ponding checks)',
+            ),
+            value: _isPlumbing,
+            onChanged: (value) => setState(() => _isPlumbing = value),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.of(context)
+                  .pop((name: widget.controller.text, isPlumbing: _isPlumbing)),
+          child: Text(widget.isNew ? 'Add' : 'Save'),
+        ),
+      ],
     );
-    if (name != null) {
-      notifier.addCustom(name);
+  }
+}
+
+/// The explicit, final setup action — this is the only place a draft
+/// actually becomes a persisted, dashboard-visible inspection. Guards
+/// against a double-tap starting two sessions.
+class _StartInspectionButton extends ConsumerStatefulWidget {
+  const _StartInspectionButton({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  ConsumerState<_StartInspectionButton> createState() =>
+      _StartInspectionButtonState();
+}
+
+class _StartInspectionButtonState
+    extends ConsumerState<_StartInspectionButton> {
+  bool _isStarting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: widget.enabled && !_isStarting ? _start : null,
+      child: _isStarting
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(Colors.white),
+              ),
+            )
+          : const Text('Start Inspection'),
+    );
+  }
+
+  Future<void> _start() async {
+    setState(() => _isStarting = true);
+    final started = await ref
+        .read(newInspectionDraftProvider.notifier)
+        .startInspection();
+    if (!mounted) return;
+    if (!started) {
+      setState(() => _isStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not start the inspection. Please try again.'),
+        ),
+      );
+      return;
     }
+    context.push('/home-inspection/inspection');
   }
 }
 
@@ -200,54 +286,68 @@ class _AreaCard extends StatelessWidget {
   const _AreaCard({
     required this.section,
     required this.onToggleIncluded,
-    required this.onRename,
+    required this.onEdit,
     required this.onRemove,
   });
 
   final Section section;
   final VoidCallback onToggleIncluded;
-  final VoidCallback onRename;
+  final VoidCallback onEdit;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    // A Row/Column layout (rather than ListTile's fixed leading/title/
+    // subtitle/trailing grid) so the plumbing indicator and a long
+    // area name always have room to wrap or ellipsize instead of
+    // overflowing past the action buttons — see
+    // `docs/production_readiness.md` ("Area configuration overflow fix").
     return Card(
       color: section.isIncluded ? null : AppColors.surfaceAlt,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: 2,
+          vertical: AppSpacing.sm,
         ),
-        title: Text(
-          section.name,
-          style: section.isIncluded
-              ? Theme.of(context).textTheme.titleMedium
-              : Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(color: AppColors.textMuted),
-        ),
-        subtitle: section.isPlumbing
-            ? const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: StatusPill(
-                  label: 'Plumbing area — inspect first',
-                  icon: Icons.plumbing_outlined,
-                  foreground: AppColors.plumbing,
-                  background: AppColors.plumbingBg,
-                  dense: true,
-                ),
-              )
-            : null,
-        leading: Switch(
-          value: section.isIncluded,
-          onChanged: (_) => onToggleIncluded(),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
+            Switch(
+              value: section.isIncluded,
+              onChanged: (_) => onToggleIncluded(),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    section.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: section.isIncluded
+                        ? Theme.of(context).textTheme.titleMedium
+                        : Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: AppColors.textMuted),
+                  ),
+                  if (section.isPlumbing)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: StatusPill(
+                        label: 'Plumbing area — inspect first',
+                        icon: Icons.plumbing_outlined,
+                        foreground: AppColors.plumbing,
+                        background: AppColors.plumbingBg,
+                        dense: true,
+                      ),
+                    ),
+                ],
+              ),
+            ),
             IconButton(
-              tooltip: 'Rename',
+              tooltip: 'Edit',
               icon: const Icon(Icons.edit),
-              onPressed: onRename,
+              onPressed: onEdit,
             ),
             IconButton(
               tooltip: 'Remove',

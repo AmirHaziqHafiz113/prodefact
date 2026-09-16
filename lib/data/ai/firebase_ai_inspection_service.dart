@@ -54,7 +54,15 @@ class FirebaseAiInspectionService implements AiInspectionService {
 }
 
 /// Builds the JSON payload the `analyzeInspection` callable expects.
-/// Only redacted inspection context — no account/user data.
+/// Only redacted inspection context — no account/user data, and no
+/// evidence file paths/bytes/URLs, only opaque evidence *ids*: the
+/// callable resolves each one to an actual image itself, server-side,
+/// scoped to the authenticated caller's own cloud storage — see
+/// `docs/ai_provider_architecture.md` ("Multimodal evidence
+/// resolution"). An id with no matching synced evidence is simply
+/// skipped server-side rather than failing the request, so this works
+/// the same whether or not the session has ever been synced to the
+/// cloud.
 @visibleForTesting
 Map<String, dynamic> buildAnalyzeInspectionPayload(AiAnalysisRequest request) {
   return {
@@ -72,6 +80,8 @@ Map<String, dynamic> buildAnalyzeInspectionPayload(AiAnalysisRequest request) {
             if (finding.description != null) 'description': finding.description,
             if (finding.notes != null) 'notes': finding.notes,
             'evidenceCount': finding.evidenceFilePaths.length,
+            if (finding.evidenceIds.isNotEmpty)
+              'evidenceIds': finding.evidenceIds,
           },
         )
         .toList(),

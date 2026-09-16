@@ -27,13 +27,14 @@ class Section {
   Section copyWith({
     String? name,
     List<InspectionElement>? elements,
+    bool? isPlumbing,
     bool? isIncluded,
   }) {
     return Section(
       id: id,
       name: name ?? this.name,
       elements: elements ?? this.elements,
-      isPlumbing: isPlumbing,
+      isPlumbing: isPlumbing ?? this.isPlumbing,
       isIncluded: isIncluded ?? this.isIncluded,
     );
   }
