@@ -359,126 +359,75 @@ class _SessionCard extends ConsumerWidget {
     final canSync =
         authState.value != null &&
         (summary.ownerUid == null || summary.ownerUid == authState.value!.uid);
+    final (_, _, accentColor, _) = sessionLifecyclePresentation(summary.status);
+
+    // Real, derived — never fabricated: "review resolved" is processed
+    // findings minus those still genuinely pending review, both cheap
+    // counts the summary already exposes (see `InspectionSessionSummary`
+    // for why a full per-area/per-suggestion fraction isn't available
+    // at this list granularity without an expensive per-card load).
+    final aiTotal = summary.aiEligibleFindingsCount;
+    final aiProcessed = summary.aiProcessedFindingsCount;
+    final reviewTotal = aiProcessed;
+    final reviewResolved = (aiProcessed - summary.aiPendingReviewCount).clamp(
+      0,
+      aiProcessed,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          onTap: () => resumeAndOpenInspection(context, ref, summary.id),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppFallbackThumbnail(
-                  icon: propertyType == PropertyType.highRise
-                      ? Icons.apartment_outlined
-                      : Icons.house_outlined,
-                ),
-                const SizedBox(width: AppSpacing.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        summary.propertyTitle?.isNotEmpty == true
-                            ? summary.propertyTitle!
-                            : (propertyType?.label ?? summary.assetTypeId),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (summary.unitNumber != null ||
-                          summary.propertyAddress != null)
-                        Text(
-                          [
-                            summary.unitNumber,
-                            summary.propertyAddress,
-                          ].whereType<String>().join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      const SizedBox(height: AppSpacing.sm),
-                      // Priority order: status first, then AI progress —
-                      // sync state and the timestamp are tertiary
-                      // metadata and sit below, muted (§31).
-                      Wrap(
-                        spacing: AppSpacing.sm,
-                        runSpacing: AppSpacing.sm,
-                        children: [
-                          SessionLifecyclePill(status: summary.status),
-                          if (summary.needsAttention)
-                            StatusPill(
-                              label: summary.aiFailedFindingsCount > 0
-                                  ? '${summary.aiFailedFindingsCount} AI failed'
-                                  : '${summary.aiPendingReviewCount} need review',
-                              icon: Icons.priority_high,
-                              foreground: AppColors.danger,
-                              background: AppColors.dangerBg,
-                              dense: true,
-                            ),
-                        ],
-                      ),
-                      if (summary.aiEligibleFindingsCount > 0) ...[
-                        const SizedBox(height: AppSpacing.sm),
-                        _AiProgressLine(summary: summary),
-                      ],
-                      const SizedBox(height: AppSpacing.sm),
-                      Row(
-                        children: [
-                          SyncStatusPill(
-                            status: summary.syncStatus,
-                            dense: true,
-                            pendingCount: summary.pendingSyncCount,
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              _formatUpdatedAt(summary.updatedAt),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: AppColors.textMuted),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<_SessionAction>(
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (action) => switch (action) {
-                    _SessionAction.sync => _syncOne(context, ref),
-                    _SessionAction.delete => _confirmDelete(
-                      context,
-                      ref,
-                      propertyType?.label ?? summary.assetTypeId,
-                    ),
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      enabled: canSync,
-                      value: _SessionAction.sync,
-                      child: const ListTile(
-                        leading: Icon(Icons.cloud_sync_outlined),
-                        title: Text('Sync now'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: _SessionAction.delete,
-                      child: ListTile(
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Delete'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+      child: AppInspectionCard(
+        title: summary.propertyTitle?.isNotEmpty == true
+            ? summary.propertyTitle!
+            : (propertyType?.label ?? summary.assetTypeId),
+        subtitle: [
+          summary.unitNumber,
+          summary.propertyAddress,
+        ].whereType<String>().join(' · '),
+        illustrationKind: propertyType == PropertyType.highRise
+            ? AppPropertyIllustrationKind.highRise
+            : AppPropertyIllustrationKind.landed,
+        statusPill: SessionLifecyclePill(status: summary.status),
+        accentColor: accentColor,
+        onTap: () => resumeAndOpenInspection(context, ref, summary.id),
+        syncStatus: summary.syncStatus,
+        pendingSyncCount: summary.pendingSyncCount,
+        physicalComplete: summary.status != InspectionStatus.inProgress,
+        aiFraction: aiTotal == 0 ? null : aiProcessed / aiTotal,
+        aiFractionLabel: aiTotal == 0 ? null : '$aiProcessed/$aiTotal',
+        reviewFraction: reviewTotal == 0 ? null : reviewResolved / reviewTotal,
+        reviewFractionLabel: reviewTotal == 0
+            ? null
+            : '$reviewResolved/$reviewTotal',
+        trailing: PopupMenuButton<_SessionAction>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (action) => switch (action) {
+            _SessionAction.sync => _syncOne(context, ref),
+            _SessionAction.delete => _confirmDelete(
+              context,
+              ref,
+              propertyType?.label ?? summary.assetTypeId,
             ),
-          ),
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              enabled: canSync,
+              value: _SessionAction.sync,
+              child: const ListTile(
+                leading: Icon(Icons.cloud_sync_outlined),
+                title: Text('Sync now'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            const PopupMenuItem(
+              value: _SessionAction.delete,
+              child: ListTile(
+                leading: Icon(Icons.delete_outline),
+                title: Text('Delete'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -544,68 +493,9 @@ class _SessionCard extends ConsumerWidget {
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Inspection deleted.')));
   }
-
-  String _formatUpdatedAt(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return 'Last updated ${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
-        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
-  }
 }
 
 enum _SessionAction { sync, delete }
-
-/// "AI analysing inspection · 12 of 19 findings analysed · 63%" — real,
-/// count-based progress (never a fake timer/animation), computed from
-/// `InspectionSessionSummary`'s cheap AI counts. See
-/// `docs/ai_provider_architecture.md` ("AI progress on the dashboard").
-class _AiProgressLine extends StatelessWidget {
-  const _AiProgressLine({required this.summary});
-
-  final InspectionSessionSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = summary.aiEligibleFindingsCount;
-    final processed = summary.aiProcessedFindingsCount;
-    final pendingReview = summary.aiPendingReviewCount;
-    final inFlight = total - processed;
-
-    final String label;
-    final IconData icon;
-    final Color color;
-    if (inFlight > 0) {
-      final percent = total == 0 ? 0 : (processed / total * 100).round();
-      label = 'AI analysing · $processed of $total findings · $percent%';
-      icon = Icons.smart_toy_outlined;
-      color = AppColors.info;
-    } else if (pendingReview > 0) {
-      label = 'AI needs review · $pendingReview pending';
-      icon = Icons.help_outline;
-      color = AppColors.warning;
-    } else {
-      label = 'AI analysis complete';
-      icon = Icons.check_circle_outline;
-      color = AppColors.success;
-    }
-
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: color),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _AuthAction extends ConsumerWidget {
   const _AuthAction({required this.authState});

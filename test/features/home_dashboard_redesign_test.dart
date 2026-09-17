@@ -37,7 +37,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(HomeDashboardScreen), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, 'Top Up'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Top Up'), findsOneWidget);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('View Usage'), findsNothing);
 

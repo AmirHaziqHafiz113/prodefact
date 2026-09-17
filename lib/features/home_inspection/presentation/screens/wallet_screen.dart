@@ -168,13 +168,11 @@ class _BalanceCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppRadius.md),
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
             ),
-            child: const Icon(
-              Icons.monetization_on_outlined,
-              color: Colors.white,
-            ),
+            child: const Icon(Icons.bolt_rounded, color: Colors.white),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -182,8 +180,13 @@ class _BalanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'AI Credits',
-                  style: TextStyle(color: Colors.white70),
+                  'AI CREDITS',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 if (balanceAsync.isLoading && resolvedBalance == null)
@@ -201,11 +204,12 @@ class _BalanceCard extends StatelessWidget {
                     style: TextStyle(color: Colors.white),
                   )
                 else
-                  Text(
-                    '$resolvedBalance credits',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  AppAnimatedNumber(
+                    value: resolvedBalance!,
+                    suffix: ' credits',
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 if (resolvedBalance != null &&

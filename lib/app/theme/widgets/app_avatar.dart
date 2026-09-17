@@ -54,7 +54,18 @@ class AppAvatar extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: _background, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: _background,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.surface, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: _background.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Text(
         _initials,
         style: TextStyle(

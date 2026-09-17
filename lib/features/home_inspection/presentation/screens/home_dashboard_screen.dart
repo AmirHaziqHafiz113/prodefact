@@ -127,9 +127,16 @@ class _CreditsCard extends StatelessWidget {
     // the active inspection below (when there is one) carries that role.
     // The row itself opens Wallet ("View Usage"); Top Up is the one
     // explicit button, so it never has to compete with a second one.
-    return Card(
-      child: InkWell(
+    // A soft brand-tinted surface (not the full dark hero treatment)
+    // gives it real financial-product presence without competing with
+    // the Active Inspection hero below.
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.successBg,
         borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: onViewUsage,
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -139,16 +146,16 @@ class _CreditsCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.monetization_on_outlined,
-                  size: 18,
-                  color: AppColors.primary,
+                  Icons.bolt_rounded,
+                  size: 20,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -157,13 +164,27 @@ class _CreditsCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      resolvedBalance == null
-                          ? (balanceAsync.hasError ? 'Unavailable' : 'Loading…')
-                          : '$resolvedBalance credits',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      'AI CREDITS',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.primaryDark,
+                        letterSpacing: 0.6,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
+                    resolvedBalance == null
+                        ? Text(
+                            balanceAsync.hasError ? 'Unavailable' : 'Loading…',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          )
+                        : AppAnimatedNumber(
+                            value: resolvedBalance,
+                            suffix: ' credits',
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  color: AppColors.primaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
                     if (resolvedBalance != null &&
                         creditsPerMyr != null &&
                         creditsPerMyr! > 0)
@@ -175,8 +196,8 @@ class _CreditsCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
+              FilledButton(
+                style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 36),
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
@@ -276,6 +297,19 @@ class _HomeBody extends ConsumerWidget {
   }
 }
 
+/// A short, human relative timestamp ("2h ago", "Just now") — real
+/// data (`summary.updatedAt`), never an estimate.
+String _relativeTime(DateTime dateTime) {
+  final diff = DateTime.now().difference(dateTime);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  final local = dateTime.toLocal();
+  return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
+      '${local.day.toString().padLeft(2, '0')}';
+}
+
 class _ActiveInspectionHero extends ConsumerWidget {
   const _ActiveInspectionHero({required this.summary});
 
@@ -300,11 +334,11 @@ class _ActiveInspectionHero extends ConsumerWidget {
           children: [
             Row(
               children: [
-                AppFallbackThumbnail(
-                  icon: propertyType == PropertyType.highRise
-                      ? Icons.apartment_outlined
-                      : Icons.house_outlined,
-                  size: 44,
+                AppPropertyIllustration(
+                  kind: propertyType == PropertyType.landed
+                      ? AppPropertyIllustrationKind.landed
+                      : AppPropertyIllustrationKind.highRise,
+                  size: 48,
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
@@ -328,6 +362,15 @@ class _ActiveInspectionHero extends ConsumerWidget {
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 12.5,
+                        ),
+                      ),
+                      Text(
+                        'Updated ${_relativeTime(summary.updatedAt)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -439,10 +482,20 @@ class _AttentionListRow extends ConsumerWidget {
         ? '${summary.aiFailedFindingsCount} AI ${summary.aiFailedFindingsCount == 1 ? 'analysis' : 'analyses'} failed'
         : '${summary.aiPendingReviewCount} finding${summary.aiPendingReviewCount == 1 ? '' : 's'} pending review';
 
+    final color = isFailed ? AppColors.danger : AppColors.warning;
     return ListTile(
-      leading: Icon(
-        Icons.priority_high,
-        color: isFailed ? AppColors.danger : AppColors.warning,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          isFailed ? Icons.error_outline : Icons.rate_review_outlined,
+          size: 18,
+          color: color,
+        ),
       ),
       title: Text(title),
       subtitle: Text(message),
@@ -465,52 +518,23 @@ class _RecentInspectionTile extends ConsumerWidget {
     final title = summary.propertyTitle?.isNotEmpty == true
         ? summary.propertyTitle!
         : (propertyType?.label ?? summary.assetTypeId);
+    final (_, _, accentColor, _) = sessionLifecyclePresentation(summary.status);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          onTap: () => resumeAndOpenInspection(context, ref, summary.id),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
-              children: [
-                AppFallbackThumbnail(
-                  icon: propertyType == PropertyType.highRise
-                      ? Icons.apartment_outlined
-                      : Icons.house_outlined,
-                  size: 48,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      Text(
-                        [
-                          summary.propertyAddress,
-                          propertyType?.label,
-                        ].whereType<String>().join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Flexible(child: SessionLifecyclePill(status: summary.status)),
-              ],
-            ),
-          ),
-        ),
+      child: AppInspectionCard(
+        title: title,
+        subtitle: [
+          summary.propertyAddress,
+          '${propertyType?.label ?? ''} · ${_relativeTime(summary.updatedAt)}',
+        ].whereType<String>().join(' · '),
+        illustrationKind: propertyType == PropertyType.landed
+            ? AppPropertyIllustrationKind.landed
+            : AppPropertyIllustrationKind.highRise,
+        statusPill: SessionLifecyclePill(status: summary.status),
+        accentColor: accentColor,
+        dense: true,
+        onTap: () => resumeAndOpenInspection(context, ref, summary.id),
       ),
     );
   }

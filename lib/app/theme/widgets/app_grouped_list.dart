@@ -17,13 +17,18 @@ class AppGroupedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.outline),
-      ),
+    // `Material` (not a plain `Container`) provides the background and
+    // border — a decorated `Container` sitting between a `ListTile`/
+    // `InkWell` row and its Material ancestor paints over that row's
+    // ink splash, making tap feedback invisible (a real, Flutter-
+    // flagged bug this fix resolves).
+    return Material(
+      color: color ?? AppColors.surface,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: const BorderSide(color: AppColors.outline),
+      ),
       child: Column(
         children: [
           for (var i = 0; i < children.length; i++) ...[

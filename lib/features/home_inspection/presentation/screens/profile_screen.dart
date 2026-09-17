@@ -68,39 +68,85 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onAttentionTap: () => showAttentionSheet(context, ref),
             ),
             const SizedBox(height: AppSpacing.lg),
-            // A compact identity header, not a card — removing the border
-            // here loses no meaning, so it doesn't get one (§9).
-            Row(
-              children: [
-                AppAvatar(
-                  displayName: _inspectorName.text,
-                  email: user?.email,
-                  size: 56,
+            // A soft branded identity surface — elevated above a plain
+            // header row without going as dark/urgent as Home/Wallet's
+            // hero, since Profile's job is identity, not a call to act.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.successBg, AppColors.surfaceAlt],
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                border: Border.all(color: AppColors.outline),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  const Positioned.fill(
+                    child: AppBrandPattern(
+                      color: AppColors.primary,
+                      opacity: 0.06,
+                    ),
+                  ),
+                  Row(
                     children: [
-                      Text(
-                        displayName,
-                        style: Theme.of(context).textTheme.titleLarge,
+                      AppAvatar(
+                        displayName: _inspectorName.text,
+                        email: user?.email,
+                        size: 64,
                       ),
-                      Text(
-                        user?.email ??
-                            'Not signed in — working offline, local only',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      if (_companyName.text.isNotEmpty)
-                        Text(
-                          _companyName.text,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.textMuted),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            Text(
+                              user?.email ??
+                                  'Not signed in — working offline, local only',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            if (_companyName.text.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.apartment_outlined,
+                                      size: 13,
+                                      color: AppColors.textMuted,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        _companyName.text,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppColors.textMuted,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             _SectionCard(
@@ -111,6 +157,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SegmentedButton<AiLevel>(
+                    style: SegmentedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceMuted,
+                      selectedBackgroundColor: AppColors.primary,
+                      selectedForegroundColor: Colors.white,
+                      side: BorderSide.none,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                    ),
+                    showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(value: AiLevel.fast, label: Text('Fast')),
                       ButtonSegment(value: AiLevel.smart, label: Text('Smart')),
