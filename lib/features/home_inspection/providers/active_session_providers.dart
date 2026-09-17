@@ -161,6 +161,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     PropertyType propertyType, {
     List<Section>? initialSections,
     PropertyDetails propertyDetails = PropertyDetails.empty,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
   }) async {
     final sections =
         initialSections ??
@@ -172,6 +174,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         initialSections: sections,
         ownerUid: ref.read(authServiceProvider).currentUser?.uid,
         propertyDetails: propertyDetails,
+        commercialMode: commercialMode,
+        selectedAiLevel: selectedAiLevel,
       );
       state = session;
       ref.read(activeSessionErrorProvider.notifier).clear();

@@ -28,6 +28,8 @@ class FaultInjectingRepository implements InspectionRepository {
     required List<Section> initialSections,
     String? ownerUid,
     PropertyDetails propertyDetails = PropertyDetails.empty,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
   }) {
     _maybeFail('createSession');
     return _inner.createSession(
@@ -36,6 +38,8 @@ class FaultInjectingRepository implements InspectionRepository {
       initialSections: initialSections,
       ownerUid: ownerUid,
       propertyDetails: propertyDetails,
+      commercialMode: commercialMode,
+      selectedAiLevel: selectedAiLevel,
     );
   }
 
@@ -179,6 +183,24 @@ class FaultInjectingRepository implements InspectionRepository {
   Future<void> saveInspectionNote(String sessionId, String? note) {
     _maybeFail('saveInspectionNote');
     return _inner.saveInspectionNote(sessionId, note);
+  }
+
+  @override
+  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled) {
+    _maybeFail('setAutoAnalyseEnabled');
+    return _inner.setAutoAnalyseEnabled(sessionId, enabled);
+  }
+
+  @override
+  Future<WalletCache?> loadWalletCache() {
+    _maybeFail('loadWalletCache');
+    return _inner.loadWalletCache();
+  }
+
+  @override
+  Future<void> saveWalletCache(WalletCache cache) {
+    _maybeFail('saveWalletCache');
+    return _inner.saveWalletCache(cache);
   }
 
   @override

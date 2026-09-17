@@ -403,4 +403,93 @@ void main() {
       );
     },
   );
+
+  group('commercial layer', () {
+    test('createSession persists commercialMode/selectedAiLevel, and they '
+        'survive a reload', () async {
+      final created = await repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: [_bathroomSection()],
+        commercialMode: CommercialMode.housePass,
+        selectedAiLevel: AiLevel.expert,
+      );
+      expect(created.commercialMode, CommercialMode.housePass);
+      expect(created.selectedAiLevel, AiLevel.expert);
+      // Auto Analyse always starts off for a brand-new session.
+      expect(created.autoAnalyseEnabled, isFalse);
+
+      final reloaded = await repository.loadSession(created.id);
+      expect(reloaded!.commercialMode, CommercialMode.housePass);
+      expect(reloaded.selectedAiLevel, AiLevel.expert);
+    });
+
+    test('a session created without a commercial plan leaves it null — '
+        'never defaulted to flexCredits at the storage layer', () async {
+      final created = await repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: [_bathroomSection()],
+      );
+      expect(created.commercialMode, isNull);
+      expect(created.selectedAiLevel, isNull);
+
+      final reloaded = await repository.loadSession(created.id);
+      expect(reloaded!.commercialMode, isNull);
+    });
+
+    test('setAutoAnalyseEnabled persists and survives a reload', () async {
+      final session = await repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: [_bathroomSection()],
+        commercialMode: CommercialMode.housePass,
+      );
+
+      await repository.setAutoAnalyseEnabled(session.id, true);
+
+      final reloaded = await repository.loadSession(session.id);
+      expect(reloaded!.autoAnalyseEnabled, isTrue);
+    });
+
+    test(
+      'loadWalletCache returns null until a balance has ever been cached',
+      () async {
+        expect(await repository.loadWalletCache(), isNull);
+      },
+    );
+
+    test('saveWalletCache persists a balance that loadWalletCache returns, '
+        'and a later save overwrites rather than accumulating rows', () async {
+      final now = DateTime.now();
+      await repository.saveWalletCache(
+        WalletCache(balanceCredits: 500, updatedAt: now),
+      );
+      final first = await repository.loadWalletCache();
+      expect(first!.balanceCredits, 500);
+
+      final later = now.add(const Duration(minutes: 5));
+      await repository.saveWalletCache(
+        WalletCache(balanceCredits: 320, updatedAt: later),
+      );
+      final second = await repository.loadWalletCache();
+      expect(second!.balanceCredits, 320);
+      // Drift's DateTimeColumn stores whole seconds — compare with
+      // second precision rather than the microsecond-precise input.
+      expect(
+        second.updatedAt.difference(later).inSeconds.abs(),
+        lessThanOrEqualTo(1),
+      );
+    });
+
+    test('loadUserProfile/saveUserProfile round-trip defaultAiLevel', () async {
+      expect((await repository.loadUserProfile()).defaultAiLevel, isNull);
+
+      await repository.saveUserProfile(
+        UserProfile.empty.copyWith(defaultAiLevel: AiLevel.fast),
+      );
+
+      expect((await repository.loadUserProfile()).defaultAiLevel, AiLevel.fast);
+    });
+  });
 }

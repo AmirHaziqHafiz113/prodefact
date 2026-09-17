@@ -126,7 +126,8 @@ class ReviewSetupScreen extends ConsumerWidget {
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: _StartInspectionButton(
-                  enabled: includedAreas.isNotEmpty,
+                  enabled:
+                      includedAreas.isNotEmpty && draft.hasChosenCommercialPlan,
                 ),
               ),
             ],

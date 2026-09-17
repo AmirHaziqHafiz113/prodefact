@@ -50,6 +50,22 @@ class InspectionSessionRows extends Table {
   /// never sent through AI classification.
   TextColumn get inspectionNote => text().nullable()();
 
+  /// How this inspection pays for AI analysis — `flexCredits` or
+  /// `housePass` (added in schema v9), chosen once via the Choose AI
+  /// Plan step. Null for a pre-v9 session or one still awaiting that
+  /// choice — see `CommercialMode`, docs/commercial_model.md.
+  TextColumn get commercialMode => text().nullable()();
+
+  /// The inspector's chosen AI quality tier for this inspection —
+  /// `fast`/`smart`/`expert` (added in schema v9). See `AiLevel`.
+  TextColumn get selectedAiLevel => text().nullable()();
+
+  /// Whether AI analysis should run automatically after Save Finding
+  /// (added in schema v9). Defaults to false (Flex Credits' safe
+  /// default) — never true for any pre-existing session.
+  BoolColumn get autoAnalyseEnabled =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -256,6 +272,28 @@ class UserProfileRows extends Table {
   TextColumn get id => text()();
   TextColumn get companyName => text().nullable()();
   TextColumn get inspectorName => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// The inspector's preferred default AI quality tier for new
+  /// inspections (added in schema v9) — see `AiLevel`, `UserProfile.
+  /// defaultAiLevel`. Null falls back to the app-wide default.
+  TextColumn get defaultAiLevel => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A local, non-authoritative display cache of the last-known Credits
+/// wallet balance (added in schema v9) — purely so the Wallet/Home UI
+/// has something to show instantly and offline. The backend ledger
+/// (`users/{uid}/walletTransactions`) is always the source of truth;
+/// this cache is refreshed opportunistically whenever a commercial
+/// callable returns a fresh balance, and is never read by any pricing/
+/// charging decision. Always one row, keyed by the constant id
+/// `'local'` — see `WalletCache`.
+class WalletCacheRows extends Table {
+  TextColumn get id => text()();
+  IntColumn get balanceCredits => integer()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

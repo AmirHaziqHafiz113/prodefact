@@ -50,17 +50,24 @@ export function resolveProviderId(
  * Constructs the adapter for one provider id.
  * @param {SupportedProviderId} providerId the provider to construct.
  * @param {string} apiKey that provider's API key.
+ * @param {string} [model] the exact model id to request — required for
+ *   `openai` (see `billing/pricing_config.ts`'s AI-level -> model
+ *   mapping); ignored by providers with a single, fixed model.
  * @return {AiProvider} the constructed adapter.
  */
 export function createProvider(
   providerId: SupportedProviderId,
-  apiKey: string
+  apiKey: string,
+  model?: string
 ): AiProvider {
   switch (providerId) {
   case "deepseek":
     return new DeepSeekProvider(apiKey);
   case "openai":
-    return new OpenAiProvider(apiKey);
+    if (!model) {
+      throw new Error("The OpenAI provider requires a model id.");
+    }
+    return new OpenAiProvider(apiKey, model);
   case "gemini":
     return new GeminiProvider(apiKey);
   case "anthropic":

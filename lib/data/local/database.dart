@@ -65,6 +65,16 @@ part 'database.g.dart';
 ///   (nullable). Added `SectionRows.note` (nullable) for per-area
 ///   contextual notes. All additive/nullable; no existing data
 ///   affected.
+/// - v9: (commercial layer pass) added `InspectionSessionRows.
+///   commercialMode`/`selectedAiLevel` (nullable — see `CommercialMode`/
+///   `AiLevel`) and `autoAnalyseEnabled` (defaults to false, correct for
+///   every pre-existing session) for the Choose AI Plan step. Added
+///   `UserProfileRows.defaultAiLevel` (nullable) for the Profile
+///   preference. Added the new `WalletCacheRows` table — a local,
+///   non-authoritative *display* cache of the Credits balance; the
+///   backend ledger is always the source of truth (see
+///   docs/commercial_model.md). All additive; no existing column or
+///   table is altered or dropped.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -74,6 +84,7 @@ part 'database.g.dart';
     AiSuggestionRows,
     ReportRows,
     UserProfileRows,
+    WalletCacheRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -84,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +203,31 @@ class AppDatabase extends _$AppDatabase {
           inspectionSessionRows.inspectionNote,
         );
         await migrator.addColumn(sectionRows, sectionRows.note);
+      }
+      if (from < 9) {
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.commercialMode,
+        );
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.selectedAiLevel,
+        );
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.autoAnalyseEnabled,
+        );
+        // `userProfileRows` only needs the column added here if the
+        // table already existed before this migration run (from >= 7,
+        // when it was created) — the same guard `reportRows.version`
+        // used at v7 for the identical reason.
+        if (from >= 7) {
+          await migrator.addColumn(
+            userProfileRows,
+            userProfileRows.defaultAiLevel,
+          );
+        }
+        await migrator.createTable(walletCacheRows);
       }
     },
   );

@@ -1,9 +1,16 @@
 import {AiProvider, AiProviderError} from "./provider";
-import {defectCatalogue} from "./defect_catalogue";
+import {fetchWithTimeout} from "./http_util";
+import {
+  buildFindingContent,
+  buildSystemPrompt,
+  parseClassificationPayload,
+} from "./prompt";
 import {
   ClassificationResult,
   ClassifyFindingInput,
   FindingImages,
+  ProviderClassification,
+  ProviderUsage,
 } from "./types";
 
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
@@ -16,185 +23,12 @@ const DEEPSEEK_MODEL = "deepseek-flash";
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 1;
 
-/**
- * Builds the compact catalogue listing embedded in the system prompt —
- * id, main element, component, and defect description only. The
- * corrective action is deliberately never sent to the model: it's
- * resolved server-side from whichever id the model returns, so a
- * hallucinated or altered corrective action can never reach the
- * inspector. Sending the *entire* catalogue every request (rather than
- * a deterministic subset keyed off the area name) is a deliberate
- * choice — this is one small request per finding now, not one huge
- * per-session batch, so the absolute per-request cost stays bounded,
- * and a partial/guessed subset risks the model being unable to find
- * the actually-correct entry for an area whose defects don't map
- * cleanly to its name (see docs/ai_provider_architecture.md, "Why the
- * full catalogue").
- * @return {string} the catalogue listing, one line per defect entry.
- */
-function buildCatalogueListing(): string {
-  return defectCatalogue.entries
-    .map(
-      (e) =>
-        `${e.id} | ${e.mainElementName} | ${e.componentName} | ` +
-        e.defectDescription
-    )
-    .join("\n");
-}
-
-/**
- * Builds the system prompt: the controlled catalogue, the JSON
- * contract, and explicit instructions to select only from the given
- * ids, to say so when uncertain, and to distinguish what's visible in
- * a photo from what's inferred.
- * @return {string} the system prompt.
- */
-function buildSystemPrompt(): string {
-  const jsonShape = "{\"catalogueEntryId\": string | null, " +
-    "\"confidence\": number, \"shortReason\": string, " +
-    "\"candidateEntryIds\": string[], \"needsReview\": boolean}";
-  return [
-    "You are ProDefact's professional home inspection defect",
-    "classification engine. You can see a photo of one defect plus",
-    "the inspector's own optional note and the area it was found in.",
-    "",
-    "You must classify this finding by choosing exactly ONE entry",
-    "from the CONTROLLED DEFECT CATALOGUE below, identified by its",
-    "id. You are NEVER allowed to invent a main element, component,",
-    "defect, or corrective action that is not one of the ids listed.",
-    "The catalogue format is: id | main element | component | defect",
-    "description.",
-    "",
-    "CONTROLLED DEFECT CATALOGUE:",
-    buildCatalogueListing(),
-    "",
-    "You are advisory only. The human inspector is the final",
-    "authority and reviews every classification — never state or",
-    "imply otherwise.",
-    "",
-    "In your notes/reason, clearly distinguish what is directly",
-    "visible in the photo from what is inference from context. If",
-    "the photo is unclear, irrelevant, or does not clearly match any",
-    "catalogue entry, or if multiple entries are similarly plausible,",
-    "set needsReview to true and catalogueEntryId to null — do NOT",
-    "guess an entry just to have an answer. You may still list up to",
-    "3 plausible catalogueEntryIds in candidateEntryIds even when",
-    "needsReview is true, so the inspector has a shortlist.",
-    "",
-    "Respond with JSON only, shaped exactly as:",
-    jsonShape,
-    "",
-    "catalogueEntryId must be exactly one of the ids from the",
-    "catalogue above, or null. Never invent a new id.",
-  ].join("\n");
-}
-
-type DeepSeekContentBlock =
-  | {type: "text"; text: string}
-  | {type: "image_url"; image_url: {url: string; detail: "auto"}};
-
-/**
- * Builds the finding's multimodal user-message content: its structured
- * text context first, followed by any resolved photos.
- * @param {ClassifyFindingInput} input the finding's structured context.
- * @param {FindingImages} images that finding's resolved images.
- * @return {DeepSeekContentBlock[]} the content blocks for this finding.
- */
-function buildFindingContent(
-  input: ClassifyFindingInput,
-  images: FindingImages
-): DeepSeekContentBlock[] {
-  const lines = [
-    `findingId: ${input.findingId}`,
-    `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`,
-  ];
-  if (input.note) lines.push(`inspector note: ${input.note}`);
-
-  const photoCount = images.images.length;
-  if (photoCount > 0) {
-    lines.push(`attached photos: ${photoCount}`);
-  } else {
-    lines.push(
-      "attached photos: none usable (missing, not yet synced, or " +
-        "unreadable) — rely on the area/note above only"
-    );
-  }
-  if (images.unavailableCount > 0) {
-    lines.push(
-      `(${images.unavailableCount} additional photo(s) could not be ` +
-        "processed)"
-    );
-  }
-
-  const blocks: DeepSeekContentBlock[] = [
-    {type: "text", text: lines.join("\n")},
-  ];
-  for (const image of images.images) {
-    blocks.push({
-      type: "image_url",
-      image_url: {
-        url: `data:${image.mimeType};base64,${image.base64}`,
-        detail: "auto",
-      },
-    });
-  }
-  return blocks;
-}
-
 interface DeepSeekChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
-}
-
-/**
- * Structurally validates the raw parsed JSON before it's trusted at
- * all — `gateway.validateAndNormalize` performs the real, catalogue-
- * aware validation before this data is used for anything.
- * @param {unknown} raw the parsed JSON body from the model.
- * @param {string} findingId the finding this response is for.
- * @return {ClassificationResult} the raw (not yet catalogue-validated)
- *   classification.
- */
-function parseClassificationPayload(
-  raw: unknown,
-  findingId: string
-): ClassificationResult {
-  if (typeof raw !== "object" || raw === null) {
-    throw new AiProviderError("DeepSeek response was not a JSON object.");
-  }
-  const r = raw as Record<string, unknown>;
-  return {
-    findingId,
-    catalogueEntryId:
-      typeof r.catalogueEntryId === "string" ? r.catalogueEntryId : undefined,
-    confidence: typeof r.confidence === "number" ? r.confidence : undefined,
-    shortReason:
-      typeof r.shortReason === "string" ? r.shortReason : undefined,
-    candidateEntryIds: Array.isArray(r.candidateEntryIds) ?
-      r.candidateEntryIds.filter((x): x is string => typeof x === "string") :
-      [],
-    needsReview: r.needsReview === true,
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
   };
-}
-
-/**
- * Fetches with a hard timeout via `AbortController`.
- * @param {string} url the request URL.
- * @param {RequestInit} init the fetch options.
- * @param {number} timeoutMs the timeout, in milliseconds.
- * @return {Promise<Response>} the fetch response.
- */
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {...init, signal: controller.signal});
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /**
@@ -203,7 +37,9 @@ async function fetchWithTimeout(
  * structured context plus any resolved evidence photos (already
  * downloaded/validated/normalized by `ai/evidence.ts` before this
  * class ever sees them), and classifies against the controlled defect
- * catalogue rather than freely inventing a defect/recommendation.
+ * catalogue rather than freely inventing a defect/recommendation. The
+ * system prompt/finding content builders are shared with every other
+ * multimodal provider — see `ai/prompt.ts`.
  */
 export class DeepSeekProvider implements AiProvider {
   readonly id = "deepseek";
@@ -218,7 +54,7 @@ export class DeepSeekProvider implements AiProvider {
   async classifyFinding(
     input: ClassifyFindingInput,
     images: FindingImages
-  ): Promise<ClassificationResult> {
+  ): Promise<ProviderClassification> {
     const requestBody = {
       model: DEEPSEEK_MODEL,
       temperature: 0.2,
@@ -255,12 +91,12 @@ export class DeepSeekProvider implements AiProvider {
    * response shape.
    * @param {Record<string, unknown>} requestBody the request body.
    * @param {string} findingId the finding this request is for.
-   * @return {Promise<ClassificationResult>} the validated result.
+   * @return {Promise<ProviderClassification>} the validated result.
    */
   private async callOnce(
     requestBody: Record<string, unknown>,
     findingId: string
-  ): Promise<ClassificationResult> {
+  ): Promise<ProviderClassification> {
     let response: Response;
     try {
       response = await fetchWithTimeout(
@@ -304,6 +140,18 @@ export class DeepSeekProvider implements AiProvider {
       throw new AiProviderError("DeepSeek returned invalid JSON.", error);
     }
 
-    return parseClassificationPayload(parsedContent, findingId);
+    const result: ClassificationResult = parseClassificationPayload(
+      parsedContent,
+      findingId
+    );
+    const usage: ProviderUsage | undefined =
+      typeof data.usage?.prompt_tokens === "number" &&
+      typeof data.usage?.completion_tokens === "number" ?
+        {
+          inputTokens: data.usage.prompt_tokens,
+          outputTokens: data.usage.completion_tokens,
+        } :
+        undefined;
+    return {result, usage};
   }
 }

@@ -48,7 +48,7 @@ export async function handleClassifyFinding(params: {
 
   let result: ClassificationResult;
   try {
-    result = await provider.classifyFinding(input, images);
+    result = (await provider.classifyFinding(input, images)).result;
   } catch (error) {
     console.error("AI provider request failed", {
       provider: provider.id,

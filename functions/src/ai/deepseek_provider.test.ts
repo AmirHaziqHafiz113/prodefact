@@ -39,11 +39,15 @@ function stubFetch(t: TestContext, impl: FetchImpl): void {
 
 /**
  * @param {unknown} content the model's (already-stringified) JSON body.
+ * @param {object} [usage] the model's reported token usage.
  * @return {Response} a fake successful DeepSeek chat-completion response.
  */
-function okResponse(content: string): Response {
+function okResponse(
+  content: string,
+  usage?: {prompt_tokens: number; completion_tokens: number}
+): Response {
   return new Response(
-    JSON.stringify({choices: [{message: {content}}]}),
+    JSON.stringify({choices: [{message: {content}}], usage}),
     {status: 200}
   );
 }
@@ -56,9 +60,39 @@ test("a successful response is parsed into a classification", async (t) => {
       needsReview: false,
     })));
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.classifyFinding(sampleInput(), noImages());
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(result.catalogueEntryId, "wall.concrete_wall.05");
   assert.equal(result.confidence, 0.8);
+});
+
+test("the provider's reported token usage is captured for billing",
+  async (t) => {
+    stubFetch(t, async () =>
+      okResponse(
+        JSON.stringify({
+          catalogueEntryId: "wall.concrete_wall.05",
+          needsReview: false,
+        }),
+        {prompt_tokens: 1234, completion_tokens: 56}
+      ));
+    const provider = new DeepSeekProvider("fake-key");
+    const {usage} = await provider.classifyFinding(
+      sampleInput(),
+      noImages()
+    );
+    assert.deepEqual(usage, {inputTokens: 1234, outputTokens: 56});
+  });
+
+test("a response with no usage field leaves usage undefined rather than " +
+  "fabricating zeros", async (t) => {
+  stubFetch(t, async () =>
+    okResponse(JSON.stringify({
+      catalogueEntryId: "wall.concrete_wall.05",
+      needsReview: false,
+    })));
+  const provider = new DeepSeekProvider("fake-key");
+  const {usage} = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(usage, undefined);
 });
 
 test("a 400 response fails immediately, without retrying", async (t) => {
@@ -102,7 +136,7 @@ test("a 429 (rate limit) response is retried once and can succeed on " +
     }));
   });
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.classifyFinding(sampleInput(), noImages());
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
   assert.equal(result.catalogueEntryId, "floor.floor_tiles.03");
 });
@@ -120,7 +154,7 @@ test("a network/abort failure is treated as transient and retried", async (
     }));
   });
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.classifyFinding(sampleInput(), noImages());
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
   assert.equal(result.catalogueEntryId, "door.door_hinge.03");
 });
@@ -153,7 +187,7 @@ test("a needsReview response with no catalogueEntryId is parsed " +
       candidateEntryIds: ["door.door_hinge.01", "door.door_hinge.02"],
     })));
   const provider = new DeepSeekProvider("fake-key");
-  const result = await provider.classifyFinding(sampleInput(), noImages());
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(result.catalogueEntryId, undefined);
   assert.equal(result.needsReview, true);
   assert.deepEqual(result.candidateEntryIds, [

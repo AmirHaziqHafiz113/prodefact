@@ -1,0 +1,453 @@
+# Commercial Model — AI Credits, Flex Credits, House Pass
+
+This document covers ProDefact's commercial layer: the customer-facing
+"AI Credits" abstraction, the two ways to pay for AI analysis (Flex
+Credits and House Pass), the wallet ledger, the pricing/reservation/
+settlement protocol, and the payment architecture (sandbox-only today).
+It complements `docs/ai_provider_architecture.md` (which covers the AI
+provider gateway itself) and `docs/production_readiness.md`.
+
+**Status: backend/Cloud Functions only.** This pass implemented the
+Firestore data model, pricing/wallet/House Pass domain logic, and the
+six new callables under `functions/src/billing/`, all covered by unit
+tests (`npm test` in `functions/`). **No Flutter UI has been built
+yet** — there is no splash screen, bottom navigation, Wallet screen, Top
+Up screen, Choose AI Plan step, or Drift schema migration. Save Finding
+in the Flutter app still behaves exactly as before (it does not yet
+call `estimateFindingAnalysis`/`analyseFinding` at all). This document
+describes the backend contract the Flutter work still needs to be built
+against — **the app is not commercially functional yet, and none of
+this makes any claim of production readiness.**
+
+## Principles
+
+- **Credits, never tokens.** The customer-facing unit is "AI Credits."
+  Nothing in Flutter ever computes a price, sees a model name, sees a
+  provider name, or sees a raw token count. Every price shown comes
+  from a callable (`estimateFindingAnalysis`, `getCommercialConfig`).
+- **Backend-authoritative, always.** Flutter cannot grant Credits, edit
+  its own balance, activate a House Pass, decide a price, or settle its
+  own AI charge. Every one of those happens only inside a Cloud
+  Function using the Admin SDK. Firestore rules deny all client writes
+  to `wallet/`, `walletTransactions/`, `housePasses/`, `paymentIntents/`,
+  `aiJobs/`, and `pricing/` (see `firestore.rules`).
+- **Physical inspection is never blocked by commercial state.** A zero
+  balance, an exhausted House Pass allowance, or being offline never
+  prevents taking photos, saving findings, or completing an inspection.
+  Only the *AI analysis* step is commercially gated.
+- **Save Finding never spends Credits.** This is the one behavior
+  change to the existing flow: saving a finding (photo + note) is
+  purely physical and free. AI analysis is a separate, explicit,
+  approved step — see "The estimate -> approval -> reservation ->
+  settlement protocol" below.
+
+## Credits conversion and markup
+
+Single source of truth: `functions/src/billing/pricing_config.ts`,
+`PricingConfig`, stored at Firestore `pricing/config` (read via
+`loadPricingConfig`, falling back to `DEFAULT_PRICING_CONFIG` only when
+that document has never been written — never silently on a malformed
+one, which throws). Production changes to any of the numbers below are
+a Firestore document edit, never an app rebuild.
+
+- `creditsPerMyr` — e.g. `100` means **100 Credits = RM1**. Default
+  config uses this ratio for RM10 -> 1,000 / RM30 -> 3,000 / RM50 ->
+  5,000 / RM100 -> 10,000 Credits (`myrToCredits` in `pricing.ts`).
+- `markupMultiplier` — customer price = provider cost × this
+  multiplier. The default is `2.0`. **This is a 100% markup over
+  provider cost, not 100% gross margin** — gross margin on a 2×
+  multiplier is 50% (revenue minus cost, divided by revenue), and this
+  document, the code comments in `pricing.ts`, and `PricingConfig`'s own
+  doc comment all say so explicitly to avoid that exact mix-up.
+- `lowBalanceThresholdCredits` — below this, the (not-yet-built) Wallet/
+  Home UI should show a non-blocking low-balance notice.
+
+## Flex Credits vs. House Pass
+
+Two commercial modes, persisted once per inspection as
+`InspectionSession.commercialMode` (Flutter-side field, not yet added —
+see "What's still needed on the Flutter side"). `computeEstimate` in
+`handle_estimate_finding_analysis.ts` is the one place that resolves
+which mode actually applies for a given AI analysis, re-derived fresh
+on every estimate/analyse call (never cached client-side as
+authoritative).
+
+**Flex Credits (pay-per-use).** Every AI analysis reserves and (on
+success) charges the real usage-based cost, capped at the shown
+estimate. No subscription, no included allowance.
+
+**House Pass (RM30 per property, not unlimited).** A fixed-price
+product tied to exactly one inspection (`HousePass.inspectionId`).
+Includes one AI level (`HousePassConfig.includedAiLevel`, default
+`"smart"`) up to a **fair-use allowance** (`allowanceFindings`, a count
+of included findings — deliberately a simple number, not a Credits
+budget, so it's easy for a non-technical operator to reason about).
+Choosing a level above the included one still charges the surcharge in
+Credits (`housePassSurchargeCredits` in `pricing.ts`) — e.g. a pass that
+includes Smart but the inspector picks Expert.
+
+**House Pass states** (`HousePassStatus` in `billing/types.ts`):
+`paymentRequired` (implicit — no pass doc exists yet) ->
+`paymentPending` (a payment intent exists but isn't confirmed) ->
+`active` (created only by `handle_confirm_sandbox_payment.ts` /
+`createActiveHousePass`, immediately active since payment is confirmed
+first) -> `allowanceReached` (flipped automatically by
+`recordHousePassUsage` the moment usage hits the limit) -> `expired` /
+`cancelled` (not yet driven by any code path this pass — reserved for
+future subscription-adjacent lifecycle, out of scope per the exclusion
+list below). **The state machine is entirely backend-authoritative** —
+Flutter reads a pass's status; it never sets it.
+
+**If the allowance is reached:** `computeEstimate` detects
+`!hasRemainingAllowance(pass)` and returns `paymentMode: "flexCredits"`
+with `reason: "housePassAllowanceReached"` — the caller falls back to
+Flex Credits for that one analysis rather than being blocked.
+`handle_analyse_finding.ts` honors this same fallback authoritatively
+(it re-derives payment mode itself; it never trusts a client-supplied
+mode).
+
+**Unfinished decision — the real House Pass allowance.**
+`DEFAULT_PRICING_CONFIG.housePass.allowanceFindings` is `200`, and
+`environment` is `"test"`. This is a deliberately generous, clearly
+arbitrary test value. `HousePassConfig.environment` exists specifically
+so this is never mistaken for a real commercial allowance decision:
+`getCommercialConfig`'s response includes
+`housePass.isProductionReady: config.housePass.environment ===
+"production"`, so the (not-yet-built) UI can visibly flag a non-
+production config. **A real production launch requires an operator to
+explicitly write a `pricing/config` document with `environment:
+"production"` and a deliberately chosen allowance — this pass makes no
+attempt to guess what that number should be**, since that's a business
+decision, not an engineering one.
+
+## AI levels and provider mapping
+
+Three customer-facing tiers — `AiLevel = "fast" | "smart" | "expert"`
+(`billing/types.ts`). Customers see only `label`/`description`
+(`"Fast"`/`"Smart"`/`"Expert"`, from `getCommercialConfig`) — never a
+model id or provider name.
+
+Server-side mapping (`AiLevelConfig` in `pricing_config.ts`), verified
+against current official OpenAI documentation at the time this pass was
+written (**not from training-era model-name knowledge** — the spec
+driving this pass was explicit that stale model names must never be
+guessed):
+
+| Level  | Provider | Model            |
+|--------|----------|------------------|
+| Fast   | openai   | `gpt-5.6-luna`   |
+| Smart  | openai   | `gpt-5.6-terra`  |
+| Expert | openai   | `gpt-5.6-sol`    |
+
+This mapping lives in `pricing/config` (Firestore), not in Flutter or
+even hardcoded permanently in the Functions bundle beyond the
+fallback default — changing a model id, or re-verifying it against
+OpenAI's docs at a later date, is a config write, never an app rebuild.
+The DeepSeek adapter (`ai/deepseek_provider.ts`) is untouched and
+remains available as an alternate provider (`AiLevelConfig.provider:
+"deepseek"` is a valid config value); OpenAI is primary per this pass's
+requirements, implemented in `ai/openai_provider.ts` behind the same
+`AiProvider` interface DeepSeek already used, sharing prompt
+construction (`ai/prompt.ts`) and retry/timeout handling
+(`ai/http_util.ts`) with it byte-for-byte so classification behavior
+never quietly differs by provider.
+
+**`OPENAI_API_KEY` is not yet configured in Secret Manager** for
+project `prodefact-82bac`. `analyseFinding` (the only callable that
+actually spends the OpenAI provider) is fully implemented and tested,
+but its own deployment will fail with a clear "secret not found" error
+until this is provisioned — see the comment above `openaiApiKey` in
+`functions/src/index.ts`. The command to provision it:
+
+```
+firebase functions:secrets:set OPENAI_API_KEY --project prodefact-82bac
+```
+
+No key has been fabricated anywhere in this codebase. `classifyFinding`
+(the pre-existing, unpriced classification path) is unaffected and
+keeps using DeepSeek.
+
+Model selection exists at three levels in the domain model
+(`AiLevel` chosen per finding via `analyseFinding`'s request), but only
+the finding-level selection is wired up this pass — a global default
+and a per-inspection default are Flutter-side preferences
+(`Default AI Level` in Profile, `selectedAiLevel` on the inspection)
+that still need to be built; see "What's still needed."
+
+## The estimate -> approval -> reservation -> settlement protocol
+
+This is the behavior change from the existing flow: **Save Finding no
+longer auto-triggers AI.** The intended sequence (backend fully built;
+Flutter integration still needed):
+
+1. Inspector saves a finding (photo + optional note) — purely physical,
+   free, unchanged from before.
+2. Flutter calls `estimateFindingAnalysis` (`inspectionId`, `findingId`,
+   `aiLevel`) -> `handle_estimate_finding_analysis.ts`. Verifies
+   ownership, resolves the effective commercial mode, and returns an
+   `EstimateResult`: `estimatedCredits`/`maximumCredits` (a ceiling from
+   each level's conservative token estimates — **never a false-precise
+   exact number**, since the real cost is unknowable before the request
+   runs), `currentBalance`, `paymentMode`, `includedInHousePass`,
+   `surchargeCredits`, and `eligible`/`reason`. This step **never runs
+   AI and never reserves anything** — purely informational, shown to
+   the inspector as "Up to N Credits."
+3. The inspector explicitly approves ("Analyse" button — not yet built
+   in Flutter).
+4. Flutter calls `analyseFinding` with the same request plus a
+   **client-generated `idempotencyKey`** (one per approval tap, reused
+   verbatim on any retry of that same tap — never regenerated for a
+   genuine "Retry" action, which should mint a new key) ->
+   `handle_analyse_finding.ts`, which:
+   - Re-verifies auth, ownership, and **re-prices from scratch**
+     (`computeEstimate` again) — never trusts the estimate the client
+     saw earlier, which may be stale.
+   - Checks for an existing `aiJobs/{idempotencyKey}` document first —
+     if one exists, returns its stored outcome directly without
+     touching the wallet or the AI provider again. This is what makes a
+     duplicate tap or a Cloud Functions-level retry safe: **the AI job
+     itself only ever runs once per idempotency key.**
+   - Reserves the maximum Credits (`reserveCredits`) — the full amount
+     shown in the estimate, debited from the wallet immediately. For an
+     included House Pass tier this reservation is 0 (skipped entirely).
+   - Resolves evidence photos and calls the AI provider
+     (`provider.classifyFinding`).
+   - **On failure:** releases the reservation in full
+     (`releaseReservation` — the inspector is charged nothing), records
+     a `failed` job doc, and returns a clear "you have not been
+     charged, please retry or classify manually" error (mapped to
+     `deadline-exceeded` for a timeout/transient failure,
+     `internal` otherwise — never a raw provider error message).
+   - **On success:** validates the response against the controlled
+     catalogue (`validateAndNormalize`, unchanged from the existing
+     path), computes the actual charge from the provider's own reported
+     token usage (`actualCreditsForUsage` — **never a client-sent
+     number**; if a provider genuinely reports no usage, the charge
+     conservatively falls back to the full reserved maximum rather than
+     guessing), settles the reservation (`settleReservation` — refunds
+     the unused portion, and clamps the charge to never exceed what was
+     originally reserved/approved even if the computed actual is
+     somehow higher), records House Pass usage if applicable
+     (`recordHousePassUsage`), and stores a `succeeded` job doc.
+5. Flutter shows the real stage progress during this call (queued ->
+   uploading evidence -> analysing -> done) — **never a fake token-level
+   percentage**, since the callable is a single request/response, not a
+   stream. (UI not yet built.)
+
+## The wallet ledger
+
+`functions/src/billing/wallet.ts`. `users/{uid}/wallet/main` is a
+transactionally-maintained **cache** of the balance — the actual source
+of truth is the append-only ledger at
+`users/{uid}/walletTransactions/{id}`. Every mutation
+(`recordTopUp`/`reserveCredits`/`settleReservation`/
+`releaseReservation`/`recordHousePassPurchase`/`recordAdjustment`) runs
+inside a single Firestore transaction that reads the current balance and
+writes both the new balance and the ledger entry atomically, and is
+keyed by a caller-supplied `idempotencyKey` that becomes the ledger
+entry's own document id — a retried call with the same key returns the
+existing entry unchanged rather than mutating the balance again.
+
+`WalletTransactionType`: `topup`, `reservation`, `usage`,
+`reservationRelease`, `refund`, `adjustment`, `housePassPurchase`. Each
+entry records `transactionId`/`userId`/`amountCredits`/`direction`
+(`credit`/`debit`)/`type`/`status`/`createdAt`/`updatedAt`, and
+optionally `inspectionId`/`findingId`/`aiLevel`/
+`relatedTransactionId`/`externalPaymentRef`/`idempotencyKey`/
+`description`.
+
+**Settlement model** (why `usage` never independently moves the
+balance): a `reservation` debits the full worst-case amount up front.
+`settleReservation` credits back any unused portion as a
+`reservationRelease` and separately writes a purely informational
+`usage` entry recording the real amount actually consumed — `usage`
+never itself mutates the balance a second time, since the reservation
+already did. A full failure instead releases the *entire* reservation
+via `releaseReservation`. `refund`/`adjustment` exist for future manual
+corrections (e.g. support-issued goodwill Credits) — not driven by any
+automated path yet.
+
+Regression coverage: `functions/src/billing/wallet.test.ts` (reserve/
+settle/release math, insufficient-balance rejection, and idempotent-
+replay-never-double-moves-balance for every mutation type) and
+`functions/src/billing/handle_analyse_finding.test.ts` (the full
+protocol above, including the no-charge-on-failure and duplicate-tap
+cases end to end).
+
+## Payment architecture
+
+**No real Malaysia payment gateway is configured for this project.**
+Per the spec driving this pass, this codebase builds the clean
+architecture for one without enabling live payment processing:
+
+```
+Client -> createTopUpIntent / purchaseHousePass
+            (creates a `pending` users/{uid}/paymentIntents/{id} doc —
+             grants nothing yet)
+       -> [a real provider's checkout/redirect flow would happen here —
+           not implemented]
+       -> provider's own webhook verifies payment
+            (not implemented — no real provider is configured)
+       -> backend confirms -> recordTopUp / createActiveHousePass +
+          recordHousePassPurchase (the ONLY paths that ever grant
+          Credits or activate a pass)
+```
+
+`PaymentService` (`billing/payment_service.ts`) is the abstraction that
+seam is built around: `confirmPayment(intent): Promise<{success,
+providerRef}>`. `SandboxPaymentService`
+(`billing/sandbox_payment_service.ts`) is the **only** implementation
+today — it always "succeeds," performing no real verification
+whatsoever, which is the entire point of it being sandbox-only. A real
+provider's implementation would independently verify the intent was
+actually paid (via the provider's API or a signed webhook payload)
+rather than trusting the caller.
+
+**The sandbox/production boundary:** `handle_confirm_sandbox_payment.ts`
+(the callable `confirmSandboxPayment`) refuses to run at all unless
+`resolvePaymentsMode(process.env)` (`billing/payments_mode.ts`) resolves
+to `"sandbox"` — which requires the Cloud Function's own
+`PAYMENTS_MODE` environment variable to be the **literal string**
+`"sandbox"`. **A real deployment must never set this variable.** There
+is no client-supplied field, header, or build flavor that can flip this
+— it is controlled entirely by the function's own deploy-time
+environment, which a client cannot influence. **"Never grant Credits
+because the client says payment succeeded"** holds even in sandbox mode:
+the client only ever supplies an `intentId`; `SandboxPaymentService`,
+not the client, decides success.
+`functions/src/billing/handle_confirm_sandbox_payment.test.ts` proves
+this boundary directly (confirmation is rejected both when
+`PAYMENTS_MODE` is unset — the real deploy default — and when it's set
+to any value other than `"sandbox"`).
+
+Flutter's payment UI is not yet built. When it is, it should call
+`createTopUpIntent`/`purchaseHousePass`, then — **only in a debug/test
+build, and only if the backend's `PAYMENTS_MODE` happens to be
+sandbox** — `confirmSandboxPayment`. There is no code path in this pass
+that would let a release build reach a fake-success screen; that guard
+needs to be added on the Flutter side too once the UI exists (e.g. never
+compiling the "Simulate Payment" button into a release build), and is
+listed under "What's still needed."
+
+## Firestore data model
+
+```
+users/{uid}/
+  wallet/main                    — cached balance (backend-write-only)
+  walletTransactions/{id}        — the ledger (backend-write-only)
+  housePasses/{id}                — one per inspection (backend-write-only)
+  paymentIntents/{id}             — pending/succeeded/failed (backend-write-only)
+  aiJobs/{idempotencyKey}         — analyseFinding's idempotency record
+  inspections/{id}                — unchanged by this pass
+  inspections/{id}/findings/{id}  — unchanged by this pass
+
+pricing/config                    — the single PricingConfig document
+                                     (no client read or write at all)
+```
+
+All of the above are read-only for their owner (or, for `pricing/`,
+unreadable entirely) and write-denied for every client under
+`firestore.rules` — every mutation happens exclusively via the Admin
+SDK inside a callable, which bypasses rules by design. See the new
+`match` blocks added to `firestore.rules` this pass.
+
+## Callables added this pass
+
+All registered in `functions/src/index.ts`, region `asia-southeast1`:
+
+- `estimateFindingAnalysis` — price check, no side effects.
+- `analyseFinding` — the priced AI classification (requires
+  `OPENAI_API_KEY`; deployment blocked until it's configured).
+- `getCommercialConfig` — the customer-safe pricing/AI-level/House Pass
+  summary (labels, Credits/MYR conversion, top-up packages, House Pass
+  headline price — never a provider name, model id, or cost rate).
+- `createTopUpIntent` — RM10/30/50/100/other (bounded RM1–RM1,000),
+  creates a `pending` intent.
+- `purchaseHousePass` — creates a `pending` intent for one inspection's
+  RM30 pass; rejects a duplicate purchase for an inspection that
+  already has an active/allowance-reached pass.
+- `confirmSandboxPayment` — sandbox-only (see above); the only path
+  that turns a pending intent into granted Credits or an active pass.
+
+## Failure, offline, and low-balance behavior
+
+- **Failed AI:** see "On failure" above — reservation released in
+  full, no charge, `aiJobs` doc marked `failed`. The (not-yet-built)
+  Flutter UI should offer Retry (new idempotencyKey) or Classify
+  Manually, never silently retry the same key automatically.
+- **Insufficient Credits:** `computeEstimate`/`handle_analyse_finding`
+  return `eligible: false` with a plain-language reason before any
+  reservation is attempted — physical inspection is never blocked; only
+  that one AI analysis is deferred.
+- **Offline:** not yet implemented on the Flutter side. The intended
+  behavior (per the spec this pass implements against, not yet coded):
+  never attempt a Credits reservation while offline, and never treat a
+  cached price estimate as authoritative indefinitely — a stale
+  estimate should be re-fetched before `analyseFinding` is called, not
+  reused across a long offline gap. `estimateFindingAnalysis` and
+  `analyseFinding` both already re-derive everything server-side on
+  every call, so the backend half of this is naturally correct; what's
+  missing is the Flutter-side network-awareness and estimate-freshness
+  UI.
+- **Low balance:** `lowBalanceThresholdCredits` in `pricing/config`,
+  surfaced via `getCommercialConfig` — intended as a non-blocking
+  notice on Home/Wallet. Not yet built.
+
+## Security summary
+
+- Wallet balance/ledger/House Pass/payment-intent/AI-job writes: denied
+  to every client in `firestore.rules`; only the Admin SDK (inside a
+  callable) can write them.
+- Pricing config: unreadable and unwritable by any client; every price
+  shown to Flutter is computed server-side and returned by a callable.
+- Ownership: every callable re-derives ownership from
+  `request.auth.uid` and the caller's own `users/{uid}/...` documents —
+  never from a client-supplied uid/owner field.
+- Idempotency/double-spend: every wallet mutation and the AI job itself
+  are keyed by a caller-supplied idempotency key that becomes a
+  Firestore document id, so a duplicate tap, a Cloud Functions retry, or
+  a replayed call can never double-charge or double-run the AI request.
+  Covered by `wallet.test.ts` and `handle_analyse_finding.test.ts`.
+- Payment spoofing: a client can create a payment intent but can never
+  mark it succeeded — only `SandboxPaymentService` (sandbox-gated) or, in
+  the future, a verified real-provider webhook can. Covered by
+  `handle_confirm_sandbox_payment.test.ts`.
+- Provider cost/model ids: never returned to the client by any
+  callable — `getCommercialConfig` returns only labels/descriptions/
+  Credits figures.
+- Secrets: `OPENAI_API_KEY`/`DEEPSEEK_API_KEY` are Secret-Manager-only
+  (`defineSecret`), never logged, never present in Flutter source.
+
+## Explicitly out of scope this pass
+
+Per the spec driving this work: no subscriptions, no auto-reload, no
+stored credit cards, no invoicing/accounting suite, no company/team
+billing, no defect-taxonomy changes, no PDF redesign, and no real
+payment gateway (none was already configured for this project). House
+Pass `expired`/`cancelled` states exist in the type but have no driving
+code path yet (no subscription/expiry concept exists to drive them).
+
+## What's still needed on the Flutter side
+
+None of this exists yet — this pass is backend-only:
+
+- Splash/startup screen, authenticated bottom navigation (Home/
+  Inspections/+/Wallet/Profile).
+- Choose AI Plan step in New Inspection (Flex Credits vs. House Pass).
+- Wallet screen (balance, this-month stats, usage graph, activity feed
+  from `walletTransactions`), Top Up screen and flow (including the
+  debug-only sandbox confirmation path and its release-build guard),
+  House Pass purchase UI.
+- Replacing the existing auto-AI-on-save behavior with the explicit
+  estimate -> approve -> analyse flow described above, plus an "Auto
+  Analyse" preference (default off for Flex, may default on for an
+  active House Pass subject to allowance).
+- Real-data graphs: Home progress rings, Wallet usage-over-time,
+  completed-inspection findings-by-area.
+- Drift schema v8 -> v9 (additive): `commercialMode`,
+  `selectedAiLevel`, `autoAnalyseEnabled` on the inspection, and a
+  **local wallet display cache only** — never the authoritative balance
+  (the backend ledger always is).
+- Profile: Default AI Level preference (never exposing API keys,
+  provider names, or raw model ids).
+- A full routing audit once the above screens exist.

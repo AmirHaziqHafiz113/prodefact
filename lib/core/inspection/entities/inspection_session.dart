@@ -1,5 +1,7 @@
+import 'ai_level.dart';
 import 'ai_review.dart';
 import 'ai_review_state.dart';
+import 'commercial_mode.dart';
 import 'finding.dart';
 import 'industry.dart';
 import 'inspection.dart';
@@ -36,6 +38,9 @@ class InspectionSession {
     this.propertyDetails = PropertyDetails.empty,
     this.reportMetadata,
     this.inspectionNote,
+    this.commercialMode,
+    this.selectedAiLevel,
+    this.autoAnalyseEnabled = false,
   });
 
   final String id;
@@ -62,6 +67,26 @@ class InspectionSession {
   /// through AI classification; surfaced in the report's summary/
   /// information section when present.
   final String? inspectionNote;
+
+  /// How this inspection pays for AI analysis — null for a session
+  /// created before the Choose AI Plan step existed, or one still
+  /// awaiting that choice; a screen that requires a resolved mode
+  /// should treat null as "not yet chosen," never assume `flexCredits`.
+  /// See docs/commercial_model.md.
+  final CommercialMode? commercialMode;
+
+  /// The inspector's chosen AI quality tier for this inspection — a
+  /// per-finding override may still differ; this is the inspection-
+  /// level default. Null falls back to the profile's
+  /// `UserProfile.defaultAiLevel`, then `AiLevel.smart`.
+  final AiLevel? selectedAiLevel;
+
+  /// Whether AI analysis should run automatically after Save Finding,
+  /// without the explicit estimate/approve step. Defaults to false
+  /// (Flex Credits' safe default); the inspector may enable it for an
+  /// active House Pass, subject to its allowance. Never inferred from
+  /// wallet state — see docs/commercial_model.md.
+  final bool autoAnalyseEnabled;
 
   final List<Section> sections;
   final Map<String, SectionStatus> sectionStatuses;
@@ -111,6 +136,9 @@ class InspectionSession {
     ReportMetadata? reportMetadata,
     String? inspectionNote,
     bool clearInspectionNote = false,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
+    bool? autoAnalyseEnabled,
   }) {
     return InspectionSession(
       id: id,
@@ -132,6 +160,9 @@ class InspectionSession {
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
       report: report ?? this.report,
       propertyDetails: propertyDetails ?? this.propertyDetails,
+      commercialMode: commercialMode ?? this.commercialMode,
+      selectedAiLevel: selectedAiLevel ?? this.selectedAiLevel,
+      autoAnalyseEnabled: autoAnalyseEnabled ?? this.autoAnalyseEnabled,
     );
   }
 }

@@ -40,6 +40,8 @@ class DriftInspectionRepository implements InspectionRepository {
     required List<Section> initialSections,
     String? ownerUid,
     PropertyDetails propertyDetails = PropertyDetails.empty,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
   }) async {
     final now = DateTime.now();
     final id = _newId('session');
@@ -68,6 +70,8 @@ class DriftInspectionRepository implements InspectionRepository {
               developerName: Value(propertyDetails.developerName),
               contactNumber: Value(propertyDetails.contactNumber),
               inspectionDate: Value(propertyDetails.inspectionDate),
+              commercialMode: Value(commercialMode?.name),
+              selectedAiLevel: Value(selectedAiLevel?.name),
             ),
           );
 
@@ -92,6 +96,8 @@ class DriftInspectionRepository implements InspectionRepository {
       updatedAt: now,
       ownerUid: ownerUid,
       propertyDetails: propertyDetails,
+      commercialMode: commercialMode,
+      selectedAiLevel: selectedAiLevel,
     );
   }
 
@@ -257,8 +263,17 @@ class DriftInspectionRepository implements InspectionRepository {
       propertyDetails: _propertyDetailsFromRow(sessionRow),
       reportMetadata: _reportMetadataFromJson(sessionRow.reportMetadataJson),
       inspectionNote: sessionRow.inspectionNote,
+      commercialMode: _commercialModeFromRow(sessionRow.commercialMode),
+      selectedAiLevel: _aiLevelFromRow(sessionRow.selectedAiLevel),
+      autoAnalyseEnabled: sessionRow.autoAnalyseEnabled,
     );
   }
+
+  CommercialMode? _commercialModeFromRow(String? raw) =>
+      raw == null ? null : CommercialMode.values.byName(raw);
+
+  AiLevel? _aiLevelFromRow(String? raw) =>
+      raw == null ? null : AiLevel.values.byName(raw);
 
   ReportMetadata? _reportMetadataFromJson(String? json) {
     if (json == null) return null;
@@ -666,6 +681,7 @@ class DriftInspectionRepository implements InspectionRepository {
     return UserProfile(
       companyName: row.companyName,
       inspectorName: row.inspectorName,
+      defaultAiLevel: _aiLevelFromRow(row.defaultAiLevel),
     );
   }
 
@@ -678,6 +694,7 @@ class DriftInspectionRepository implements InspectionRepository {
             id: _localProfileId,
             companyName: Value(profile.companyName),
             inspectorName: Value(profile.inspectorName),
+            defaultAiLevel: Value(profile.defaultAiLevel?.name),
             updatedAt: DateTime.now(),
           ),
         );
@@ -705,6 +722,42 @@ class DriftInspectionRepository implements InspectionRepository {
           ..where((t) => t.id.equals(sessionId)))
         .write(InspectionSessionRowsCompanion(inspectionNote: Value(note)));
   }
+
+  @override
+  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled) async {
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(autoAnalyseEnabled: Value(enabled)),
+    );
+  }
+
+  @override
+  Future<WalletCache?> loadWalletCache() async {
+    final row = await (_db.select(
+      _db.walletCacheRows,
+    )..where((t) => t.id.equals(_localWalletCacheId))).getSingleOrNull();
+    if (row == null) return null;
+    return WalletCache(
+      balanceCredits: row.balanceCredits,
+      updatedAt: row.updatedAt,
+    );
+  }
+
+  @override
+  Future<void> saveWalletCache(WalletCache cache) async {
+    await _db
+        .into(_db.walletCacheRows)
+        .insertOnConflictUpdate(
+          WalletCacheRowsCompanion.insert(
+            id: _localWalletCacheId,
+            balanceCredits: cache.balanceCredits,
+            updatedAt: cache.updatedAt,
+          ),
+        );
+  }
+
+  static const _localWalletCacheId = 'local';
 
   Future<void> _touchSession(String sessionId, DateTime timestamp) {
     return (_db.update(_db.inspectionSessionRows)

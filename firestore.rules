@@ -29,6 +29,49 @@ service cloud.firestore {
           }
         }
       }
+
+      // Commercial/billing data — the Credits ledger, cached wallet
+      // balance, House Passes, payment intents, and AI job records are
+      // all backend-authoritative (see docs/commercial_model.md,
+      // "Wallet security"). The client may read its own data for
+      // display, but every write happens only via the Admin SDK inside
+      // a Cloud Function callable, which bypasses these rules entirely
+      // — a direct client write here is always denied, with no
+      // exception, so Flutter can never grant itself Credits, edit its
+      // balance, activate a House Pass, or alter a ledger entry.
+      match /wallet/{docId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
+      match /walletTransactions/{transactionId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
+      match /housePasses/{passId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
+      match /paymentIntents/{intentId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
+      match /aiJobs/{jobId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+    }
+
+    // The single, centralized, server-side pricing configuration (see
+    // billing/pricing_config.ts) — never read directly by the client
+    // (every price Flutter shows comes from a callable, e.g.
+    // `getCommercialConfig`, which returns only the customer-safe
+    // subset) and never writable by any client under any circumstance.
+    match /pricing/{document} {
+      allow read, write: if false;
     }
 
     // Deny everything else by default.

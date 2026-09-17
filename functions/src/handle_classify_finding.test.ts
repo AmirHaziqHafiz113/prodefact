@@ -38,7 +38,9 @@ function fakeProvider(
   return {
     id: "fake",
     supportsImages,
-    classifyFinding: classify,
+    classifyFinding: async (input, images) => ({
+      result: await classify(input, images),
+    }),
   };
 }
 

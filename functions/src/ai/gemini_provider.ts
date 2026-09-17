@@ -1,8 +1,8 @@
 import {AiProvider, AiProviderError} from "./provider";
 import {
-  ClassificationResult,
   ClassifyFindingInput,
   FindingImages,
+  ProviderClassification,
 } from "./types";
 
 /**
@@ -37,7 +37,7 @@ export class GeminiProvider implements AiProvider {
   classifyFinding(
     input: ClassifyFindingInput,
     images: FindingImages
-  ): Promise<ClassificationResult> {
+  ): Promise<ProviderClassification> {
     void input;
     void images;
     throw new AiProviderError(

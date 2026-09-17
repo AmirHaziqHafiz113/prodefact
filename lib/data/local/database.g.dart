@@ -239,6 +239,42 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _commercialModeMeta = const VerificationMeta(
+    'commercialMode',
+  );
+  @override
+  late final GeneratedColumn<String> commercialMode = GeneratedColumn<String>(
+    'commercial_mode',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _selectedAiLevelMeta = const VerificationMeta(
+    'selectedAiLevel',
+  );
+  @override
+  late final GeneratedColumn<String> selectedAiLevel = GeneratedColumn<String>(
+    'selected_ai_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _autoAnalyseEnabledMeta =
+      const VerificationMeta('autoAnalyseEnabled');
+  @override
+  late final GeneratedColumn<bool> autoAnalyseEnabled = GeneratedColumn<bool>(
+    'auto_analyse_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_analyse_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -262,6 +298,9 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     inspectionDate,
     reportMetadataJson,
     inspectionNote,
+    commercialMode,
+    selectedAiLevel,
+    autoAnalyseEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -443,6 +482,33 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         ),
       );
     }
+    if (data.containsKey('commercial_mode')) {
+      context.handle(
+        _commercialModeMeta,
+        commercialMode.isAcceptableOrUnknown(
+          data['commercial_mode']!,
+          _commercialModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('selected_ai_level')) {
+      context.handle(
+        _selectedAiLevelMeta,
+        selectedAiLevel.isAcceptableOrUnknown(
+          data['selected_ai_level']!,
+          _selectedAiLevelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('auto_analyse_enabled')) {
+      context.handle(
+        _autoAnalyseEnabledMeta,
+        autoAnalyseEnabled.isAcceptableOrUnknown(
+          data['auto_analyse_enabled']!,
+          _autoAnalyseEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -536,6 +602,18 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         DriftSqlType.string,
         data['${effectivePrefix}inspection_note'],
       ),
+      commercialMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}commercial_mode'],
+      ),
+      selectedAiLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}selected_ai_level'],
+      ),
+      autoAnalyseEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_analyse_enabled'],
+      )!,
     );
   }
 
@@ -586,6 +664,21 @@ class InspectionSessionRow extends DataClass
   /// schema v8) — e.g. "Unit occupied during inspection." Not a defect;
   /// never sent through AI classification.
   final String? inspectionNote;
+
+  /// How this inspection pays for AI analysis — `flexCredits` or
+  /// `housePass` (added in schema v9), chosen once via the Choose AI
+  /// Plan step. Null for a pre-v9 session or one still awaiting that
+  /// choice — see `CommercialMode`, docs/commercial_model.md.
+  final String? commercialMode;
+
+  /// The inspector's chosen AI quality tier for this inspection —
+  /// `fast`/`smart`/`expert` (added in schema v9). See `AiLevel`.
+  final String? selectedAiLevel;
+
+  /// Whether AI analysis should run automatically after Save Finding
+  /// (added in schema v9). Defaults to false (Flex Credits' safe
+  /// default) — never true for any pre-existing session.
+  final bool autoAnalyseEnabled;
   const InspectionSessionRow({
     required this.id,
     required this.industry,
@@ -608,6 +701,9 @@ class InspectionSessionRow extends DataClass
     this.inspectionDate,
     this.reportMetadataJson,
     this.inspectionNote,
+    this.commercialMode,
+    this.selectedAiLevel,
+    required this.autoAnalyseEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -659,6 +755,13 @@ class InspectionSessionRow extends DataClass
     if (!nullToAbsent || inspectionNote != null) {
       map['inspection_note'] = Variable<String>(inspectionNote);
     }
+    if (!nullToAbsent || commercialMode != null) {
+      map['commercial_mode'] = Variable<String>(commercialMode);
+    }
+    if (!nullToAbsent || selectedAiLevel != null) {
+      map['selected_ai_level'] = Variable<String>(selectedAiLevel);
+    }
+    map['auto_analyse_enabled'] = Variable<bool>(autoAnalyseEnabled);
     return map;
   }
 
@@ -711,6 +814,13 @@ class InspectionSessionRow extends DataClass
       inspectionNote: inspectionNote == null && nullToAbsent
           ? const Value.absent()
           : Value(inspectionNote),
+      commercialMode: commercialMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(commercialMode),
+      selectedAiLevel: selectedAiLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(selectedAiLevel),
+      autoAnalyseEnabled: Value(autoAnalyseEnabled),
     );
   }
 
@@ -743,6 +853,9 @@ class InspectionSessionRow extends DataClass
         json['reportMetadataJson'],
       ),
       inspectionNote: serializer.fromJson<String?>(json['inspectionNote']),
+      commercialMode: serializer.fromJson<String?>(json['commercialMode']),
+      selectedAiLevel: serializer.fromJson<String?>(json['selectedAiLevel']),
+      autoAnalyseEnabled: serializer.fromJson<bool>(json['autoAnalyseEnabled']),
     );
   }
   @override
@@ -770,6 +883,9 @@ class InspectionSessionRow extends DataClass
       'inspectionDate': serializer.toJson<DateTime?>(inspectionDate),
       'reportMetadataJson': serializer.toJson<String?>(reportMetadataJson),
       'inspectionNote': serializer.toJson<String?>(inspectionNote),
+      'commercialMode': serializer.toJson<String?>(commercialMode),
+      'selectedAiLevel': serializer.toJson<String?>(selectedAiLevel),
+      'autoAnalyseEnabled': serializer.toJson<bool>(autoAnalyseEnabled),
     };
   }
 
@@ -795,6 +911,9 @@ class InspectionSessionRow extends DataClass
     Value<DateTime?> inspectionDate = const Value.absent(),
     Value<String?> reportMetadataJson = const Value.absent(),
     Value<String?> inspectionNote = const Value.absent(),
+    Value<String?> commercialMode = const Value.absent(),
+    Value<String?> selectedAiLevel = const Value.absent(),
+    bool? autoAnalyseEnabled,
   }) => InspectionSessionRow(
     id: id ?? this.id,
     industry: industry ?? this.industry,
@@ -833,6 +952,13 @@ class InspectionSessionRow extends DataClass
     inspectionNote: inspectionNote.present
         ? inspectionNote.value
         : this.inspectionNote,
+    commercialMode: commercialMode.present
+        ? commercialMode.value
+        : this.commercialMode,
+    selectedAiLevel: selectedAiLevel.present
+        ? selectedAiLevel.value
+        : this.selectedAiLevel,
+    autoAnalyseEnabled: autoAnalyseEnabled ?? this.autoAnalyseEnabled,
   );
   InspectionSessionRow copyWithCompanion(InspectionSessionRowsCompanion data) {
     return InspectionSessionRow(
@@ -887,6 +1013,15 @@ class InspectionSessionRow extends DataClass
       inspectionNote: data.inspectionNote.present
           ? data.inspectionNote.value
           : this.inspectionNote,
+      commercialMode: data.commercialMode.present
+          ? data.commercialMode.value
+          : this.commercialMode,
+      selectedAiLevel: data.selectedAiLevel.present
+          ? data.selectedAiLevel.value
+          : this.selectedAiLevel,
+      autoAnalyseEnabled: data.autoAnalyseEnabled.present
+          ? data.autoAnalyseEnabled.value
+          : this.autoAnalyseEnabled,
     );
   }
 
@@ -913,7 +1048,10 @@ class InspectionSessionRow extends DataClass
           ..write('contactNumber: $contactNumber, ')
           ..write('inspectionDate: $inspectionDate, ')
           ..write('reportMetadataJson: $reportMetadataJson, ')
-          ..write('inspectionNote: $inspectionNote')
+          ..write('inspectionNote: $inspectionNote, ')
+          ..write('commercialMode: $commercialMode, ')
+          ..write('selectedAiLevel: $selectedAiLevel, ')
+          ..write('autoAnalyseEnabled: $autoAnalyseEnabled')
           ..write(')'))
         .toString();
   }
@@ -941,6 +1079,9 @@ class InspectionSessionRow extends DataClass
     inspectionDate,
     reportMetadataJson,
     inspectionNote,
+    commercialMode,
+    selectedAiLevel,
+    autoAnalyseEnabled,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -966,7 +1107,10 @@ class InspectionSessionRow extends DataClass
           other.contactNumber == this.contactNumber &&
           other.inspectionDate == this.inspectionDate &&
           other.reportMetadataJson == this.reportMetadataJson &&
-          other.inspectionNote == this.inspectionNote);
+          other.inspectionNote == this.inspectionNote &&
+          other.commercialMode == this.commercialMode &&
+          other.selectedAiLevel == this.selectedAiLevel &&
+          other.autoAnalyseEnabled == this.autoAnalyseEnabled);
 }
 
 class InspectionSessionRowsCompanion
@@ -992,6 +1136,9 @@ class InspectionSessionRowsCompanion
   final Value<DateTime?> inspectionDate;
   final Value<String?> reportMetadataJson;
   final Value<String?> inspectionNote;
+  final Value<String?> commercialMode;
+  final Value<String?> selectedAiLevel;
+  final Value<bool> autoAnalyseEnabled;
   final Value<int> rowid;
   const InspectionSessionRowsCompanion({
     this.id = const Value.absent(),
@@ -1015,6 +1162,9 @@ class InspectionSessionRowsCompanion
     this.inspectionDate = const Value.absent(),
     this.reportMetadataJson = const Value.absent(),
     this.inspectionNote = const Value.absent(),
+    this.commercialMode = const Value.absent(),
+    this.selectedAiLevel = const Value.absent(),
+    this.autoAnalyseEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InspectionSessionRowsCompanion.insert({
@@ -1039,6 +1189,9 @@ class InspectionSessionRowsCompanion
     this.inspectionDate = const Value.absent(),
     this.reportMetadataJson = const Value.absent(),
     this.inspectionNote = const Value.absent(),
+    this.commercialMode = const Value.absent(),
+    this.selectedAiLevel = const Value.absent(),
+    this.autoAnalyseEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        industry = Value(industry),
@@ -1068,6 +1221,9 @@ class InspectionSessionRowsCompanion
     Expression<DateTime>? inspectionDate,
     Expression<String>? reportMetadataJson,
     Expression<String>? inspectionNote,
+    Expression<String>? commercialMode,
+    Expression<String>? selectedAiLevel,
+    Expression<bool>? autoAnalyseEnabled,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1093,6 +1249,10 @@ class InspectionSessionRowsCompanion
       if (reportMetadataJson != null)
         'report_metadata_json': reportMetadataJson,
       if (inspectionNote != null) 'inspection_note': inspectionNote,
+      if (commercialMode != null) 'commercial_mode': commercialMode,
+      if (selectedAiLevel != null) 'selected_ai_level': selectedAiLevel,
+      if (autoAnalyseEnabled != null)
+        'auto_analyse_enabled': autoAnalyseEnabled,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1119,6 +1279,9 @@ class InspectionSessionRowsCompanion
     Value<DateTime?>? inspectionDate,
     Value<String?>? reportMetadataJson,
     Value<String?>? inspectionNote,
+    Value<String?>? commercialMode,
+    Value<String?>? selectedAiLevel,
+    Value<bool>? autoAnalyseEnabled,
     Value<int>? rowid,
   }) {
     return InspectionSessionRowsCompanion(
@@ -1143,6 +1306,9 @@ class InspectionSessionRowsCompanion
       inspectionDate: inspectionDate ?? this.inspectionDate,
       reportMetadataJson: reportMetadataJson ?? this.reportMetadataJson,
       inspectionNote: inspectionNote ?? this.inspectionNote,
+      commercialMode: commercialMode ?? this.commercialMode,
+      selectedAiLevel: selectedAiLevel ?? this.selectedAiLevel,
+      autoAnalyseEnabled: autoAnalyseEnabled ?? this.autoAnalyseEnabled,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1213,6 +1379,15 @@ class InspectionSessionRowsCompanion
     if (inspectionNote.present) {
       map['inspection_note'] = Variable<String>(inspectionNote.value);
     }
+    if (commercialMode.present) {
+      map['commercial_mode'] = Variable<String>(commercialMode.value);
+    }
+    if (selectedAiLevel.present) {
+      map['selected_ai_level'] = Variable<String>(selectedAiLevel.value);
+    }
+    if (autoAnalyseEnabled.present) {
+      map['auto_analyse_enabled'] = Variable<bool>(autoAnalyseEnabled.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1243,6 +1418,9 @@ class InspectionSessionRowsCompanion
           ..write('inspectionDate: $inspectionDate, ')
           ..write('reportMetadataJson: $reportMetadataJson, ')
           ..write('inspectionNote: $inspectionNote, ')
+          ..write('commercialMode: $commercialMode, ')
+          ..write('selectedAiLevel: $selectedAiLevel, ')
+          ..write('autoAnalyseEnabled: $autoAnalyseEnabled, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5127,12 +5305,24 @@ class $UserProfileRowsTable extends UserProfileRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _defaultAiLevelMeta = const VerificationMeta(
+    'defaultAiLevel',
+  );
+  @override
+  late final GeneratedColumn<String> defaultAiLevel = GeneratedColumn<String>(
+    'default_ai_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     companyName,
     inspectorName,
     updatedAt,
+    defaultAiLevel,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5177,6 +5367,15 @@ class $UserProfileRowsTable extends UserProfileRows
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('default_ai_level')) {
+      context.handle(
+        _defaultAiLevelMeta,
+        defaultAiLevel.isAcceptableOrUnknown(
+          data['default_ai_level']!,
+          _defaultAiLevelMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5202,6 +5401,10 @@ class $UserProfileRowsTable extends UserProfileRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      defaultAiLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_ai_level'],
+      ),
     );
   }
 
@@ -5216,11 +5419,17 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
   final String? companyName;
   final String? inspectorName;
   final DateTime updatedAt;
+
+  /// The inspector's preferred default AI quality tier for new
+  /// inspections (added in schema v9) — see `AiLevel`, `UserProfile.
+  /// defaultAiLevel`. Null falls back to the app-wide default.
+  final String? defaultAiLevel;
   const UserProfileRow({
     required this.id,
     this.companyName,
     this.inspectorName,
     required this.updatedAt,
+    this.defaultAiLevel,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5233,6 +5442,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       map['inspector_name'] = Variable<String>(inspectorName);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || defaultAiLevel != null) {
+      map['default_ai_level'] = Variable<String>(defaultAiLevel);
+    }
     return map;
   }
 
@@ -5246,6 +5458,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           ? const Value.absent()
           : Value(inspectorName),
       updatedAt: Value(updatedAt),
+      defaultAiLevel: defaultAiLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultAiLevel),
     );
   }
 
@@ -5259,6 +5474,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       companyName: serializer.fromJson<String?>(json['companyName']),
       inspectorName: serializer.fromJson<String?>(json['inspectorName']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      defaultAiLevel: serializer.fromJson<String?>(json['defaultAiLevel']),
     );
   }
   @override
@@ -5269,6 +5485,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       'companyName': serializer.toJson<String?>(companyName),
       'inspectorName': serializer.toJson<String?>(inspectorName),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'defaultAiLevel': serializer.toJson<String?>(defaultAiLevel),
     };
   }
 
@@ -5277,6 +5494,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     Value<String?> companyName = const Value.absent(),
     Value<String?> inspectorName = const Value.absent(),
     DateTime? updatedAt,
+    Value<String?> defaultAiLevel = const Value.absent(),
   }) => UserProfileRow(
     id: id ?? this.id,
     companyName: companyName.present ? companyName.value : this.companyName,
@@ -5284,6 +5502,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
         ? inspectorName.value
         : this.inspectorName,
     updatedAt: updatedAt ?? this.updatedAt,
+    defaultAiLevel: defaultAiLevel.present
+        ? defaultAiLevel.value
+        : this.defaultAiLevel,
   );
   UserProfileRow copyWithCompanion(UserProfileRowsCompanion data) {
     return UserProfileRow(
@@ -5295,6 +5516,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           ? data.inspectorName.value
           : this.inspectorName,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      defaultAiLevel: data.defaultAiLevel.present
+          ? data.defaultAiLevel.value
+          : this.defaultAiLevel,
     );
   }
 
@@ -5304,13 +5528,15 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           ..write('id: $id, ')
           ..write('companyName: $companyName, ')
           ..write('inspectorName: $inspectorName, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('defaultAiLevel: $defaultAiLevel')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, companyName, inspectorName, updatedAt);
+  int get hashCode =>
+      Object.hash(id, companyName, inspectorName, updatedAt, defaultAiLevel);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5318,7 +5544,8 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           other.id == this.id &&
           other.companyName == this.companyName &&
           other.inspectorName == this.inspectorName &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.defaultAiLevel == this.defaultAiLevel);
 }
 
 class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
@@ -5326,12 +5553,14 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
   final Value<String?> companyName;
   final Value<String?> inspectorName;
   final Value<DateTime> updatedAt;
+  final Value<String?> defaultAiLevel;
   final Value<int> rowid;
   const UserProfileRowsCompanion({
     this.id = const Value.absent(),
     this.companyName = const Value.absent(),
     this.inspectorName = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.defaultAiLevel = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   UserProfileRowsCompanion.insert({
@@ -5339,6 +5568,7 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
     this.companyName = const Value.absent(),
     this.inspectorName = const Value.absent(),
     required DateTime updatedAt,
+    this.defaultAiLevel = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        updatedAt = Value(updatedAt);
@@ -5347,6 +5577,7 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
     Expression<String>? companyName,
     Expression<String>? inspectorName,
     Expression<DateTime>? updatedAt,
+    Expression<String>? defaultAiLevel,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5354,6 +5585,7 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
       if (companyName != null) 'company_name': companyName,
       if (inspectorName != null) 'inspector_name': inspectorName,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (defaultAiLevel != null) 'default_ai_level': defaultAiLevel,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5363,6 +5595,7 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
     Value<String?>? companyName,
     Value<String?>? inspectorName,
     Value<DateTime>? updatedAt,
+    Value<String?>? defaultAiLevel,
     Value<int>? rowid,
   }) {
     return UserProfileRowsCompanion(
@@ -5370,6 +5603,7 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
       companyName: companyName ?? this.companyName,
       inspectorName: inspectorName ?? this.inspectorName,
       updatedAt: updatedAt ?? this.updatedAt,
+      defaultAiLevel: defaultAiLevel ?? this.defaultAiLevel,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5389,6 +5623,9 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (defaultAiLevel.present) {
+      map['default_ai_level'] = Variable<String>(defaultAiLevel.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5401,6 +5638,276 @@ class UserProfileRowsCompanion extends UpdateCompanion<UserProfileRow> {
           ..write('id: $id, ')
           ..write('companyName: $companyName, ')
           ..write('inspectorName: $inspectorName, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('defaultAiLevel: $defaultAiLevel, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WalletCacheRowsTable extends WalletCacheRows
+    with TableInfo<$WalletCacheRowsTable, WalletCacheRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WalletCacheRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _balanceCreditsMeta = const VerificationMeta(
+    'balanceCredits',
+  );
+  @override
+  late final GeneratedColumn<int> balanceCredits = GeneratedColumn<int>(
+    'balance_credits',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, balanceCredits, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'wallet_cache_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WalletCacheRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('balance_credits')) {
+      context.handle(
+        _balanceCreditsMeta,
+        balanceCredits.isAcceptableOrUnknown(
+          data['balance_credits']!,
+          _balanceCreditsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_balanceCreditsMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WalletCacheRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WalletCacheRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      balanceCredits: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_credits'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WalletCacheRowsTable createAlias(String alias) {
+    return $WalletCacheRowsTable(attachedDatabase, alias);
+  }
+}
+
+class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
+  final String id;
+  final int balanceCredits;
+  final DateTime updatedAt;
+  const WalletCacheRow({
+    required this.id,
+    required this.balanceCredits,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['balance_credits'] = Variable<int>(balanceCredits);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  WalletCacheRowsCompanion toCompanion(bool nullToAbsent) {
+    return WalletCacheRowsCompanion(
+      id: Value(id),
+      balanceCredits: Value(balanceCredits),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory WalletCacheRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WalletCacheRow(
+      id: serializer.fromJson<String>(json['id']),
+      balanceCredits: serializer.fromJson<int>(json['balanceCredits']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'balanceCredits': serializer.toJson<int>(balanceCredits),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  WalletCacheRow copyWith({
+    String? id,
+    int? balanceCredits,
+    DateTime? updatedAt,
+  }) => WalletCacheRow(
+    id: id ?? this.id,
+    balanceCredits: balanceCredits ?? this.balanceCredits,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  WalletCacheRow copyWithCompanion(WalletCacheRowsCompanion data) {
+    return WalletCacheRow(
+      id: data.id.present ? data.id.value : this.id,
+      balanceCredits: data.balanceCredits.present
+          ? data.balanceCredits.value
+          : this.balanceCredits,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletCacheRow(')
+          ..write('id: $id, ')
+          ..write('balanceCredits: $balanceCredits, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, balanceCredits, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WalletCacheRow &&
+          other.id == this.id &&
+          other.balanceCredits == this.balanceCredits &&
+          other.updatedAt == this.updatedAt);
+}
+
+class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
+  final Value<String> id;
+  final Value<int> balanceCredits;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const WalletCacheRowsCompanion({
+    this.id = const Value.absent(),
+    this.balanceCredits = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WalletCacheRowsCompanion.insert({
+    required String id,
+    required int balanceCredits,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       balanceCredits = Value(balanceCredits),
+       updatedAt = Value(updatedAt);
+  static Insertable<WalletCacheRow> custom({
+    Expression<String>? id,
+    Expression<int>? balanceCredits,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (balanceCredits != null) 'balance_credits': balanceCredits,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WalletCacheRowsCompanion copyWith({
+    Value<String>? id,
+    Value<int>? balanceCredits,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return WalletCacheRowsCompanion(
+      id: id ?? this.id,
+      balanceCredits: balanceCredits ?? this.balanceCredits,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (balanceCredits.present) {
+      map['balance_credits'] = Variable<int>(balanceCredits.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletCacheRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('balanceCredits: $balanceCredits, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5423,6 +5930,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UserProfileRowsTable userProfileRows = $UserProfileRowsTable(
     this,
   );
+  late final $WalletCacheRowsTable walletCacheRows = $WalletCacheRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5435,6 +5945,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     aiSuggestionRows,
     reportRows,
     userProfileRows,
+    walletCacheRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5506,6 +6017,9 @@ typedef $$InspectionSessionRowsTableCreateCompanionBuilder =
       Value<DateTime?> inspectionDate,
       Value<String?> reportMetadataJson,
       Value<String?> inspectionNote,
+      Value<String?> commercialMode,
+      Value<String?> selectedAiLevel,
+      Value<bool> autoAnalyseEnabled,
       Value<int> rowid,
     });
 typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
@@ -5531,6 +6045,9 @@ typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
       Value<DateTime?> inspectionDate,
       Value<String?> reportMetadataJson,
       Value<String?> inspectionNote,
+      Value<String?> commercialMode,
+      Value<String?> selectedAiLevel,
+      Value<bool> autoAnalyseEnabled,
       Value<int> rowid,
     });
 
@@ -5733,6 +6250,21 @@ class $$InspectionSessionRowsTableFilterComposer
 
   ColumnFilters<String> get inspectionNote => $composableBuilder(
     column: $table.inspectionNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get commercialMode => $composableBuilder(
+    column: $table.commercialMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get selectedAiLevel => $composableBuilder(
+    column: $table.selectedAiLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoAnalyseEnabled => $composableBuilder(
+    column: $table.autoAnalyseEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5950,6 +6482,21 @@ class $$InspectionSessionRowsTableOrderingComposer
     column: $table.inspectionNote,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get commercialMode => $composableBuilder(
+    column: $table.commercialMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get selectedAiLevel => $composableBuilder(
+    column: $table.selectedAiLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get autoAnalyseEnabled => $composableBuilder(
+    column: $table.autoAnalyseEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InspectionSessionRowsTableAnnotationComposer
@@ -6051,6 +6598,21 @@ class $$InspectionSessionRowsTableAnnotationComposer
 
   GeneratedColumn<String> get inspectionNote => $composableBuilder(
     column: $table.inspectionNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get commercialMode => $composableBuilder(
+    column: $table.commercialMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get selectedAiLevel => $composableBuilder(
+    column: $table.selectedAiLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get autoAnalyseEnabled => $composableBuilder(
+    column: $table.autoAnalyseEnabled,
     builder: (column) => column,
   );
 
@@ -6220,6 +6782,9 @@ class $$InspectionSessionRowsTableTableManager
                 Value<DateTime?> inspectionDate = const Value.absent(),
                 Value<String?> reportMetadataJson = const Value.absent(),
                 Value<String?> inspectionNote = const Value.absent(),
+                Value<String?> commercialMode = const Value.absent(),
+                Value<String?> selectedAiLevel = const Value.absent(),
+                Value<bool> autoAnalyseEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion(
                 id: id,
@@ -6243,6 +6808,9 @@ class $$InspectionSessionRowsTableTableManager
                 inspectionDate: inspectionDate,
                 reportMetadataJson: reportMetadataJson,
                 inspectionNote: inspectionNote,
+                commercialMode: commercialMode,
+                selectedAiLevel: selectedAiLevel,
+                autoAnalyseEnabled: autoAnalyseEnabled,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6268,6 +6836,9 @@ class $$InspectionSessionRowsTableTableManager
                 Value<DateTime?> inspectionDate = const Value.absent(),
                 Value<String?> reportMetadataJson = const Value.absent(),
                 Value<String?> inspectionNote = const Value.absent(),
+                Value<String?> commercialMode = const Value.absent(),
+                Value<String?> selectedAiLevel = const Value.absent(),
+                Value<bool> autoAnalyseEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion.insert(
                 id: id,
@@ -6291,6 +6862,9 @@ class $$InspectionSessionRowsTableTableManager
                 inspectionDate: inspectionDate,
                 reportMetadataJson: reportMetadataJson,
                 inspectionNote: inspectionNote,
+                commercialMode: commercialMode,
+                selectedAiLevel: selectedAiLevel,
+                autoAnalyseEnabled: autoAnalyseEnabled,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -9065,6 +9639,7 @@ typedef $$UserProfileRowsTableCreateCompanionBuilder =
       Value<String?> companyName,
       Value<String?> inspectorName,
       required DateTime updatedAt,
+      Value<String?> defaultAiLevel,
       Value<int> rowid,
     });
 typedef $$UserProfileRowsTableUpdateCompanionBuilder =
@@ -9073,6 +9648,7 @@ typedef $$UserProfileRowsTableUpdateCompanionBuilder =
       Value<String?> companyName,
       Value<String?> inspectorName,
       Value<DateTime> updatedAt,
+      Value<String?> defaultAiLevel,
       Value<int> rowid,
     });
 
@@ -9102,6 +9678,11 @@ class $$UserProfileRowsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultAiLevel => $composableBuilder(
+    column: $table.defaultAiLevel,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9134,6 +9715,11 @@ class $$UserProfileRowsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get defaultAiLevel => $composableBuilder(
+    column: $table.defaultAiLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserProfileRowsTableAnnotationComposer
@@ -9160,6 +9746,11 @@ class $$UserProfileRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get defaultAiLevel => $composableBuilder(
+    column: $table.defaultAiLevel,
+    builder: (column) => column,
+  );
 }
 
 class $$UserProfileRowsTableTableManager
@@ -9203,12 +9794,14 @@ class $$UserProfileRowsTableTableManager
                 Value<String?> companyName = const Value.absent(),
                 Value<String?> inspectorName = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> defaultAiLevel = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserProfileRowsCompanion(
                 id: id,
                 companyName: companyName,
                 inspectorName: inspectorName,
                 updatedAt: updatedAt,
+                defaultAiLevel: defaultAiLevel,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9217,12 +9810,14 @@ class $$UserProfileRowsTableTableManager
                 Value<String?> companyName = const Value.absent(),
                 Value<String?> inspectorName = const Value.absent(),
                 required DateTime updatedAt,
+                Value<String?> defaultAiLevel = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserProfileRowsCompanion.insert(
                 id: id,
                 companyName: companyName,
                 inspectorName: inspectorName,
                 updatedAt: updatedAt,
+                defaultAiLevel: defaultAiLevel,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -9259,6 +9854,185 @@ typedef $$UserProfileRowsTableProcessedTableManager =
       UserProfileRow,
       PrefetchHooks Function()
     >;
+typedef $$WalletCacheRowsTableCreateCompanionBuilder =
+    WalletCacheRowsCompanion Function({
+      required String id,
+      required int balanceCredits,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$WalletCacheRowsTableUpdateCompanionBuilder =
+    WalletCacheRowsCompanion Function({
+      Value<String> id,
+      Value<int> balanceCredits,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$WalletCacheRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $WalletCacheRowsTable> {
+  $$WalletCacheRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceCredits => $composableBuilder(
+    column: $table.balanceCredits,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WalletCacheRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WalletCacheRowsTable> {
+  $$WalletCacheRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get balanceCredits => $composableBuilder(
+    column: $table.balanceCredits,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WalletCacheRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WalletCacheRowsTable> {
+  $$WalletCacheRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceCredits => $composableBuilder(
+    column: $table.balanceCredits,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$WalletCacheRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WalletCacheRowsTable,
+          WalletCacheRow,
+          $$WalletCacheRowsTableFilterComposer,
+          $$WalletCacheRowsTableOrderingComposer,
+          $$WalletCacheRowsTableAnnotationComposer,
+          $$WalletCacheRowsTableCreateCompanionBuilder,
+          $$WalletCacheRowsTableUpdateCompanionBuilder,
+          (
+            WalletCacheRow,
+            BaseReferences<
+              _$AppDatabase,
+              $WalletCacheRowsTable,
+              WalletCacheRow
+            >,
+          ),
+          WalletCacheRow,
+          PrefetchHooks Function()
+        > {
+  $$WalletCacheRowsTableTableManager(
+    _$AppDatabase db,
+    $WalletCacheRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WalletCacheRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WalletCacheRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WalletCacheRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<int> balanceCredits = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WalletCacheRowsCompanion(
+                id: id,
+                balanceCredits: balanceCredits,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required int balanceCredits,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => WalletCacheRowsCompanion.insert(
+                id: id,
+                balanceCredits: balanceCredits,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WalletCacheRowsTable, WalletCacheRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WalletCacheRowsTable,
+                    WalletCacheRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WalletCacheRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WalletCacheRowsTable,
+      WalletCacheRow,
+      $$WalletCacheRowsTableFilterComposer,
+      $$WalletCacheRowsTableOrderingComposer,
+      $$WalletCacheRowsTableAnnotationComposer,
+      $$WalletCacheRowsTableCreateCompanionBuilder,
+      $$WalletCacheRowsTableUpdateCompanionBuilder,
+      (
+        WalletCacheRow,
+        BaseReferences<_$AppDatabase, $WalletCacheRowsTable, WalletCacheRow>,
+      ),
+      WalletCacheRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9277,4 +10051,6 @@ class $AppDatabaseManager {
       $$ReportRowsTableTableManager(_db, _db.reportRows);
   $$UserProfileRowsTableTableManager get userProfileRows =>
       $$UserProfileRowsTableTableManager(_db, _db.userProfileRows);
+  $$WalletCacheRowsTableTableManager get walletCacheRows =>
+      $$WalletCacheRowsTableTableManager(_db, _db.walletCacheRows);
 }

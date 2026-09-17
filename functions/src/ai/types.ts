@@ -73,3 +73,21 @@ export interface ClassificationResult {
    * finding at all. Always true if `catalogueEntryId` is absent. */
   needsReview: boolean;
 }
+
+/**
+ * A provider's own reported token usage for one request — internal
+ * only, used solely to compute the customer's Credits charge (see
+ * `billing/pricing.ts`). Never forwarded to Flutter, never logged in
+ * full; see `docs/commercial_model.md` ("Actual usage settlement").
+ */
+export interface ProviderUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** What a provider adapter actually returns — the classification plus
+ * (when the provider reports it) the real usage billing needs. */
+export interface ProviderClassification {
+  result: ClassificationResult;
+  usage?: ProviderUsage;
+}

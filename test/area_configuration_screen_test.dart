@@ -23,11 +23,15 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// From the area configuration screen, through Review Setup, to
-/// "Start Inspection" — the only place a draft actually becomes a
-/// persisted inspection (see `ReviewSetupScreen`).
+/// From the area configuration screen, through Choose AI Plan and
+/// Review Setup, to "Start Inspection" — the only place a draft
+/// actually becomes a persisted inspection (see `ReviewSetupScreen`).
+/// Choose AI Plan defaults to Flex Credits / Smart once its config
+/// loads, so "Continue" is reachable without any extra selection.
 Future<void> _reviewAndStart(WidgetTester tester) async {
   await tester.tap(find.text('Review & Start'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Start Inspection'));
   await tester.pumpAndSettle();
@@ -225,11 +229,12 @@ void main() {
       // exclusion actually persisted in the created session, rather
       // than in the ephemeral setup screen. Stack from the dashboard:
       // property type -> property details -> area configuration ->
-      // review setup -> queue — 5 pops to unwind it all.
+      // choose AI plan -> review setup -> queue — 6 pops to unwind it
+      // all.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      for (var i = 0; i < 5; i++) {
+      for (var i = 0; i < 6; i++) {
         navigator.pop();
       }
       await tester.pumpAndSettle();
@@ -269,6 +274,8 @@ void main() {
     await _startHighRiseSetup(tester);
     await tester.tap(find.text('Review & Start'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
 
     // Fire multiple taps in quick succession before the first
     // navigation completes.
@@ -280,13 +287,13 @@ void main() {
     expect(find.text('Physical Inspection'), findsOneWidget);
 
     // Only one inspection was actually created — pop all the way
-    // back to the dashboard (queue -> review setup -> areas ->
-    // property details -> property type -> dashboard) and confirm
-    // there's exactly one card, not several.
+    // back to the dashboard (queue -> review setup -> choose AI plan ->
+    // areas -> property details -> property type -> dashboard) and
+    // confirm there's exactly one card, not several.
     final navigator = tester.state<NavigatorState>(
       find.byType(Navigator).first,
     );
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 6; i++) {
       navigator.pop();
     }
     await tester.pumpAndSettle();

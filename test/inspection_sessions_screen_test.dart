@@ -69,18 +69,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review & Start'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Start Inspection'));
     await tester.pumpAndSettle();
 
     expect(find.text('Physical Inspection'), findsOneWidget);
 
     // Back out of the created inspection to the dashboard — property
-    // type -> property details -> area configuration -> review setup ->
-    // queue is 5 pushes deep from the dashboard.
+    // type -> property details -> area configuration -> choose AI plan ->
+    // review setup -> queue is 6 pushes deep from the dashboard.
     final navigator = tester.state<NavigatorState>(
       find.byType(Navigator).first,
     );
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 6; i++) {
       navigator.pop();
     }
     await tester.pumpAndSettle();

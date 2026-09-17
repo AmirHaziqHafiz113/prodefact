@@ -35,6 +35,8 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Review & Start')));
   await tester.pumpAndSettle();
+  await tester.tap(_within(find.text('Continue')));
+  await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
 

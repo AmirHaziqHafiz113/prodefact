@@ -10,8 +10,9 @@ fit together as one coherent lifecycle. It supersedes
 `docs/home_inspection_workflow.md` as the top-level flow reference (that
 document still has useful detail and now points here); the deeper
 subsystem docs (`docs/ai_provider_architecture.md`, `docs/ai_review.md`,
-`docs/report.md`, `docs/firebase.md`, `docs/production_readiness.md`)
-remain authoritative for their own areas and are linked throughout.
+`docs/report.md`, `docs/firebase.md`, `docs/production_readiness.md`,
+`docs/commercial_model.md`) remain authoritative for their own areas and
+are linked throughout.
 
 ProDefact's definition: **a camera-first property inspection system
 where inspectors capture evidence naturally, AI maps that evidence to a
@@ -215,6 +216,15 @@ Unchanged — see `docs/ai_provider_architecture.md` and
 controlled 11-main-element / 34-component / 222-defect-entry catalogue
 (`tool/generate_defect_catalogue.py` — counts verified this pass, exact
 match).
+
+**Pending commercial-layer change (backend built, Flutter not yet
+wired up — see `docs/commercial_model.md`).** Save Finding queuing AI
+automatically, as described above, is the behavior this app has today.
+A commercial pass has since built (but not yet integrated into this
+screen) a backend contract where Save Finding stays free/physical-only
+and AI analysis becomes a separate, explicit step: an estimate ("Up to
+N Credits"), inspector approval, then `analyseFinding`. Until that
+Flutter integration lands, this section's description remains accurate.
 
 ## 7. Area / Continue Property / Physical Inspection Complete
 

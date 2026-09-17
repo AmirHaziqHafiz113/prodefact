@@ -1,6 +1,8 @@
 import '../entities/ai_finding_status.dart';
+import '../entities/ai_level.dart';
 import '../entities/ai_review.dart';
 import '../entities/ai_review_state.dart';
+import '../entities/commercial_mode.dart';
 import '../entities/evidence.dart';
 import '../entities/finding.dart';
 import '../entities/industry.dart';
@@ -13,6 +15,7 @@ import '../entities/section.dart';
 import '../entities/section_status.dart';
 import '../entities/sync_status.dart';
 import '../entities/user_profile.dart';
+import '../entities/wallet_cache.dart';
 
 /// Durable storage for [InspectionSession]s, generic across industries.
 ///
@@ -25,12 +28,18 @@ abstract class InspectionRepository {
   /// id and the given starting sections. [ownerUid] is null for a
   /// "guest" session started while signed out — see the ownership
   /// policy in `docs/firebase.md`.
+  ///
+  /// [commercialMode]/[selectedAiLevel] are the outcome of the Choose AI
+  /// Plan step (see docs/commercial_model.md) — null means that choice
+  /// hasn't happened yet (e.g. a caller that predates this feature).
   Future<InspectionSession> createSession({
     required Industry industry,
     required String assetTypeId,
     required List<Section> initialSections,
     String? ownerUid,
     PropertyDetails propertyDetails = PropertyDetails.empty,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
   });
 
   /// Loads a previously-created session by id, or null if it doesn't
@@ -129,6 +138,17 @@ abstract class InspectionRepository {
   /// Records the whole-inspection contextual note. Pass null to clear
   /// it.
   Future<void> saveInspectionNote(String sessionId, String? note);
+
+  /// Records the Auto Analyse preference for one inspection — see
+  /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.
+  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled);
+
+  /// The last-known Credits balance cached locally for instant/offline
+  /// display — null if nothing has been cached yet. **Never
+  /// authoritative** — see `WalletCache`'s doc comment.
+  Future<WalletCache?> loadWalletCache();
+
+  Future<void> saveWalletCache(WalletCache cache);
 
   Future<void> close();
 }

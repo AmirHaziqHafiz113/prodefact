@@ -1,7 +1,7 @@
 import {
-  ClassificationResult,
   ClassifyFindingInput,
   FindingImages,
+  ProviderClassification,
 } from "./types";
 
 /**
@@ -24,7 +24,7 @@ export interface AiProvider {
   classifyFinding(
     input: ClassifyFindingInput,
     images: FindingImages
-  ): Promise<ClassificationResult>;
+  ): Promise<ProviderClassification>;
 }
 
 /** Thrown by a provider adapter for any request/response failure. */

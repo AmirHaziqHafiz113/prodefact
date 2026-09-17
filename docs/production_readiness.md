@@ -1146,3 +1146,35 @@ async already).
    has a generated report, add or edit a finding, and confirm the
    "changes may require a new report version" banner is visible before
    any edit is made (not just after).
+
+## Commercial layer (backend-only pass)
+
+A commercial layer (AI Credits, Flex Credits, House Pass, wallet
+ledger, sandbox-only payment architecture) was added this pass —
+**backend/Cloud Functions only; see `docs/commercial_model.md` for the
+full design.** No Flutter UI exists yet (no splash/bottom nav/Wallet/
+Top Up/Choose AI Plan screens, no Drift migration, Save Finding still
+behaves exactly as before with no commercial gating). This does not
+change this document's overall pilot-readiness status — it is
+additional scope layered on top of the existing, unaffected inspection
+workflow, not yet exercised end to end. Notable items that don't fit
+neatly into the sections above:
+
+- `analyseFinding` (the priced AI-classification callable) cannot be
+  deployed until `OPENAI_API_KEY` is provisioned in Secret Manager for
+  `prodefact-82bac` — see `docs/commercial_model.md` ("AI levels and
+  provider mapping") for the exact command. No key was fabricated
+  anywhere in this codebase; `classifyFinding` (the existing, unpriced
+  path) is unaffected and keeps using DeepSeek.
+- New Firestore rules added for `users/{uid}/wallet`,
+  `walletTransactions`, `housePasses`, `paymentIntents`, `aiJobs`
+  (owner-read-only, no client write ever) and `pricing/config`
+  (unreadable and unwritable by any client) — see `firestore.rules`.
+- `PAYMENTS_MODE=sandbox` must never be set on a real deployment; the
+  only fake-payment-success path (`confirmSandboxPayment`) is inert
+  without it, and this boundary has its own regression test
+  (`functions/src/billing/handle_confirm_sandbox_payment.test.ts`).
+- The House Pass fair-use allowance shipped in the default pricing
+  config (`allowanceFindings: 200`) is an explicitly-labeled test value
+  (`environment: "test"`), not a real commercial decision — see
+  `docs/commercial_model.md` ("Unfinished decision").

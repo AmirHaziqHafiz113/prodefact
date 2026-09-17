@@ -68,6 +68,10 @@ void main() {
     await tester.tap(find.text('Review & Start'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Choose AI Plan'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Review Setup'), findsOneWidget);
     expect(find.text('Residensi Vista'), findsOneWidget);
     expect(find.text('1 Jalan Test'), findsOneWidget);

@@ -25,6 +25,8 @@ class NewInspectionDraft {
     required this.propertyType,
     required this.sections,
     this.propertyDetails,
+    this.commercialMode,
+    this.selectedAiLevel,
   });
 
   final PropertyType propertyType;
@@ -36,14 +38,28 @@ class NewInspectionDraft {
   /// back to `PropertyDetails.empty`.
   final PropertyDetails? propertyDetails;
 
+  /// Filled in by the Choose AI Plan step — null until the inspector
+  /// has made a choice there. `ReviewSetupScreen`'s Start Inspection
+  /// button is disabled until both are set; see
+  /// docs/commercial_model.md.
+  final CommercialMode? commercialMode;
+  final AiLevel? selectedAiLevel;
+
+  bool get hasChosenCommercialPlan =>
+      commercialMode != null && selectedAiLevel != null;
+
   NewInspectionDraft copyWith({
     List<Section>? sections,
     PropertyDetails? propertyDetails,
+    CommercialMode? commercialMode,
+    AiLevel? selectedAiLevel,
   }) {
     return NewInspectionDraft(
       propertyType: propertyType,
       sections: sections ?? this.sections,
       propertyDetails: propertyDetails ?? this.propertyDetails,
+      commercialMode: commercialMode ?? this.commercialMode,
+      selectedAiLevel: selectedAiLevel ?? this.selectedAiLevel,
     );
   }
 }
@@ -76,6 +92,20 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
     final draft = state;
     if (draft == null) return;
     state = draft.copyWith(propertyDetails: details);
+  }
+
+  /// Records the Choose AI Plan step's result — see
+  /// docs/commercial_model.md.
+  void chooseCommercialPlan({
+    required CommercialMode commercialMode,
+    required AiLevel selectedAiLevel,
+  }) {
+    final draft = state;
+    if (draft == null) return;
+    state = draft.copyWith(
+      commercialMode: commercialMode,
+      selectedAiLevel: selectedAiLevel,
+    );
   }
 
   void resetToDefaults() {
@@ -166,6 +196,8 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
             draft.propertyType,
             initialSections: draft.sections,
             propertyDetails: draft.propertyDetails ?? PropertyDetails.empty,
+            commercialMode: draft.commercialMode,
+            selectedAiLevel: draft.selectedAiLevel,
           );
       if (started) {
         state = null;

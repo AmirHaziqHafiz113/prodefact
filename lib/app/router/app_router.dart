@@ -6,6 +6,7 @@ import '../../features/auth/presentation/sign_in_screen.dart';
 import '../../features/home_inspection/presentation/screens/ai_review_overview_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_configuration_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
+import '../../features/home_inspection/presentation/screens/choose_ai_plan_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/profile_screen.dart';
@@ -86,6 +87,10 @@ GoRouter buildAppRouter(WidgetRef ref) {
       GoRoute(
         path: AreaConfigurationScreen.routePath,
         builder: (context, state) => const AreaConfigurationScreen(),
+      ),
+      GoRoute(
+        path: ChooseAiPlanScreen.routePath,
+        builder: (context, state) => const ChooseAiPlanScreen(),
       ),
       GoRoute(
         path: ReviewSetupScreen.routePath,
