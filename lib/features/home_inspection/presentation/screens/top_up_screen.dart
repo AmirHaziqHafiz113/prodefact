@@ -7,6 +7,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/wallet_providers.dart';
+import '../widgets/commercial_error_presentation.dart';
 
 /// Top Up: choose an RM amount, see the Credits it buys, and create a
 /// payment intent. **No real payment gateway is configured for this
@@ -126,7 +127,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Continue'),
+              : const Text('Proceed to Payment'),
         ),
       ],
     );
@@ -219,11 +220,15 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
         _intent = intent;
         _creatingIntent = false;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() {
         _creatingIntent = false;
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CommercialErrorPresentation.messageFor(
+          'Top-up intent creation',
+          error,
+          stackTrace,
+        );
       });
     }
   }
@@ -251,11 +256,15 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
           ),
         ),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() {
         _confirming = false;
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CommercialErrorPresentation.messageFor(
+          'Top-up sandbox confirmation',
+          error,
+          stackTrace,
+        );
       });
     }
   }

@@ -156,16 +156,6 @@ class _PropertyTypeCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      child: Icon(icon, color: AppColors.primary),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
                     Text(
                       propertyType.label,
                       style: Theme.of(context).textTheme.titleLarge,

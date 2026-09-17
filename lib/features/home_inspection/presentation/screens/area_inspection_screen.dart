@@ -162,45 +162,12 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 'whenever you spot a defect.',
               ),
             )
-          else ...[
+          else
             for (final finding in areaFindings)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _FindingCard(finding: finding),
               ),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceAlt,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.lightbulb_outline,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Found another issue?',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        Text(
-                          'Keep capturing photos of defects in this area.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -215,7 +182,11 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.photo_camera),
-            label: const Text('Take Defect Photo'),
+            label: Text(
+              areaFindings.isEmpty
+                  ? 'Take Defect Photo'
+                  : 'Take Another Defect Photo',
+            ),
           ),
         ),
       ),

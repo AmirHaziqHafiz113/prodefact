@@ -8,6 +8,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/house_pass_providers.dart';
+import '../widgets/commercial_error_presentation.dart';
 
 /// House Pass purchase and status — a fixed-price (RM30) AI package for
 /// one inspection. Backend remains authoritative throughout: this
@@ -194,6 +195,11 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
             'This House Pass is no longer active.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          const SizedBox(height: AppSpacing.lg),
+          OutlinedButton(
+            onPressed: () => context.pop(),
+            child: const Text('Back'),
+          ),
         ];
     }
   }
@@ -215,10 +221,14 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
           .read(billingServiceProvider)
           .purchaseHousePass(widget.inspectionId);
       ref.invalidate(housePassStatusProvider(widget.inspectionId));
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CommercialErrorPresentation.messageFor(
+          'House Pass purchase',
+          error,
+          stackTrace,
+        );
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -237,10 +247,14 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
       // see `_AutoAnalyseToggle`'s doc comment. The inspector can still
       // switch it back off from the queue screen at any time.
       ref.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CommercialErrorPresentation.messageFor(
+          'House Pass payment confirmation',
+          error,
+          stackTrace,
+        );
       });
     } finally {
       if (mounted) setState(() => _busy = false);

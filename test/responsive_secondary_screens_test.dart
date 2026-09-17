@@ -117,7 +117,7 @@ void main() {
       // banner) is a materially different layout — check it too.
       await tester.tap(find.byType(ChoiceChip).first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Proceed to Payment'));
       await tester.pumpAndSettle();
       await _assertNoOverflowAcrossWidths(
         tester,
