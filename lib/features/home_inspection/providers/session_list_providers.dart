@@ -25,3 +25,15 @@ final sessionSummariesProvider =
       final uid = ref.watch(authStateProvider).value?.uid;
       return repository.listSessions(ownerUid: uid);
     });
+
+/// The real, non-fabricated subset of [sessionSummariesProvider] the
+/// inspector should look at — a pending AI review or a failed
+/// classification (see `InspectionSessionSummary.needsAttention`).
+/// Shared by every "needs attention"/notification-bell surface (Home,
+/// the top-bar bell) so they always agree with each other and with the
+/// Inspections list's own "Needs attention" section.
+final attentionSessionsProvider =
+    Provider.autoDispose<List<InspectionSessionSummary>>((ref) {
+      final summaries = ref.watch(sessionSummariesProvider).value ?? const [];
+      return summaries.where((s) => s.needsAttention).toList();
+    });

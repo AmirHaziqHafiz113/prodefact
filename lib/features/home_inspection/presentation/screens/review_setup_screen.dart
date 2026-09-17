@@ -7,6 +7,8 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
 import 'house_pass_screen.dart';
+import 'inspection_queue_screen.dart';
+import 'property_type_selection_screen.dart';
 
 /// New Inspection setup, the final step before a session is actually
 /// created: a read-only summary of everything configured so far
@@ -45,6 +47,11 @@ class ReviewSetupScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
+            const AppWizardStepper(
+              stepLabels: PropertyTypeSelectionScreen.wizardSteps,
+              currentIndex: 4,
+            ),
+            const SizedBox(height: AppSpacing.lg),
             AppSectionHeader(
               title: details.title.isEmpty
                   ? draft.propertyType.label
@@ -238,7 +245,7 @@ class _StartInspectionButtonState
       return;
     }
     final session = ref.read(activeSessionProvider);
-    context.push('/home-inspection/inspection');
+    context.push(InspectionQueueScreen.routePath);
     // A House Pass inspection still needs the purchase actually
     // completed — offered immediately, pushed on top of the (already
     // reachable) inspection queue, never required to reach it. See

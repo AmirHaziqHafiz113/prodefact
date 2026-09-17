@@ -7,6 +7,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
 import '../../providers/user_profile_providers.dart';
 import 'area_configuration_screen.dart';
+import 'property_type_selection_screen.dart';
 
 /// New Inspection setup, step 2 (after property type, before area
 /// configuration): the property/report metadata that later populates
@@ -79,58 +80,85 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
+              const AppWizardStepper(
+                stepLabels: PropertyTypeSelectionScreen.wizardSteps,
+                currentIndex: 1,
+              ),
+              const SizedBox(height: AppSpacing.sm),
               Text(
-                'These details appear on the report cover page.',
+                'Tell us about the property and inspection details.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
-              _field(
-                _title,
-                'Inspection / Property title',
-                required: true,
-                textCapitalization: TextCapitalization.words,
-              ),
-              _field(
-                _address,
-                'Property address',
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              _field(
-                _projectName,
-                'Project / Development name',
-                textCapitalization: TextCapitalization.words,
-              ),
-              Row(
+              _SectionCard(
+                icon: Icons.home_outlined,
+                title: 'Property',
+                subtitle: 'Basic information about the property',
                 children: [
-                  Expanded(child: _field(_blockTower, 'Block / Tower')),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(child: _field(_unitNumber, 'Unit number')),
+                  _field(
+                    _title,
+                    'Inspection / Property title',
+                    required: true,
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  _field(
+                    _address,
+                    'Property address',
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  _field(
+                    _projectName,
+                    'Project / Development name',
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(child: _field(_blockTower, 'Block / Tower')),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(child: _field(_unitNumber, 'Unit number')),
+                    ],
+                  ),
+                  _field(
+                    _developerName,
+                    'Developer (optional)',
+                    textCapitalization: TextCapitalization.words,
+                  ),
                 ],
               ),
-              _field(
-                _clientName,
-                'Client / Owner name',
-                textCapitalization: TextCapitalization.words,
+              const SizedBox(height: AppSpacing.lg),
+              _SectionCard(
+                icon: Icons.people_outline,
+                title: 'Client',
+                subtitle: 'Client or owner information',
+                children: [
+                  _field(
+                    _clientName,
+                    'Client / Owner name',
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  _field(
+                    _contactNumber,
+                    'Contact number (optional)',
+                    keyboardType: TextInputType.phone,
+                  ),
+                ],
               ),
-              _field(
-                _inspectorName,
-                'Inspector name',
-                textCapitalization: TextCapitalization.words,
-              ),
-              _field(
-                _developerName,
-                'Developer (optional)',
-                textCapitalization: TextCapitalization.words,
-              ),
-              _field(
-                _contactNumber,
-                'Contact number (optional)',
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _DatePickerField(
-                date: _inspectionDate,
-                onPick: (date) => setState(() => _inspectionDate = date),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionCard(
+                icon: Icons.event_available_outlined,
+                title: 'Inspection',
+                subtitle: 'Assign the inspector and schedule',
+                children: [
+                  _field(
+                    _inspectorName,
+                    'Inspector name',
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  _DatePickerField(
+                    date: _inspectionDate,
+                    onPick: (date) => setState(() => _inspectionDate = date),
+                  ),
+                ],
               ),
             ],
           ),
@@ -139,9 +167,22 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: FilledButton(
-            onPressed: _continue,
-            child: const Text('Continue'),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Back'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _continue,
+                  child: const Text('Continue'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -193,6 +234,68 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           ),
         );
     context.push(AreaConfigurationScreen.routePath);
+  }
+}
+
+/// A visually distinct, icon-headed field group — used to break a long
+/// unstructured form into scannable sections (Property/Client/
+/// Inspection), matching the reference mockup's grouping.
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Icon(icon, color: AppColors.primary, size: 20),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ...children,
+          ],
+        ),
+      ),
+    );
   }
 }
 

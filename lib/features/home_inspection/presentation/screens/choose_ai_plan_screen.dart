@@ -7,6 +7,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
 import '../../providers/user_profile_providers.dart';
+import 'property_type_selection_screen.dart';
 import 'review_setup_screen.dart';
 
 /// New Inspection setup, inserted between Area Configuration and Review
@@ -97,6 +98,11 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
+        const AppWizardStepper(
+          stepLabels: PropertyTypeSelectionScreen.wizardSteps,
+          currentIndex: 3,
+        ),
+        const SizedBox(height: AppSpacing.lg),
         Text(
           'How should AI analysis be paid for?',
           style: Theme.of(context).textTheme.titleMedium,

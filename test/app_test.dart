@@ -14,22 +14,19 @@ void main() {
     await tester.pumpAndSettle();
 
     // No industry-picker splash — the dashboard is the app's initial
-    // route (see `buildAppRouter`). "Inspections" also appears as a
-    // bottom-nav destination label now, so this specifically checks the
-    // AppBar title rather than a bare `find.text`.
-    expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Inspections'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('No saved inspections yet.'), findsOneWidget);
+    // route (see `buildAppRouter`). "Inspections" appears twice now (the
+    // page's own headline plus its bottom-nav destination label), so
+    // this checks for at least one rather than exactly one.
+    expect(find.text('Inspections'), findsWidgets);
+    expect(find.text('No inspections yet'), findsOneWidget);
 
-    await tester.tap(find.text('New Inspection'));
+    await tester.tap(find.byTooltip('New Inspection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Select property type'), findsOneWidget);
+    expect(
+      find.text('What type of property are you inspecting?'),
+      findsOneWidget,
+    );
     expect(find.text('High Rise'), findsOneWidget);
     expect(find.text('Landed'), findsOneWidget);
   });
@@ -43,7 +40,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('New Inspection'));
+      await tester.tap(find.byTooltip('New Inspection'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Landed'));
@@ -57,7 +54,7 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Landed Areas'), findsOneWidget);
+      expect(find.text('Configure Areas'), findsOneWidget);
       expect(find.text('Master Bathroom'), findsOneWidget);
       // Nothing is persisted yet — property type/details setup only
       // edits an in-memory setup draft (see

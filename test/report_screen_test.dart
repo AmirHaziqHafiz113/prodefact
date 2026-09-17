@@ -24,6 +24,13 @@ Future<ProviderContainer> _pumpToReportScreen(
   final container = ProviderContainer(overrides: overrides);
   addTearDown(container.dispose);
 
+  // A tall surface so every area card is actually built (not just
+  // scrolled past) by the lazy list on the inspection queue screen
+  // this flow passes through.
+  addTearDown(tester.view.reset);
+  tester.view.physicalSize = const Size(800, 3000);
+  tester.view.devicePixelRatio = 1.0;
+
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
@@ -32,7 +39,7 @@ Future<ProviderContainer> _pumpToReportScreen(
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(_within(find.text('New Inspection')));
+  await tester.tap(find.byTooltip('New Inspection'));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('High Rise')));
   await tester.pumpAndSettle();
@@ -42,7 +49,7 @@ Future<ProviderContainer> _pumpToReportScreen(
   );
   await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
-  await tester.tap(_within(find.text('Review & Start')));
+  await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();

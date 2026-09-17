@@ -41,7 +41,10 @@ void main() {
     // Local-only before any sync.
     expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.cloud_sync_outlined));
+    // "Sync now" lives behind the card's "..." overflow menu now.
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sync now'));
     await tester.pumpAndSettle();
 
     // The manual "Sync now" action reached the coordinator, which

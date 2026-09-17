@@ -10,12 +10,17 @@ import '../../../auth/presentation/sign_in_screen.dart';
 import '../../config/property_type.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/session_list_providers.dart';
+import '../../providers/user_profile_providers.dart';
+import '../widgets/attention_sheet.dart';
+import '../widgets/session_navigation.dart';
+import '../widgets/session_status_presentation.dart';
 import 'profile_screen.dart';
-import 'property_type_selection_screen.dart';
 
-/// ProDefact's dashboard: active/recent inspection cards, a strong
-/// "New Inspection" call to action, and a minimal sign-in affordance.
-/// Sessions save and work fully offline — sign-in only unlocks sync.
+/// ProDefact's dashboard: search/filter, a real-data status strip, and
+/// active/needs-attention/recent inspection cards. Sessions save and
+/// work fully offline — sign-in only unlocks sync. New Inspection is
+/// never duplicated here — the shared "+" bottom-nav action is the one
+/// canonical entry point (see `AppShellScreen`).
 class InspectionSessionsScreen extends ConsumerWidget {
   const InspectionSessionsScreen({super.key});
 
@@ -25,51 +30,118 @@ class InspectionSessionsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final summaries = ref.watch(sessionSummariesProvider);
     final authState = ref.watch(authStateProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final attention = ref.watch(attentionSessionsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inspections'),
-        actions: [
-          IconButton(
-            tooltip: 'Profile',
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => context.push(ProfileScreen.routePath),
-          ),
-          _AuthAction(authState: authState),
-        ],
-      ),
       body: SafeArea(
         child: summaries.when(
-          loading: () => const AppLoadingView(message: 'Loading inspections…'),
-          error: (error, stackTrace) => AppErrorView(
-            message: 'Could not load saved inspections.',
-            onRetry: () => ref.invalidate(sessionSummariesProvider),
+          loading: () => const _ScreenScaffold(child: AppSkeletonCardList()),
+          error: (error, stackTrace) => _ScreenScaffold(
+            child: AppErrorView(
+              message: 'Could not load saved inspections.',
+              onRetry: () => ref.invalidate(sessionSummariesProvider),
+            ),
           ),
-          data: (sessions) => _DashboardBody(sessions: sessions, ref: ref),
+          data: (sessions) => _DashboardBody(
+            sessions: sessions,
+            attentionCount: attention.length,
+            displayName: profileAsync.value?.inspectorName,
+            email: authState.value?.email,
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(PropertyTypeSelectionScreen.routePath),
-        icon: const Icon(Icons.add),
-        label: const Text('New Inspection'),
+    );
+  }
+}
+
+/// The header (top bar + title) any state (loading/error/data) shows —
+/// so a loading/error state still looks like part of the same screen
+/// rather than a bare centered widget.
+class _ScreenScaffold extends ConsumerWidget {
+  const _ScreenScaffold({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _Header(attentionCount: 0, displayName: null, email: null),
+          const SizedBox(height: AppSpacing.xl),
+          Expanded(child: child),
+        ],
       ),
+    );
+  }
+}
+
+class _Header extends ConsumerWidget {
+  const _Header({
+    required this.attentionCount,
+    required this.displayName,
+    required this.email,
+  });
+
+  final int attentionCount;
+  final String? displayName;
+  final String? email;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: AppTopBar(
+                showBrand: false,
+                attentionCount: attentionCount,
+                onAttentionTap: () => showAttentionSheet(context, ref),
+                displayName: displayName,
+                email: email,
+                onAvatarTap: () => context.push(ProfileScreen.routePath),
+              ),
+            ),
+            _AuthAction(authState: authState),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Inspections', style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          'Track, review and complete your inspections.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 }
 
 enum _DashboardFilter { all, inProgress, needsReview, reportReady, completed }
 
-class _DashboardBody extends StatefulWidget {
-  const _DashboardBody({required this.sessions, required this.ref});
+class _DashboardBody extends ConsumerStatefulWidget {
+  const _DashboardBody({
+    required this.sessions,
+    required this.attentionCount,
+    required this.displayName,
+    required this.email,
+  });
 
   final List<InspectionSessionSummary> sessions;
-  final WidgetRef ref;
+  final int attentionCount;
+  final String? displayName;
+  final String? email;
 
   @override
-  State<_DashboardBody> createState() => _DashboardBodyState();
+  ConsumerState<_DashboardBody> createState() => _DashboardBodyState();
 }
 
-class _DashboardBodyState extends State<_DashboardBody> {
+class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   final _searchController = TextEditingController();
   String _query = '';
   _DashboardFilter _filter = _DashboardFilter.all;
@@ -83,15 +155,15 @@ class _DashboardBodyState extends State<_DashboardBody> {
   @override
   Widget build(BuildContext context) {
     final sessions = widget.sessions;
-    if (sessions.isEmpty) {
-      return const AppEmptyView(
-        icon: Icons.assignment_outlined,
-        title: 'No saved inspections yet.',
-        message: 'Tap "New Inspection" below to get started.',
-      );
-    }
 
     final attention = sessions.where((s) => s.needsAttention).toList();
+    final activeCount = sessions.where((s) => !s.isComplete).length;
+    final needsReviewCount = sessions
+        .where((s) => s.aiPendingReviewCount > 0)
+        .length;
+    final completedCount = sessions
+        .where((s) => s.status == InspectionStatus.reported)
+        .length;
 
     bool matchesQuery(InspectionSessionSummary s) {
       if (_query.isEmpty) return true;
@@ -124,18 +196,19 @@ class _DashboardBodyState extends State<_DashboardBody> {
     final recent = filtered.where((s) => s.isComplete).toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
-        96,
-      ),
+      padding: const EdgeInsets.only(bottom: 96),
       children: [
+        _Header(
+          attentionCount: widget.attentionCount,
+          displayName: widget.displayName,
+          email: widget.email,
+        ),
+        const SizedBox(height: AppSpacing.lg),
         TextField(
           controller: _searchController,
           onChanged: (value) => setState(() => _query = value),
           decoration: InputDecoration(
-            hintText: 'Search by title, unit, address…',
+            hintText: 'Search by property name, address or unit…',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _query.isEmpty
                 ? null
@@ -148,61 +221,92 @@ class _DashboardBodyState extends State<_DashboardBody> {
                   ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Wrap(
-          spacing: AppSpacing.sm,
-          children: [
-            for (final option in _DashboardFilter.values)
-              ChoiceChip(
-                label: Text(_filterLabel(option)),
-                selected: _filter == option,
-                onSelected: (_) => setState(() => _filter = option),
-              ),
-          ],
+        const SizedBox(height: AppSpacing.md),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final option in _DashboardFilter.values) ...[
+                ChoiceChip(
+                  label: Text(_filterLabel(option)),
+                  selected: _filter == option,
+                  onSelected: (_) => setState(() => _filter = option),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+            ],
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
-        if (attention.isNotEmpty) ...[
-          AppSectionHeader(
-            title: 'Needs attention',
-            subtitle: '${attention.length} inspection(s)',
+        if (sessions.isNotEmpty)
+          Row(
+            children: [
+              Expanded(
+                child: AppMetricCard(
+                  icon: Icons.assignment_outlined,
+                  value: '$activeCount',
+                  label: 'Active',
+                  caption: 'In progress',
+                  dense: true,
+                ),
+              ),
+              Expanded(
+                child: AppMetricCard(
+                  icon: Icons.priority_high,
+                  value: '$needsReviewCount',
+                  label: 'Needs Review',
+                  caption: 'Awaiting review',
+                  iconColor: AppColors.danger,
+                  dense: true,
+                ),
+              ),
+              Expanded(
+                child: AppMetricCard(
+                  icon: Icons.check_circle_outline,
+                  value: '$completedCount',
+                  label: 'Completed',
+                  caption: 'All time',
+                  iconColor: AppColors.success,
+                  dense: true,
+                ),
+              ),
+            ],
           ),
-          for (final summary in attention)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _SessionCard(summary: summary, ref: widget.ref),
+        const SizedBox(height: AppSpacing.lg),
+        if (sessions.isEmpty)
+          const AppEmptyView(
+            icon: Icons.assignment_outlined,
+            title: 'No inspections yet',
+            message: 'Start your first inspection with the + button below.',
+          )
+        else ...[
+          if (attention.isNotEmpty) ...[
+            AppSectionHeader(
+              title: 'Needs attention',
+              subtitle: '${attention.length} inspection(s)',
             ),
-          const SizedBox(height: AppSpacing.lg),
+            for (final summary in attention) _SessionCard(summary: summary),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          if (active.isNotEmpty) ...[
+            AppSectionHeader(
+              title: 'Active inspections',
+              subtitle: '${active.length} in progress',
+            ),
+            for (final summary in active) _SessionCard(summary: summary),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          if (recent.isNotEmpty) ...[
+            const AppSectionHeader(title: 'Recent'),
+            for (final summary in recent) _SessionCard(summary: summary),
+          ],
+          if (active.isEmpty && recent.isEmpty && attention.isEmpty)
+            const AppEmptyView(
+              icon: Icons.search_off_outlined,
+              title: 'No matching inspections',
+              message: 'Try a different search or filter.',
+            ),
         ],
-        if (active.isNotEmpty) ...[
-          AppSectionHeader(
-            title: 'Active inspections',
-            subtitle: '${active.length} in progress',
-          ),
-          for (final summary in active)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _SessionCard(summary: summary, ref: widget.ref),
-            ),
-          const SizedBox(height: AppSpacing.lg),
-        ],
-        if (recent.isNotEmpty) ...[
-          const AppSectionHeader(title: 'Recent'),
-          for (final summary in recent)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _SessionCard(summary: summary, ref: widget.ref),
-            ),
-        ],
-        if (active.isEmpty && recent.isEmpty && attention.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-            child: Text(
-              'No inspections match this search/filter.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: AppColors.textMuted),
-            ),
-          ),
       ],
     );
   }
@@ -211,9 +315,10 @@ class _DashboardBodyState extends State<_DashboardBody> {
     _DashboardFilter.all => 'All',
     // Deliberately "Active", not "In Progress" — the latter is also
     // this filter's matching sessions' own status pill label
-    // (`_LifecycleStatusPill`), and having the exact same string do
-    // double duty as both a filter chip and a status label makes
-    // narrowing a `find.text(...)` widget lookup in tests ambiguous.
+    // (`sessionLifecyclePresentation`), and having the exact same
+    // string do double duty as both a filter chip and a status label
+    // makes narrowing a `find.text(...)` widget lookup in tests
+    // ambiguous.
     _DashboardFilter.inProgress => 'Active',
     _DashboardFilter.needsReview => 'Needs Review',
     _DashboardFilter.reportReady => 'Report Ready',
@@ -221,14 +326,13 @@ class _DashboardBodyState extends State<_DashboardBody> {
   };
 }
 
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.summary, required this.ref});
+class _SessionCard extends ConsumerWidget {
+  const _SessionCard({required this.summary});
 
   final InspectionSessionSummary summary;
-  final WidgetRef ref;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final propertyType = PropertyType.values.firstWhereOrNull(
       (p) => p.name == summary.assetTypeId,
     );
@@ -237,122 +341,115 @@ class _SessionCard extends StatelessWidget {
         authState.value != null &&
         (summary.ownerUid == null || summary.ownerUid == authState.value!.uid);
 
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: () => _resume(context, ref),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Icon(
-                  propertyType == PropertyType.highRise
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: () => resumeAndOpenInspection(context, ref, summary.id),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppFallbackThumbnail(
+                  icon: propertyType == PropertyType.highRise
                       ? Icons.apartment_outlined
                       : Icons.house_outlined,
-                  color: AppColors.primary,
                 ),
-              ),
-              const SizedBox(width: AppSpacing.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      summary.propertyTitle?.isNotEmpty == true
-                          ? summary.propertyTitle!
-                          : (propertyType?.label ?? summary.assetTypeId),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    if (summary.unitNumber != null ||
-                        summary.propertyAddress != null)
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        [
-                          summary.unitNumber,
-                          summary.propertyAddress,
-                        ].whereType<String>().join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        summary.propertyTitle?.isNotEmpty == true
+                            ? summary.propertyTitle!
+                            : (propertyType?.label ?? summary.assetTypeId),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (summary.unitNumber != null ||
+                          summary.propertyAddress != null)
+                        Text(
+                          [
+                            summary.unitNumber,
+                            summary.propertyAddress,
+                          ].whereType<String>().join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatUpdatedAt(summary.updatedAt),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatUpdatedAt(summary.updatedAt),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        _LifecycleStatusPill(status: summary.status),
-                        SyncStatusPill(
-                          status: summary.syncStatus,
-                          dense: true,
-                          pendingCount: summary.pendingSyncCount,
-                        ),
-                        if (summary.needsAttention)
-                          StatusPill(
-                            label: summary.aiFailedFindingsCount > 0
-                                ? '${summary.aiFailedFindingsCount} AI failed'
-                                : '${summary.aiPendingReviewCount} need review',
-                            icon: Icons.priority_high,
-                            foreground: AppColors.danger,
-                            background: AppColors.dangerBg,
-                            dense: true,
-                          ),
-                      ],
-                    ),
-                    if (summary.aiEligibleFindingsCount > 0) ...[
                       const SizedBox(height: AppSpacing.sm),
-                      _AiProgressLine(summary: summary),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: [
+                          SessionLifecyclePill(status: summary.status),
+                          SyncStatusPill(
+                            status: summary.syncStatus,
+                            dense: true,
+                            pendingCount: summary.pendingSyncCount,
+                          ),
+                          if (summary.needsAttention)
+                            StatusPill(
+                              label: summary.aiFailedFindingsCount > 0
+                                  ? '${summary.aiFailedFindingsCount} AI failed'
+                                  : '${summary.aiPendingReviewCount} need review',
+                              icon: Icons.priority_high,
+                              foreground: AppColors.danger,
+                              background: AppColors.dangerBg,
+                              dense: true,
+                            ),
+                        ],
+                      ),
+                      if (summary.aiEligibleFindingsCount > 0) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        _AiProgressLine(summary: summary),
+                      ],
                     ],
+                  ),
+                ),
+                PopupMenuButton<_SessionAction>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (action) => switch (action) {
+                    _SessionAction.sync => _syncOne(context, ref),
+                    _SessionAction.delete => _confirmDelete(
+                      context,
+                      ref,
+                      propertyType?.label ?? summary.assetTypeId,
+                    ),
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      enabled: canSync,
+                      value: _SessionAction.sync,
+                      child: const ListTile(
+                        leading: Icon(Icons.cloud_sync_outlined),
+                        title: Text('Sync now'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: _SessionAction.delete,
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              IconButton(
-                tooltip: canSync
-                    ? 'Sync now'
-                    : 'Sign in to sync this inspection',
-                icon: const Icon(Icons.cloud_sync_outlined),
-                onPressed: canSync ? () => _syncOne(context, ref) : null,
-              ),
-              IconButton(
-                tooltip: 'Delete inspection',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _confirmDelete(
-                  context,
-                  ref,
-                  propertyType?.label ?? summary.assetTypeId,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _resume(BuildContext context, WidgetRef ref) async {
-    final resumed = await ref
-        .read(activeSessionProvider.notifier)
-        .resume(summary.id);
-    if (!context.mounted) return;
-    if (!resumed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open that inspection. Please try again.'),
-        ),
-      );
-      return;
-    }
-    context.push('/home-inspection/inspection');
   }
 
   Future<void> _syncOne(BuildContext context, WidgetRef ref) async {
@@ -424,6 +521,8 @@ class _SessionCard extends StatelessWidget {
   }
 }
 
+enum _SessionAction { sync, delete }
+
 /// "AI analysing inspection · 12 of 19 findings analysed · 63%" — real,
 /// count-based progress (never a fake timer/animation), computed from
 /// `InspectionSessionSummary`'s cheap AI counts. See
@@ -472,55 +571,6 @@ class _AiProgressLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The inspection's top-level lifecycle status, made explicit — a
-/// session isn't "Completed" merely because physical inspection or AI
-/// review finished; that only happens once a report has actually been
-/// generated (`InspectionStatus.reported`). The two intermediate states
-/// get their own distinct labels rather than being lumped into a
-/// single misleading "Completed"/"Unfinished" binary.
-class _LifecycleStatusPill extends StatelessWidget {
-  const _LifecycleStatusPill({required this.status});
-
-  final InspectionStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, icon, fg, bg) = switch (status) {
-      InspectionStatus.inProgress => (
-        'In Progress',
-        Icons.pending_outlined,
-        AppColors.warning,
-        AppColors.warningBg,
-      ),
-      InspectionStatus.physicalInspectionComplete => (
-        'AI Processing',
-        Icons.smart_toy_outlined,
-        AppColors.info,
-        AppColors.infoBg,
-      ),
-      InspectionStatus.aiReviewComplete => (
-        'Report Ready',
-        Icons.fact_check_outlined,
-        AppColors.info,
-        AppColors.infoBg,
-      ),
-      InspectionStatus.reported => (
-        'Completed',
-        Icons.check_circle_outline,
-        AppColors.success,
-        AppColors.successBg,
-      ),
-    };
-    return StatusPill(
-      label: label,
-      icon: icon,
-      foreground: fg,
-      background: bg,
-      dense: true,
     );
   }
 }

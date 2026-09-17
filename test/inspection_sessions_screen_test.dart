@@ -23,12 +23,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('No saved inspections yet.'), findsOneWidget);
+      expect(find.text('No inspections yet'), findsOneWidget);
 
       // Pick a property type, then back out *without* tapping
       // "Start Inspection" — this used to leave a phantom inspection
       // on the dashboard; it must not anymore.
-      await tester.tap(find.text('New Inspection'));
+      await tester.tap(find.byTooltip('New Inspection'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('High Rise'));
       await tester.pumpAndSettle();
@@ -40,7 +40,7 @@ void main() {
       navigator.pop(); // property type selection -> dashboard
       await tester.pumpAndSettle();
 
-      expect(find.text('No saved inspections yet.'), findsOneWidget);
+      expect(find.text('No inspections yet'), findsOneWidget);
       expect(find.text('High Rise'), findsNothing);
     },
   );
@@ -58,16 +58,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('No saved inspections yet.'), findsOneWidget);
+    expect(find.text('No inspections yet'), findsOneWidget);
 
-    await tester.tap(find.text('New Inspection'));
+    await tester.tap(find.byTooltip('New Inspection'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('High Rise'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Test Property');
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Review & Start'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
@@ -87,7 +87,7 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(find.text('No saved inspections yet.'), findsNothing);
+    expect(find.text('No inspections yet'), findsNothing);
     expect(find.text('Test Property'), findsOneWidget);
     expect(find.text('In Progress'), findsOneWidget);
 
@@ -124,6 +124,13 @@ void main() {
         completed.id,
         InspectionStatus.reported,
       );
+
+      // A tall surface so both cards below the new top bar/summary
+      // strip are actually built (not just scrolled past) by the lazy
+      // list — the default test surface is too short to fit them all.
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
 
       await tester.pumpWidget(
         UncontrolledProviderScope(

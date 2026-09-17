@@ -94,16 +94,8 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
           120,
         ),
         children: [
-          if (section.isPlumbing)
-            const Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.md),
-              child: StatusPill(
-                label: 'Plumbing area — inspect first',
-                icon: Icons.plumbing_outlined,
-                foreground: AppColors.plumbing,
-                background: AppColors.plumbingBg,
-              ),
-            ),
+          _AreaHeader(section: section, findings: areaFindings),
+          const SizedBox(height: AppSpacing.lg),
           if (section.note != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -170,12 +162,45 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 'whenever you spot a defect.',
               ),
             )
-          else
+          else ...[
             for (final finding in areaFindings)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _FindingCard(finding: finding),
               ),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.lightbulb_outline,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Found another issue?',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        Text(
+                          'Keep capturing photos of defects in this area.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -258,6 +283,77 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     );
     if (newNote == null) return;
     ref.read(activeSessionProvider.notifier).setAreaNote(section.id, newNote);
+  }
+}
+
+/// The area identity strip — real finding/pending-review counts plus
+/// the plumbing-first and needs-attention badges, matching the same
+/// card language used on the Inspection Overview's own area cards.
+class _AreaHeader extends StatelessWidget {
+  const _AreaHeader({required this.section, required this.findings});
+
+  final Section section;
+  final List<Finding> findings;
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingReview = findings
+        .where((f) => f.aiStatus == AiFindingStatus.needsReview)
+        .length;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppFallbackThumbnail(
+          icon: section.isPlumbing
+              ? Icons.plumbing_outlined
+              : Icons.chair_outlined,
+          size: 64,
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                section.name,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              Text(
+                pendingReview == 0
+                    ? '${findings.length} finding${findings.length == 1 ? '' : 's'}'
+                    : '${findings.length} finding${findings.length == 1 ? '' : 's'} '
+                          '· $pendingReview pending review',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  if (section.isPlumbing)
+                    const StatusPill(
+                      label: 'Plumbing First',
+                      icon: Icons.plumbing_outlined,
+                      foreground: AppColors.plumbing,
+                      background: AppColors.plumbingBg,
+                      dense: true,
+                    ),
+                  if (pendingReview > 0)
+                    StatusPill(
+                      label: 'Needs Attention',
+                      icon: Icons.priority_high,
+                      foreground: AppColors.danger,
+                      background: AppColors.dangerBg,
+                      dense: true,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -371,15 +467,15 @@ class _FindingCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               child: SizedBox(
-                width: 64,
-                height: 64,
+                width: 72,
+                height: 72,
                 child: firstPhoto == null
                     ? const ColoredBox(
                         color: AppColors.surfaceAlt,
@@ -388,7 +484,7 @@ class _FindingCard extends ConsumerWidget {
                     : Image.file(File(firstPhoto.filePath), fit: BoxFit.cover),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

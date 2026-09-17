@@ -41,6 +41,14 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   final container = ProviderContainer(overrides: testOverrides());
   addTearDown(container.dispose);
 
+  // A tall surface so every area card is actually built (not just
+  // scrolled past) by the lazy list — the default test surface is too
+  // short to fit the property header, progress hero, and every area at
+  // once.
+  addTearDown(tester.view.reset);
+  tester.view.physicalSize = const Size(800, 3000);
+  tester.view.devicePixelRatio = 1.0;
+
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
@@ -49,7 +57,7 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(_within(find.text('New Inspection')));
+  await tester.tap(find.byTooltip('New Inspection'));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('High Rise')));
@@ -62,7 +70,7 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
 
-  await tester.tap(_within(find.text('Review & Start')));
+  await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('Continue')));

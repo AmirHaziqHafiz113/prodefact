@@ -3,6 +3,18 @@
 > Updated by the P0 workflow-closure pass (schema v8) — see "P0
 > closure pass" near the end for exactly what changed in that pass; the
 > body of this document already reflects the current state.
+>
+> **Navigation update (UI/UX consolidation pass):** the app now has a
+> persistent bottom-navigation shell — **Home | Inspections | (+) |
+> Wallet | Profile** — wrapping the screens below; "Home" and
+> "Inspections" are two distinct tabs (Home is a compact
+> greeting/Credits/active-inspection-hero dashboard, Inspections is the
+> full searchable/filterable list this document originally called "the
+> dashboard"). The "New Inspection" FAB mentioned throughout this
+> document was removed — the bottom nav's center "+" is now the one
+> canonical entry point. Everything below about the *inspection
+> workflow itself* (steps, gating, AI, report) is unchanged; see
+> `docs/ui_design_system.md` for the navigation/visual layer.
 
 This is the canonical, end-to-end description of ProDefact's Home
 Inspection product — the source of truth for how the screens/workflows
@@ -75,19 +87,20 @@ three dashboard questions directly:
   failed AI classification (`InspectionSessionSummary.needsAttention`,
   backed by real `aiPendingReviewCount`/`aiFailedFindingsCount` values
   computed by the repository — never a fabricated count).
-- **How do I start a new inspection?** — the "New Inspection" FAB, as
-  before.
+- **How do I start a new inspection?** — the bottom nav's center "+"
+  (see the navigation note at the top of this document) — no longer a
+  screen-local FAB.
 
 New this pass:
 
 - **Search** — a text field filtering the visible list by title, unit,
   address, or property type label (client-side, case-insensitive
   substring match over already-loaded summaries).
-- **Filters** — All / In Progress / Needs Review / Report Ready /
+- **Filters** — All / Active / Needs Review / Report Ready /
   Completed, as `ChoiceChip`s, derived from each session's existing
   `status`/`aiPendingReviewCount` — no new persisted state.
-- **Profile entry point** — a person icon in the app bar opens
-  `ProfileScreen` (see §9).
+- **Profile entry point** — the bottom nav's Profile tab (an avatar
+  icon in the top-right corner also opens it).
 - **Richer cards** — a card now shows the captured property title and
   unit/address (falls back to the property type label for a session
   with no property details — schema v6 and earlier), alongside the

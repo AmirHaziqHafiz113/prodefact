@@ -1,5 +1,11 @@
 # ProDefact Design System (Phase 9)
 
+> **Superseded** — see `docs/ui_design_system.md` for the current
+> design system, after the navigation/visual consolidation pass that
+> redesigned Home, Inspections, the New Inspection wizard, Inspection
+> Overview, Area Detail, Wallet, and Profile against supplied
+> reference mockups. This document is kept for history only.
+
 A centralized design system replaced the previous one-line
 `ThemeData(colorSchemeSeed: Colors.indigo)` and per-screen ad hoc
 styling. All business logic, providers, persistence, navigation

@@ -6,12 +6,20 @@ import 'package:prodefact/app/app.dart';
 import '../support/test_repository.dart';
 
 Future<void> _pumpToPropertyDetails(WidgetTester tester) async {
+  // A tall surface so every grouped field section is actually built
+  // (not just scrolled past) by the lazy list — the default test
+  // surface is too short to fit the wizard stepper plus all three
+  // section cards at once.
+  addTearDown(tester.view.reset);
+  tester.view.physicalSize = const Size(800, 2400);
+  tester.view.devicePixelRatio = 1.0;
+
   await tester.pumpWidget(
     ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('New Inspection'));
+  await tester.tap(find.byTooltip('New Inspection'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('High Rise'));
   await tester.pumpAndSettle();
@@ -63,9 +71,9 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text('High Rise Areas'), findsOneWidget);
+    expect(find.text('Configure Areas'), findsOneWidget);
 
-    await tester.tap(find.text('Review & Start'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
     expect(find.text('Choose AI Plan'), findsOneWidget);

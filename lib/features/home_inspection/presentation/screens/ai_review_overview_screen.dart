@@ -9,6 +9,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
+import 'report_screen.dart';
 
 /// Overview of AI's progressive classification work across every
 /// finding in the inspection, and where the inspector reviews each
@@ -81,7 +82,7 @@ class AiReviewOverviewScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: FilledButton(
             onPressed: canContinue
-                ? () => context.push('/home-inspection/report')
+                ? () => context.push(ReportScreen.routePath)
                 : null,
             child: const Text('Continue to Report'),
           ),

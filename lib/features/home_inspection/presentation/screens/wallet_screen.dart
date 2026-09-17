@@ -5,18 +5,25 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
+import '../../../../data/remote/remote_providers.dart';
+import '../../providers/session_list_providers.dart';
+import '../../providers/user_profile_providers.dart';
 import '../../providers/wallet_providers.dart';
+import '../widgets/attention_sheet.dart';
+import 'profile_screen.dart';
 import 'top_up_screen.dart';
 
 /// The Wallet tab: real Credits balance, this-month usage stats, a
-/// real-data usage-over-time graph, and a human-readable activity feed
-/// — see docs/commercial_model.md. Compact by design (inspection work
-/// stays primary in the app); nothing here ever computes a price or
-/// grants Credits itself.
+/// real-data usage-over-time graph, a human-readable activity feed,
+/// and a plain-language explanation of the two real commercial modes
+/// (Flex Credits / House Pass) — see docs/commercial_model.md. Nothing
+/// here ever computes a price or grants Credits itself.
 class WalletScreen extends ConsumerWidget {
   const WalletScreen({super.key});
 
   static const routePath = '/home-inspection/wallet';
+
+  final _pricingKey = const _PricingScrollKey();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,9 +31,11 @@ class WalletScreen extends ConsumerWidget {
     final cacheAsync = ref.watch(walletCacheProvider);
     final transactionsAsync = ref.watch(walletTransactionsProvider);
     final configAsync = ref.watch(commercialConfigProvider);
+    final authState = ref.watch(authStateProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final attentionCount = ref.watch(attentionSessionsProvider).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -36,10 +45,29 @@ class WalletScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
+              AppTopBar(
+                attentionCount: attentionCount,
+                onAttentionTap: () => showAttentionSheet(context, ref),
+                displayName: profileAsync.value?.inspectorName,
+                email: authState.value?.email,
+                onAvatarTap: () => context.push(ProfileScreen.routePath),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text('Wallet', style: Theme.of(context).textTheme.headlineMedium),
+              Text(
+                'Manage your AI credits and usage.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.lg),
               _BalanceCard(
                 balanceAsync: balanceAsync,
                 cacheAsync: cacheAsync,
                 creditsPerMyr: configAsync.value?.creditsPerMyr,
+                onTopUp: () => context.push(TopUpScreen.routePath),
+                onViewPricing: () => Scrollable.ensureVisible(
+                  _pricingKey.currentContext ?? context,
+                  duration: const Duration(milliseconds: 400),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               configAsync.maybeWhen(
@@ -62,26 +90,19 @@ class WalletScreen extends ConsumerWidget {
                 },
                 orElse: () => const SizedBox.shrink(),
               ),
-              FilledButton.icon(
-                onPressed: () => context.push(TopUpScreen.routePath),
-                icon: const Icon(Icons.add_card_outlined),
-                label: const Text('Top Up'),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              AppSectionHeader(title: 'This month'),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.lg),
+              AppSectionHeader(title: 'Usage summary'),
               transactionsAsync.when(
-                loading: () => const AppLoadingView(),
+                loading: () => const AppSkeletonCardList(count: 1),
                 error: (error, stackTrace) => AppErrorView(
                   message: 'Could not load your wallet activity.',
                   onRetry: () => ref.invalidate(walletTransactionsProvider),
                 ),
                 data: (transactions) =>
-                    _ThisMonthAndUsage(transactions: transactions),
+                    _UsageSummary(transactions: transactions),
               ),
               const SizedBox(height: AppSpacing.xl),
               AppSectionHeader(title: 'Recent activity'),
-              const SizedBox(height: AppSpacing.sm),
               transactionsAsync.maybeWhen(
                 data: (transactions) => transactions.isEmpty
                     ? const AppEmptyView(
@@ -96,6 +117,8 @@ class WalletScreen extends ConsumerWidget {
                       ),
                 orElse: () => const SizedBox.shrink(),
               ),
+              const SizedBox(height: AppSpacing.xl),
+              KeyedSubtree(key: _pricingKey, child: const _PricingExplainer()),
             ],
           ),
         ),
@@ -104,11 +127,19 @@ class WalletScreen extends ConsumerWidget {
   }
 }
 
+/// A stable key so "View Pricing" can scroll straight to the pricing
+/// explainer at the bottom of the list, instead of a fake/dead button.
+class _PricingScrollKey extends GlobalObjectKey {
+  const _PricingScrollKey() : super('wallet_pricing_explainer');
+}
+
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     required this.balanceAsync,
     required this.cacheAsync,
     required this.creditsPerMyr,
+    required this.onTopUp,
+    required this.onViewPricing,
   });
 
   final AsyncValue<int> balanceAsync;
@@ -117,6 +148,8 @@ class _BalanceCard extends StatelessWidget {
   /// Null only while `commercialConfigProvider` hasn't resolved yet —
   /// the RM equivalent is simply omitted until then, never guessed.
   final int? creditsPerMyr;
+  final VoidCallback onTopUp;
+  final VoidCallback onViewPricing;
 
   @override
   Widget build(BuildContext context) {
@@ -127,68 +160,114 @@ class _BalanceCard extends StatelessWidget {
         balanceAsync.value ?? cacheAsync.value?.balanceCredits;
     final isStale = balanceAsync.value == null && resolvedBalance != null;
 
-    return Card(
-      color: AppColors.primary,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'AI Credits',
-              style: Theme.of(context).textTheme.labelLarge
-                  ?.copyWith(color: Colors.white70),
+    return AppHeroCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-            const SizedBox(height: 4),
-            if (balanceAsync.isLoading && resolvedBalance == null)
-              const SizedBox(
-                height: 36,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
+            child: const Icon(
+              Icons.monetization_on_outlined,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI Credits',
+                  style: TextStyle(color: Colors.white70),
                 ),
-              )
-            else if (balanceAsync.hasError && resolvedBalance == null)
-              Text(
-                'Could not load your balance.',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(color: Colors.white),
-              )
-            else
-              Text(
-                '$resolvedBalance Credits',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 4),
+                if (balanceAsync.isLoading && resolvedBalance == null)
+                  const SizedBox(
+                    height: 32,
+                    width: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                else if (balanceAsync.hasError && resolvedBalance == null)
+                  const Text(
+                    'Could not load your balance.',
+                    style: TextStyle(color: Colors.white),
+                  )
+                else
+                  Text(
+                    '$resolvedBalance credits',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                if (resolvedBalance != null &&
+                    creditsPerMyr != null &&
+                    creditsPerMyr! > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)} '
+                    '· RM${(1 / creditsPerMyr!).toStringAsFixed(2)} / credit',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
+                if (isStale)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Last known balance — refreshing…',
+                      style: TextStyle(color: Colors.white70, fontSize: 12.5),
+                    ),
+                  ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.primary,
+                        ),
+                        onPressed: onTopUp,
+                        icon: const Icon(Icons.add_card_outlined),
+                        label: const Text('Top Up'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white54),
+                        ),
+                        onPressed: onViewPricing,
+                        icon: const Icon(Icons.bar_chart_outlined),
+                        label: const Text('View Pricing'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            if (resolvedBalance != null &&
-                creditsPerMyr != null &&
-                creditsPerMyr! > 0) ...[
-              const SizedBox(height: 2),
-              Text(
-                '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: Colors.white70),
-              ),
-            ],
-            if (isStale) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Last known balance — refreshing…',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: Colors.white70),
-              ),
-            ],
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ThisMonthAndUsage extends StatelessWidget {
-  const _ThisMonthAndUsage({required this.transactions});
+class _UsageSummary extends StatelessWidget {
+  const _UsageSummary({required this.transactions});
 
   final List<WalletTransactionSummary> transactions;
 
@@ -204,6 +283,7 @@ class _ThisMonthAndUsage extends StatelessWidget {
     final analysisCount = thisMonth
         .where((t) => t.type == WalletTransactionType.usage)
         .length;
+    final avgPerAnalysis = analysisCount == 0 ? 0 : spent / analysisCount;
 
     // Real Credits spent per day over the last 7 days — never a fake
     // or interpolated series.
@@ -232,57 +312,73 @@ class _ThisMonthAndUsage extends StatelessWidget {
         ),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: _StatTile(label: 'Credits used', value: '$spent'),
+            Row(
+              children: [
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.receipt_long_outlined,
+                    value: '$spent',
+                    label: 'Credits used',
+                    caption: 'This month',
+                    dense: true,
+                  ),
+                ),
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.smart_toy_outlined,
+                    value: '$analysisCount',
+                    label: 'Analyses run',
+                    caption: 'This month',
+                    iconColor: AppColors.info,
+                    dense: true,
+                  ),
+                ),
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.insights_outlined,
+                    value: avgPerAnalysis.toStringAsFixed(1),
+                    label: 'Avg. / analysis',
+                    caption: 'Credits',
+                    iconColor: AppColors.plumbing,
+                    dense: true,
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: _StatTile(label: 'Analyses run', value: '$analysisCount'),
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Credit usage',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                Text(
+                  'Last 7 days',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: AppColors.textMuted),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            AppBarChart(
+              points: points,
+              emptyMessage: 'No usage in the last 7 days.',
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          'Usage — last 7 days',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        AppBarChart(
-          points: points,
-          emptyMessage: 'No usage in the last 7 days.',
-        ),
-      ],
+      ),
     );
   }
 
   String _weekdayLabel(int weekday) =>
       const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(value, style: Theme.of(context).textTheme.headlineSmall),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-      ],
-    );
-  }
 }
 
 class _ActivityTile extends StatelessWidget {
@@ -294,18 +390,15 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCredit = transaction.direction == LedgerDirection.credit;
     final (icon, color) = switch (transaction.type) {
-      WalletTransactionType.topup => (
-        Icons.add_card_outlined,
-        AppColors.success,
-      ),
-      WalletTransactionType.usage => (Icons.smart_toy_outlined, AppColors.info),
+      WalletTransactionType.topup => (Icons.add, AppColors.success),
+      WalletTransactionType.usage => (Icons.remove, AppColors.danger),
       WalletTransactionType.reservation => (
         Icons.lock_clock_outlined,
         AppColors.textMuted,
       ),
       WalletTransactionType.reservationRelease => (
-        Icons.undo_outlined,
-        AppColors.textMuted,
+        Icons.refresh,
+        AppColors.success,
       ),
       WalletTransactionType.refund => (
         Icons.replay_outlined,
@@ -325,19 +418,30 @@ class _ActivityTile extends StatelessWidget {
       ),
     };
 
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(transaction.description),
-        subtitle: Text(_formatDate(transaction.createdAt)),
-        trailing: transaction.amountCredits == 0
-            ? null
-            : Text(
-                '${isCredit ? '+' : '-'}${transaction.amountCredits}',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: isCredit ? AppColors.success : AppColors.textPrimary,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Card(
+        child: ListTile(
+          leading: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isCredit ? AppColors.successBg : AppColors.dangerBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          title: Text(transaction.description),
+          subtitle: Text(_formatDate(transaction.createdAt)),
+          trailing: transaction.amountCredits == 0
+              ? null
+              : Text(
+                  '${isCredit ? '+' : '-'}${transaction.amountCredits}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: isCredit ? AppColors.success : AppColors.textPrimary,
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -347,5 +451,115 @@ class _ActivityTile extends StatelessWidget {
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
         '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
+}
+
+/// A plain-language, real-business-rule explanation of the two
+/// commercial modes — informational only (the actual choice happens
+/// once, in the New Inspection wizard's Plan step); never restates a
+/// mockup's illustrative subscription pricing, since House Pass is a
+/// fixed RM30-per-property product, not a monthly plan.
+class _PricingExplainer extends ConsumerWidget {
+  const _PricingExplainer();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final configAsync = ref.watch(commercialConfigProvider);
+    return configAsync.maybeWhen(
+      data: (config) {
+        final flexInfo = config.aiLevels.isEmpty ? null : config.aiLevels.first;
+        return Card(
+          color: AppColors.surfaceAlt,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Choose the right plan for you',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Flexible options for every inspector.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _PlanTile(
+                        icon: Icons.bolt_outlined,
+                        title: 'Flex Credits',
+                        description: 'Pay as you go. No commitment.',
+                        priceLine: flexInfo == null
+                            ? null
+                            : 'RM${(1 / config.creditsPerMyr).toStringAsFixed(2)} / credit',
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: _PlanTile(
+                        icon: Icons.home_outlined,
+                        title: 'House Pass',
+                        description: 'One fixed price for the whole property.',
+                        priceLine:
+                            'RM${config.housePass.priceMyr.toStringAsFixed(0)} / property',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _PlanTile extends StatelessWidget {
+  const _PlanTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.priceLine,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String? priceLine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(height: AppSpacing.sm),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 2),
+          Text(description, style: Theme.of(context).textTheme.bodySmall),
+          if (priceLine != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              priceLine!,
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: AppColors.primary),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

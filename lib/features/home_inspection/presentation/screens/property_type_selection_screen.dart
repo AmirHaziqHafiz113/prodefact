@@ -8,11 +8,17 @@ import '../../providers/new_inspection_draft_providers.dart';
 import 'property_details_screen.dart';
 
 /// Entry point for Home Inspection: the inspector picks the property type
-/// before ProDefact shows the relevant inspection areas.
+/// before ProDefact shows the relevant inspection areas — step 1 of the
+/// 5-step New Inspection wizard (see `AppWizardStepper`). Tapping a card
+/// selects and immediately continues (no separate "Continue" tap) —
+/// there are only two, mutually exclusive options, so a confirm step
+/// would only add friction.
 class PropertyTypeSelectionScreen extends ConsumerWidget {
   const PropertyTypeSelectionScreen({super.key});
 
   static const routePath = '/home-inspection';
+
+  static const wizardSteps = ['Property', 'Details', 'Areas', 'Plan', 'Review'];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,29 +26,76 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('New Inspection')),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.md,
+            AppSpacing.xl,
+            AppSpacing.lg,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Select property type',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'ProDefact tailors inspection areas to the property type.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              const AppWizardStepper(stepLabels: wizardSteps, currentIndex: 0),
               const SizedBox(height: AppSpacing.xl),
-              for (final propertyType in PropertyType.values)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                  child: _PropertyTypeCard(
-                    propertyType: propertyType,
-                    onTap: () =>
-                        _selectPropertyType(context, ref, propertyType),
-                  ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    Text(
+                      'What type of property are you inspecting?',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Select the property type to get the right inspection '
+                      'flow and checklist.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    for (final propertyType in PropertyType.values)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                        child: _PropertyTypeCard(
+                          propertyType: propertyType,
+                          onTap: () =>
+                              _selectPropertyType(context, ref, propertyType),
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.lightbulb_outline,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Not sure?',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                Text(
+                                  'You can always change this later before '
+                                  'finalising your inspection.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
@@ -77,12 +130,17 @@ class _PropertyTypeCard extends StatelessWidget {
     final (icon, description) = switch (propertyType) {
       PropertyType.highRise => (
         Icons.apartment_outlined,
-        'Condos, apartments, and strata high-rise units.',
+        'Condominiums, apartments and other multi-storey residential '
+            'buildings.',
       ),
       PropertyType.landed => (
         Icons.house_outlined,
-        'Terrace, semi-detached, and bungalow landed homes.',
+        'Houses, terrace, semi-detached and bungalow properties.',
       ),
+    };
+    final tagline = switch (propertyType) {
+      PropertyType.highRise => 'Units, common areas & facilities',
+      PropertyType.landed => 'Indoor & outdoor areas',
     };
 
     return Card(
@@ -92,34 +150,44 @@ class _PropertyTypeCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Icon(icon, color: AppColors.primary, size: 28),
-              ),
-              const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Icon(icon, color: AppColors.primary),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     Text(
                       propertyType.label,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       description,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    StatusPill(
+                      label: tagline,
+                      icon: icon,
+                      foreground: AppColors.primary,
+                      background: AppColors.primary.withValues(alpha: 0.08),
+                      dense: true,
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              const SizedBox(width: AppSpacing.md),
+              AppFallbackThumbnail(icon: icon, size: 84, radius: AppRadius.lg),
             ],
           ),
         ),

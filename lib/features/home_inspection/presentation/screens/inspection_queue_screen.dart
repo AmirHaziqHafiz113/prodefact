@@ -1,12 +1,16 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../config/property_type.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import '../widgets/session_status_presentation.dart';
+import 'ai_review_overview_screen.dart';
 import 'house_pass_screen.dart';
 
 /// A real field-inspection dashboard: overall progress, the ordered
@@ -98,47 +102,109 @@ class InspectionQueueScreen extends ConsumerWidget {
                       96,
                     ),
                     children: [
+                      if (activeSession != null)
+                        _PropertyHeader(session: activeSession),
+                      if (activeSession != null)
+                        const SizedBox(height: AppSpacing.lg),
+                      AppHeroCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.home_outlined,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                const Expanded(
+                                  child: Text(
+                                    'Inspection Progress',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '$completedCount of ${queue.length} areas '
+                                  'complete',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                AppRingProgress(
+                                  value: queue.isEmpty
+                                      ? 0
+                                      : completedCount / queue.length,
+                                  label:
+                                      'Physical\n$completedCount of '
+                                      '${queue.length}',
+                                  color: Colors.white,
+                                  size: 76,
+                                ),
+                                if (activeSession != null) ...[
+                                  AppRingProgress(
+                                    value: AiProcessingProgress.of(
+                                      activeSession,
+                                    ).fraction,
+                                    label:
+                                        'AI Analysed\n'
+                                        '${AiProcessingProgress.of(activeSession).processed} of '
+                                        '${AiProcessingProgress.of(activeSession).totalEligible}',
+                                    color: Colors.white70,
+                                    size: 76,
+                                  ),
+                                  AppRingProgress(
+                                    value: AiReviewProgress.of(activeSession)
+                                        .fraction,
+                                    label:
+                                        'Reviewed\n'
+                                        '${AiReviewProgress.of(activeSession).resolved} of '
+                                        '${AiReviewProgress.of(activeSession).total}',
+                                    color: Colors.white70,
+                                    size: 76,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(AppSpacing.lg),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              AppProgressBar(
-                                value: queue.isEmpty
-                                    ? 0
-                                    : completedCount / queue.length,
-                                label: 'Inspection progress',
-                                valueLabel:
-                                    '$completedCount of ${queue.length} '
-                                    'areas',
+                              Expanded(
+                                child: _StatTile(
+                                  icon: Icons.pending_actions_outlined,
+                                  label: '$remainingCount',
+                                  caption: 'Remaining',
+                                ),
                               ),
-                              const SizedBox(height: AppSpacing.lg),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _StatTile(
-                                      icon: Icons.pending_actions_outlined,
-                                      label: '$remainingCount',
-                                      caption: 'Remaining',
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _StatTile(
-                                      icon: Icons.report_gmailerrorred_outlined,
-                                      label: '${findings.length}',
-                                      caption: 'Findings',
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _StatTile(
-                                      icon: Icons.photo_camera_outlined,
-                                      label:
-                                          '${findings.fold<int>(0, (sum, f) => sum + f.evidence.length)}',
-                                      caption: 'Photos',
-                                    ),
-                                  ),
-                                ],
+                              Expanded(
+                                child: _StatTile(
+                                  icon: Icons.report_gmailerrorred_outlined,
+                                  label: '${findings.length}',
+                                  caption: 'Findings',
+                                ),
+                              ),
+                              Expanded(
+                                child: _StatTile(
+                                  icon: Icons.photo_camera_outlined,
+                                  label:
+                                      '${findings.fold<int>(0, (sum, f) => sum + f.evidence.length)}',
+                                  caption: 'Photos',
+                                ),
                               ),
                             ],
                           ),
@@ -177,7 +243,10 @@ class InspectionQueueScreen extends ConsumerWidget {
                         _AutoAnalyseToggle(session: activeSession),
                       ],
                       const SizedBox(height: AppSpacing.lg),
-                      const AppSectionHeader(title: 'Areas'),
+                      AppSectionHeader(
+                        title: 'Areas (${queue.length})',
+                        subtitle: '$completedCount complete',
+                      ),
                       for (final section in queue)
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -213,7 +282,7 @@ class InspectionQueueScreen extends ConsumerWidget {
                                   .toList(),
                             ),
                             onTap: () => context.push(
-                              '/home-inspection/inspection/${section.id}',
+                              '${InspectionQueueScreen.routePath}/${section.id}',
                             ),
                           ),
                         ),
@@ -241,7 +310,7 @@ class InspectionQueueScreen extends ConsumerWidget {
         .read(activeSessionProvider.notifier)
         .markPhysicalInspectionComplete();
     if (!context.mounted) return;
-    context.push('/home-inspection/complete');
+    context.push(AiReviewOverviewScreen.routePath);
   }
 }
 
@@ -423,6 +492,87 @@ class _AutoAnalyseToggle extends ConsumerWidget {
   }
 }
 
+/// The property identity strip above the progress hero — real
+/// `PropertyDetails` plus the session's own lifecycle status, mirroring
+/// the same card shape the Inspections list already uses so the two
+/// screens read as one product.
+class _PropertyHeader extends StatelessWidget {
+  const _PropertyHeader({required this.session});
+
+  final InspectionSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final propertyType = PropertyType.values.firstWhereOrNull(
+      (p) => p.name == session.assetTypeId,
+    );
+    final details = session.propertyDetails;
+    final title = details.title.isNotEmpty
+        ? details.title
+        : (propertyType?.label ?? session.assetTypeId);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppFallbackThumbnail(
+          icon: propertyType == PropertyType.highRise
+              ? Icons.apartment_outlined
+              : Icons.house_outlined,
+          size: 64,
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  SessionLifecyclePill(status: session.status),
+                ],
+              ),
+              Text(
+                [
+                  details.unitNumber,
+                  propertyType?.label,
+                ].whereType<String>().join(' · '),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (details.address != null)
+                Text(
+                  details.address!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              Text(
+                'Last updated ${_formatUpdatedAt(session.updatedAt)}',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatUpdatedAt(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
+        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
+}
+
 class _StatTile extends StatelessWidget {
   const _StatTile({
     required this.icon,
@@ -489,6 +639,13 @@ class _AreaQueueCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
+              AppFallbackThumbnail(
+                icon: section.isPlumbing
+                    ? Icons.plumbing_outlined
+                    : Icons.chair_outlined,
+                size: 48,
+              ),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

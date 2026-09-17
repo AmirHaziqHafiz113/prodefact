@@ -11,7 +11,7 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('New Inspection'));
+  await tester.tap(find.byTooltip('New Inspection'));
   await tester.pumpAndSettle();
 
   await tester.tap(find.text('High Rise'));
@@ -29,7 +29,7 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
 /// Choose AI Plan defaults to Flex Credits / Smart once its config
 /// loads, so "Continue" is reachable without any extra selection.
 Future<void> _reviewAndStart(WidgetTester tester) async {
-  await tester.tap(find.text('Review & Start'));
+  await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
@@ -87,11 +87,13 @@ void main() {
   testWidgets('renaming an area updates its displayed name', (tester) async {
     await _startHighRiseSetup(tester);
 
-    final editButton = find.descendant(
+    final menuButton = find.descendant(
       of: _areaCard('Bedroom 2'),
-      matching: find.byIcon(Icons.edit),
+      matching: find.byIcon(Icons.more_vert),
     );
-    await _revealAndTap(tester, editButton);
+    await _revealAndTap(tester, menuButton);
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Edit area'), findsOneWidget);
     await tester.enterText(find.byType(TextField), "Son's Room");
@@ -108,11 +110,13 @@ void main() {
     (tester) async {
       await _startHighRiseSetup(tester);
 
-      final editButton = find.descendant(
+      final menuButton = find.descendant(
         of: _areaCard('Living Room'),
-        matching: find.byIcon(Icons.edit),
+        matching: find.byIcon(Icons.more_vert),
       );
-      await _revealAndTap(tester, editButton);
+      await _revealAndTap(tester, menuButton);
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Edit area'), findsOneWidget);
       expect(find.text('Contains plumbing'), findsOneWidget);
@@ -136,9 +140,9 @@ void main() {
   testWidgets('adding a custom area appends it to the list', (tester) async {
     await _startHighRiseSetup(tester);
 
-    await tester.tap(find.text('Add area'));
+    await _revealAndTap(tester, find.text('Add Custom Area'));
     await tester.pumpAndSettle();
-    expect(find.text('Add area'), findsWidgets);
+    expect(find.text('Add area'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Home Office');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -155,7 +159,7 @@ void main() {
       'plumbing-first ordering once the inspection starts', (tester) async {
     await _startHighRiseSetup(tester);
 
-    await tester.tap(find.text('Add area'));
+    await _revealAndTap(tester, find.text('Add Custom Area'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Wet Kitchen');
     await tester.tap(find.byType(SwitchListTile));
@@ -179,11 +183,13 @@ void main() {
   testWidgets('removing an area deletes it from the list', (tester) async {
     await _startHighRiseSetup(tester);
 
-    final removeButton = find.descendant(
+    final menuButton = find.descendant(
       of: _areaCard('Bedroom 4'),
-      matching: find.byIcon(Icons.delete_outline),
+      matching: find.byIcon(Icons.more_vert),
     );
-    await _revealAndTap(tester, removeButton);
+    await _revealAndTap(tester, menuButton);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Bedroom 4'), findsNothing);
   });
@@ -265,14 +271,14 @@ void main() {
       navigator.pop(); // property type selection -> dashboard
       await tester.pumpAndSettle();
 
-      expect(find.text('No saved inspections yet.'), findsOneWidget);
+      expect(find.text('No inspections yet'), findsOneWidget);
     },
   );
 
   testWidgets('repeated taps on Start Inspection do not create duplicate '
       'inspections', (tester) async {
     await _startHighRiseSetup(tester);
-    await tester.tap(find.text('Review & Start'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();

@@ -6,24 +6,36 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
 import 'choose_ai_plan_screen.dart';
+import 'property_type_selection_screen.dart';
 
 /// Lets the inspector configure which areas apply to this property
 /// before starting the inspection: include/exclude, rename, add/edit
 /// custom areas (with a plumbing/inspect-first flag), remove, or reset
-/// back to the property type's defaults.
+/// back to the property type's defaults. The **only** place area
+/// management happens — no other screen exposes "Add area" (see
+/// docs/ui_design_system.md, "Routing cleanup").
 ///
 /// Everything here edits an in-memory [NewInspectionDraft] — nothing is
 /// persisted, and no inspection exists, until the inspector taps
 /// "Start Inspection". Backing out of this screen at any point simply
 /// discards the draft; see `docs/production_readiness.md` ("New
 /// Inspection flow").
-class AreaConfigurationScreen extends ConsumerWidget {
+class AreaConfigurationScreen extends ConsumerStatefulWidget {
   const AreaConfigurationScreen({super.key});
 
   static const routePath = '/home-inspection/areas';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AreaConfigurationScreen> createState() =>
+      _AreaConfigurationScreenState();
+}
+
+class _AreaConfigurationScreenState
+    extends ConsumerState<AreaConfigurationScreen> {
+  bool _showInfoBanner = true;
+
+  @override
+  Widget build(BuildContext context) {
     final draft = ref.watch(newInspectionDraftProvider);
     final notifier = ref.read(newInspectionDraftProvider.notifier);
     final sections = draft?.sections ?? const <Section>[];
@@ -34,11 +46,7 @@ class AreaConfigurationScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          draft == null
-              ? 'Configure Areas'
-              : '${draft.propertyType.label} Areas',
-        ),
+        title: const Text('Configure Areas'),
         actions: [
           IconButton(
             tooltip: 'Reset to defaults',
@@ -59,56 +67,137 @@ class AreaConfigurationScreen extends ConsumerWidget {
                     AppSpacing.lg,
                     AppSpacing.md,
                     AppSpacing.lg,
-                    AppSpacing.sm,
+                    0,
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: StatusPill(
-                          label:
-                              '$includedCount of ${sections.length} '
-                              'areas selected',
-                          icon: Icons.check_circle_outline,
-                          foreground: AppColors.primary,
-                          background: AppColors.primary.withValues(alpha: 0.08),
-                        ),
+                      const AppWizardStepper(
+                        stepLabels: PropertyTypeSelectionScreen.wizardSteps,
+                        currentIndex: 2,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      if (plumbingCount > 0)
-                        StatusPill(
-                          label: '$plumbingCount plumbing-first',
-                          icon: Icons.plumbing_outlined,
-                          foreground: AppColors.plumbing,
-                          background: AppColors.plumbingBg,
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Select the areas to include in this inspection.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppMetricCard(
+                              icon: Icons.layers_outlined,
+                              value: '$includedCount',
+                              label: 'areas selected',
+                              caption:
+                                  'Out of ${sections.length} standard areas',
+                              dense: true,
+                            ),
+                          ),
+                          Expanded(
+                            child: AppMetricCard(
+                              icon: Icons.water_drop_outlined,
+                              value: '$plumbingCount',
+                              label: 'plumbing-first',
+                              caption: 'Will be inspected first',
+                              iconColor: AppColors.plumbing,
+                              dense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_showInfoBanner) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: AppColors.infoBg,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.info_outline,
+                                color: AppColors.info,
+                                size: 20,
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Manage all inspection areas here',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall,
+                                    ),
+                                    Text(
+                                      'Add, remove or customize areas for '
+                                      'this inspection.',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () =>
+                                    setState(() => _showInfoBanner = false),
+                              ),
+                            ],
+                          ),
                         ),
+                      ],
+                      const SizedBox(height: AppSpacing.md),
+                      AppSectionHeader(
+                        title: 'Standard Areas',
+                        subtitle:
+                            '$includedCount of ${sections.length} selected',
+                      ),
                     ],
                   ),
                 ),
                 Expanded(
-                  child: ListView.separated(
+                  child: ListView(
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.lg,
                       0,
                       AppSpacing.lg,
                       AppSpacing.lg,
                     ),
-                    itemCount: sections.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (context, index) {
-                      final section = sections[index];
-                      return _AreaCard(
-                        section: section,
-                        onToggleIncluded: () =>
-                            notifier.toggleIncluded(section.id),
-                        onEdit: () => _showEditAreaDialog(
-                          context,
-                          notifier,
-                          section: section,
+                    children: [
+                      for (final section in sections)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: _AreaCard(
+                            section: section,
+                            onToggleIncluded: () =>
+                                notifier.toggleIncluded(section.id),
+                            onEdit: () => _showEditAreaDialog(
+                              context,
+                              notifier,
+                              section: section,
+                            ),
+                            onRemove: () => notifier.remove(section.id),
+                          ),
                         ),
-                        onRemove: () => notifier.remove(section.id),
-                      );
-                    },
+                      OutlinedButton.icon(
+                        onPressed: () => _showEditAreaDialog(context, notifier),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Custom Area'),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(
+                            color: AppColors.primary,
+                            style: BorderStyle.solid,
+                          ),
+                          minimumSize: const Size(double.infinity, 52),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -119,12 +208,9 @@ class AreaConfigurationScreen extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: draft == null
-                      ? null
-                      : () => _showEditAreaDialog(context, notifier),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add area'),
+                child: OutlinedButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Back'),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -133,7 +219,7 @@ class AreaConfigurationScreen extends ConsumerWidget {
                   onPressed: sections.any((s) => s.isIncluded)
                       ? () => context.push(ChooseAiPlanScreen.routePath)
                       : null,
-                  child: const Text('Review & Start'),
+                  child: const Text('Continue'),
                 ),
               ),
             ],
@@ -233,6 +319,8 @@ class _AreaEditDialogState extends State<_AreaEditDialog> {
   }
 }
 
+enum _AreaAction { edit, remove }
+
 class _AreaCard extends StatelessWidget {
   const _AreaCard({
     required this.section,
@@ -262,9 +350,12 @@ class _AreaCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Switch(
-              value: section.isIncluded,
-              onChanged: (_) => onToggleIncluded(),
+            AppFallbackThumbnail(
+              icon: section.isPlumbing
+                  ? Icons.plumbing_outlined
+                  : Icons.chair_outlined,
+              size: 44,
+              radius: AppRadius.sm,
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
@@ -295,15 +386,34 @@ class _AreaCard extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: 'Edit',
-              icon: const Icon(Icons.edit),
-              onPressed: onEdit,
+            Switch(
+              value: section.isIncluded,
+              onChanged: (_) => onToggleIncluded(),
             ),
-            IconButton(
-              tooltip: 'Remove',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: onRemove,
+            PopupMenuButton<_AreaAction>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) => switch (action) {
+                _AreaAction.edit => onEdit(),
+                _AreaAction.remove => onRemove(),
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: _AreaAction.edit,
+                  child: ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Edit'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: _AreaAction.remove,
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('Delete'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
