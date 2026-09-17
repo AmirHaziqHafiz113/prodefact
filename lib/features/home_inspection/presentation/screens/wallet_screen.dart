@@ -355,14 +355,24 @@ class _UsageSummary extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Credit usage',
-                  style: Theme.of(context).textTheme.labelLarge,
+                Flexible(
+                  child: Text(
+                    'Credit usage',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                 ),
-                Text(
-                  'Last 7 days',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: AppColors.textMuted),
+                const SizedBox(width: AppSpacing.sm),
+                Flexible(
+                  child: Text(
+                    'Last 7 days',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.textMuted),
+                  ),
                 ),
               ],
             ),

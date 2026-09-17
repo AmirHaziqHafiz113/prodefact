@@ -28,14 +28,24 @@ class AppWizardStepper extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              stepLabels[currentIndex],
-              style: Theme.of(context).textTheme.labelLarge,
+            Flexible(
+              child: Text(
+                stepLabels[currentIndex],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
             ),
-            Text(
-              'Step ${currentIndex + 1} of ${stepLabels.length}',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: Text(
+                'Step ${currentIndex + 1} of ${stepLabels.length}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
             ),
           ],
         ),

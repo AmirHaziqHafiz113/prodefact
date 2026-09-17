@@ -34,12 +34,26 @@ class AppProgressBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (label != null)
-                  Text(label!, style: Theme.of(context).textTheme.labelLarge),
-                if (valueLabel != null)
-                  Text(
-                    valueLabel!,
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Flexible(
+                    child: Text(
+                      label!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
                   ),
+                if (valueLabel != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      valueLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

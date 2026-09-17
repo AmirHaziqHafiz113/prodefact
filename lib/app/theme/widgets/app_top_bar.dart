@@ -41,7 +41,14 @@ class AppTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (showBrand) const ProDefactBrandMark(),
+        if (showBrand)
+          const Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ProDefactBrandMark(),
+            ),
+          ),
         const Spacer(),
         if (onAttentionTap != null)
           _IconWithBadge(

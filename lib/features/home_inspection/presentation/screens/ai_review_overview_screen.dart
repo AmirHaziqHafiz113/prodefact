@@ -404,13 +404,17 @@ class _AttributedBlock extends StatelessWidget {
             children: [
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  letterSpacing: 0.2,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ],

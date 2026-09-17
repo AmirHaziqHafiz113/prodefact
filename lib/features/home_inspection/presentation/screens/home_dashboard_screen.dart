@@ -125,68 +125,81 @@ class _CreditsCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(
-                Icons.monetization_on_outlined,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'AI Credits',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  Text(
-                    resolvedBalance == null
-                        ? (balanceAsync.hasError ? 'Unavailable' : 'Loading…')
-                        : '$resolvedBalance credits',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  if (resolvedBalance != null &&
-                      creditsPerMyr != null &&
-                      creditsPerMyr! > 0)
-                    Text(
-                      '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
+            Row(
               children: [
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(96, 36),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                    ),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  onPressed: onTopUp,
-                  child: const Text('Top Up'),
+                  child: const Icon(
+                    Icons.monetization_on_outlined,
+                    color: AppColors.primary,
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(96, 36),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                    ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AI Credits',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        resolvedBalance == null
+                            ? (balanceAsync.hasError
+                                  ? 'Unavailable'
+                                  : 'Loading…')
+                            : '$resolvedBalance credits',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      if (resolvedBalance != null &&
+                          creditsPerMyr != null &&
+                          creditsPerMyr! > 0)
+                        Text(
+                          '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
                   ),
-                  onPressed: onViewUsage,
-                  child: const Text('View Usage'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                      ),
+                    ),
+                    onPressed: onTopUp,
+                    child: const Text('Top Up'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                      ),
+                    ),
+                    onPressed: onViewUsage,
+                    child: const Text('View Usage'),
+                  ),
                 ),
               ],
             ),
@@ -323,6 +336,8 @@ class _ActiveInspectionHero extends ConsumerWidget {
                           summary.unitNumber,
                           propertyType?.label,
                         ].whereType<String>().join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 12.5,
@@ -331,7 +346,8 @@ class _ActiveInspectionHero extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SessionLifecyclePillWhite(),
+                const SizedBox(width: AppSpacing.sm),
+                const Flexible(child: SessionLifecyclePillWhite()),
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -505,7 +521,7 @@ class _RecentInspectionTile extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                SessionLifecyclePill(status: summary.status),
+                Flexible(child: SessionLifecyclePill(status: summary.status)),
               ],
             ),
           ),

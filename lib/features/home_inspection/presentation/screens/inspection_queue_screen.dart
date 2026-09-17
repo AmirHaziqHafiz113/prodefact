@@ -120,18 +120,26 @@ class InspectionQueueScreen extends ConsumerWidget {
                                 const Expanded(
                                   child: Text(
                                     'Inspection Progress',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
-                                Text(
-                                  '$completedCount of ${queue.length} areas '
-                                  'complete',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12.5,
+                                const SizedBox(width: AppSpacing.sm),
+                                Flexible(
+                                  child: Text(
+                                    '$completedCount of ${queue.length} '
+                                    'areas complete',
+                                    textAlign: TextAlign.right,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12.5,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -664,6 +672,8 @@ class _AreaQueueCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             section.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
@@ -688,33 +698,51 @@ class _AreaQueueCard extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: AppSpacing.sm),
-                    Row(
+                    Wrap(
+                      spacing: AppSpacing.md,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        if (findingCount > 0) ...[
-                          const Icon(
-                            Icons.report_gmailerrorred_outlined,
-                            size: 14,
-                            color: AppColors.textMuted,
+                        if (findingCount > 0)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.report_gmailerrorred_outlined,
+                                size: 14,
+                                color: AppColors.textMuted,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '$findingCount finding${findingCount == 1 ? '' : 's'}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$findingCount finding${findingCount == 1 ? '' : 's'}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                        if (evidenceCount > 0)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 14,
+                                color: AppColors.textMuted,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '$evidenceCount photo${evidenceCount == 1 ? '' : 's'}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: AppSpacing.md),
-                        ],
-                        if (evidenceCount > 0) ...[
-                          const Icon(
-                            Icons.photo_camera_outlined,
-                            size: 14,
-                            color: AppColors.textMuted,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$evidenceCount photo${evidenceCount == 1 ? '' : 's'}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -738,7 +766,7 @@ class _AreaQueueCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              _StatusChip(status: status),
+              Flexible(child: _StatusChip(status: status)),
             ],
           ),
         ),

@@ -60,11 +60,21 @@ class AppRingProgress extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: AppColors.textMuted),
+        // Constrained to the ring's own diameter (plus a little
+        // breathing room) rather than left to its natural single-line
+        // width — a longer label (e.g. "AI Analysed") would otherwise
+        // make this whole widget wider than its ring, which overflows
+        // a row of 2-3 rings side by side on a narrow phone. Wrapping
+        // here (never truncating) keeps every word of a real count
+        // readable instead of silently clipping it.
+        SizedBox(
+          width: size,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: AppColors.textMuted),
+          ),
         ),
       ],
     );
