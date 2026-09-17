@@ -3,11 +3,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
+import 'report_details_screen.dart';
 
 /// Reached once AI review is complete (every suggestion resolved) —
 /// see `docs/report.md` for the full report gate and lifecycle this
@@ -44,7 +46,19 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     final isStale = report?.isStaleRelativeTo(session.updatedAt) ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Report')),
+      appBar: AppBar(
+        title: const Text('Report'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => context.push(ReportDetailsScreen.routePath),
+            icon: const Icon(Icons.edit_note_outlined, color: Colors.white),
+            label: const Text(
+              'Report Details',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (_errorMessage != null)

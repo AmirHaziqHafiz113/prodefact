@@ -87,6 +87,10 @@ class PdfReportRenderer implements ReportRenderer {
           _buildCoverRow('Inspector', model.inspectorName!),
         _buildCoverRow('Inspection ID', model.sessionId),
         _buildCoverRow('Inspection date', _formatDate(model.inspectionDate)),
+        _buildCoverRow(
+          'Report date',
+          _formatDate(model.reportDate ?? model.generatedAt),
+        ),
         _buildCoverRow('Report generated', _formatDate(model.generatedAt)),
         _buildCoverRow('Report version', 'v${model.version}'),
       ],
@@ -146,6 +150,13 @@ class PdfReportRenderer implements ReportRenderer {
               ),
             ],
           ),
+          if (model.inspectionNote != null) ...[
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Inspection note: ${model.inspectionNote}',
+              style: pw.TextStyle(fontSize: 10, color: _mutedColor),
+            ),
+          ],
         ],
       ),
     );
@@ -178,6 +189,18 @@ class PdfReportRenderer implements ReportRenderer {
           ),
         ),
         pw.Divider(color: _dividerColor, height: 8),
+        if (area.note != null)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 6),
+            child: pw.Text(
+              'Note: ${area.note}',
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontStyle: pw.FontStyle.italic,
+                color: _mutedColor,
+              ),
+            ),
+          ),
         if (area.findings.isEmpty)
           pw.Padding(
             padding: const pw.EdgeInsets.symmetric(vertical: 8),

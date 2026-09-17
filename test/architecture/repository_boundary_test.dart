@@ -58,6 +58,10 @@ void main() {
       // not a domain leak, and is intentionally allowed.)
       'package:pdf/pdf.dart',
       'package:pdf/widgets.dart',
+      // Real device connectivity (product-flow-closure pass) — UI/
+      // providers depend on ConnectivityService (the abstraction),
+      // never `connectivity_plus` directly.
+      'package:connectivity_plus/connectivity_plus.dart',
     ];
 
     const exemptPaths = {'main.dart', 'firebase_options.dart'};

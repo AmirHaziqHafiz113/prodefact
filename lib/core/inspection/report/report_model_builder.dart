@@ -6,6 +6,7 @@ import '../entities/defect_catalogue.dart';
 import '../entities/element.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
+import '../entities/report_metadata.dart';
 import '../entities/section.dart';
 import '../entities/section_status.dart';
 import 'report_model.dart';
@@ -59,11 +60,23 @@ ReportModel buildReportModel({
       )
       .length;
 
+  // The inspector-confirmed report metadata takes precedence over the
+  // original Property Details setup data — see `ReportMetadata`'s doc
+  // comment for why they're kept as two separate values.
   final details = session.propertyDetails;
+  final metadata =
+      session.reportMetadata ??
+      (details.isEmpty
+          ? null
+          : ReportMetadata.fromPropertyDetails(
+              details,
+              reportDate: generatedAt,
+            ));
+
   return ReportModel(
     sessionId: session.id,
     propertyTypeLabel: propertyTypeLabel,
-    inspectionDate: details.inspectionDate ?? session.createdAt,
+    inspectionDate: metadata?.inspectionDate ?? session.createdAt,
     generatedAt: generatedAt,
     totalAreas: includedSections.length,
     completedAreas: completedAreas,
@@ -71,13 +84,15 @@ ReportModel buildReportModel({
     totalEvidence: totalEvidence,
     areas: areas,
     version: version,
-    propertyTitle: details.isEmpty ? null : details.title,
-    propertyAddress: details.address,
-    projectName: details.projectName,
-    blockTower: details.blockTower,
-    unitNumber: details.unitNumber,
-    clientName: details.clientName,
-    inspectorName: details.inspectorName,
+    propertyTitle: metadata?.title,
+    propertyAddress: metadata?.address,
+    projectName: metadata?.projectName,
+    blockTower: metadata?.blockTower,
+    unitNumber: metadata?.unitNumber,
+    clientName: metadata?.clientName,
+    inspectorName: metadata?.inspectorName,
+    reportDate: metadata?.reportDate,
+    inspectionNote: session.inspectionNote,
   );
 }
 
@@ -103,6 +118,7 @@ ReportAreaSection _buildAreaSection(
     name: section.name,
     isPlumbing: section.isPlumbing,
     findings: findings,
+    note: section.note,
   );
 }
 

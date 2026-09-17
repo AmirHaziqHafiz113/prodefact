@@ -186,7 +186,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
           const SizedBox(height: AppSpacing.lg),
         ],
         if (recent.isNotEmpty) ...[
-          const AppSectionHeader(title: 'Completed'),
+          const AppSectionHeader(title: 'Recent'),
           for (final summary in recent)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -209,7 +209,12 @@ class _DashboardBodyState extends State<_DashboardBody> {
 
   String _filterLabel(_DashboardFilter filter) => switch (filter) {
     _DashboardFilter.all => 'All',
-    _DashboardFilter.inProgress => 'In Progress',
+    // Deliberately "Active", not "In Progress" — the latter is also
+    // this filter's matching sessions' own status pill label
+    // (`_LifecycleStatusPill`), and having the exact same string do
+    // double duty as both a filter chip and a status label makes
+    // narrowing a `find.text(...)` widget lookup in tests ambiguous.
+    _DashboardFilter.inProgress => 'Active',
     _DashboardFilter.needsReview => 'Needs Review',
     _DashboardFilter.reportReady => 'Report Ready',
     _DashboardFilter.completed => 'Completed',
@@ -286,22 +291,12 @@ class _SessionCard extends StatelessWidget {
                       spacing: AppSpacing.sm,
                       runSpacing: AppSpacing.sm,
                       children: [
-                        StatusPill(
-                          label: summary.isComplete
-                              ? 'Completed'
-                              : 'Unfinished',
-                          icon: summary.isComplete
-                              ? Icons.check_circle_outline
-                              : Icons.pending_outlined,
-                          foreground: summary.isComplete
-                              ? AppColors.success
-                              : AppColors.warning,
-                          background: summary.isComplete
-                              ? AppColors.successBg
-                              : AppColors.warningBg,
+                        _LifecycleStatusPill(status: summary.status),
+                        SyncStatusPill(
+                          status: summary.syncStatus,
                           dense: true,
+                          pendingCount: summary.pendingSyncCount,
                         ),
-                        SyncStatusPill(status: summary.syncStatus, dense: true),
                         if (summary.needsAttention)
                           StatusPill(
                             label: summary.aiFailedFindingsCount > 0
@@ -366,11 +361,26 @@ class _SessionCard extends StatelessWidget {
         .syncSession(summary.id);
     ref.invalidate(sessionSummariesProvider);
     if (!context.mounted) return;
-    final message = result.isSuccess
-        ? 'Synced.'
-        : 'Sync failed: ${result.message ?? result.outcome.name}';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Synced.')));
+      return;
+    }
+    // Never surface Firestore/Firebase terminology or a raw outcome
+    // name — local data is always safe regardless of a sync failure
+    // (see docs/firebase.md, "Sync lifecycle").
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          "We couldn't sync some changes. Your inspection is still saved "
+          'on this device.',
+        ),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () => _syncOne(context, ref),
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDelete(
@@ -462,6 +472,55 @@ class _AiProgressLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The inspection's top-level lifecycle status, made explicit — a
+/// session isn't "Completed" merely because physical inspection or AI
+/// review finished; that only happens once a report has actually been
+/// generated (`InspectionStatus.reported`). The two intermediate states
+/// get their own distinct labels rather than being lumped into a
+/// single misleading "Completed"/"Unfinished" binary.
+class _LifecycleStatusPill extends StatelessWidget {
+  const _LifecycleStatusPill({required this.status});
+
+  final InspectionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, fg, bg) = switch (status) {
+      InspectionStatus.inProgress => (
+        'In Progress',
+        Icons.pending_outlined,
+        AppColors.warning,
+        AppColors.warningBg,
+      ),
+      InspectionStatus.physicalInspectionComplete => (
+        'AI Processing',
+        Icons.smart_toy_outlined,
+        AppColors.info,
+        AppColors.infoBg,
+      ),
+      InspectionStatus.aiReviewComplete => (
+        'Report Ready',
+        Icons.fact_check_outlined,
+        AppColors.info,
+        AppColors.infoBg,
+      ),
+      InspectionStatus.reported => (
+        'Completed',
+        Icons.check_circle_outline,
+        AppColors.success,
+        AppColors.successBg,
+      ),
+    };
+    return StatusPill(
+      label: label,
+      icon: icon,
+      foreground: fg,
+      background: bg,
+      dense: true,
     );
   }
 }

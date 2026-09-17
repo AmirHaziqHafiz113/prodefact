@@ -36,6 +36,20 @@ class InspectionSessionRows extends Table {
   TextColumn get contactNumber => text().nullable()();
   DateTimeColumn get inspectionDate => dateTime().nullable()();
 
+  /// The inspector-confirmed report cover-page metadata (added in
+  /// schema v8), JSON-encoded — see `ReportMetadata`. Null until
+  /// confirmed at least once via the Report Details step; the report
+  /// falls back to deriving it fresh from the property-details columns
+  /// above in that case. A blob column (like `SectionRows.elementsJson`)
+  /// rather than one column per field, since it's edited as a whole
+  /// unit on one screen and never queried by individual field.
+  TextColumn get reportMetadataJson => text().nullable()();
+
+  /// An optional, contextual note about the whole inspection (added in
+  /// schema v8) — e.g. "Unit occupied during inspection." Not a defect;
+  /// never sent through AI classification.
+  TextColumn get inspectionNote => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -65,6 +79,10 @@ class SectionRows extends Table {
   IntColumn get orderIndex => integer()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  /// An optional, contextual note about this area (added in schema v8)
+  /// — see `Section.note`.
+  TextColumn get note => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {sessionId, id};

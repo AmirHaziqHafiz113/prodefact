@@ -8,6 +8,7 @@ import '../entities/inspection.dart';
 import '../entities/inspection_session.dart';
 import '../entities/property_details.dart';
 import '../entities/report.dart';
+import '../entities/report_metadata.dart';
 import '../entities/section.dart';
 import '../entities/section_status.dart';
 import '../entities/sync_status.dart';
@@ -119,6 +120,15 @@ abstract class InspectionRepository {
   Future<UserProfile> loadUserProfile();
 
   Future<void> saveUserProfile(UserProfile profile);
+
+  /// Records the inspector-confirmed report cover-page metadata (the
+  /// Report Details step) — see `ReportMetadata`'s doc comment for why
+  /// this never touches the session's own `PropertyDetails`.
+  Future<void> saveReportMetadata(String sessionId, ReportMetadata metadata);
+
+  /// Records the whole-inspection contextual note. Pass null to clear
+  /// it.
+  Future<void> saveInspectionNote(String sessionId, String? note);
 
   Future<void> close();
 }

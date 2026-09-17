@@ -170,5 +170,17 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> saveReportMetadata(String sessionId, ReportMetadata metadata) {
+    _maybeFail('saveReportMetadata');
+    return _inner.saveReportMetadata(sessionId, metadata);
+  }
+
+  @override
+  Future<void> saveInspectionNote(String sessionId, String? note) {
+    _maybeFail('saveInspectionNote');
+    return _inner.saveInspectionNote(sessionId, note);
+  }
+
+  @override
   Future<void> close() => _inner.close();
 }

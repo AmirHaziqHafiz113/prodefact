@@ -126,6 +126,8 @@ InspectionSession _session({
   Map<String, SectionStatus> sectionStatuses = const {},
   List<AiSuggestion> aiSuggestions = const [],
   PropertyDetails propertyDetails = PropertyDetails.empty,
+  ReportMetadata? reportMetadata,
+  String? inspectionNote,
 }) {
   final now = DateTime(2026, 1, 1);
   return InspectionSession(
@@ -139,6 +141,8 @@ InspectionSession _session({
     updatedAt: now,
     aiSuggestions: aiSuggestions,
     propertyDetails: propertyDetails,
+    reportMetadata: reportMetadata,
+    inspectionNote: inspectionNote,
   );
 }
 
@@ -530,6 +534,53 @@ void main() {
       expect(model.propertyTypeLabel, 'High Rise');
       expect(model.inspectionDate, session.createdAt);
       expect(model.version, 1);
+    });
+
+    test('confirmed report metadata takes precedence over property '
+        'details captured at setup', () {
+      final session = _session(
+        sections: [_bathroomSection()],
+        findings: const [],
+        propertyDetails: const PropertyDetails(
+          title: 'Original Setup Title',
+          clientName: 'Original Client',
+        ),
+        reportMetadata: const ReportMetadata(
+          title: 'Confirmed Report Title',
+          clientName: 'Confirmed Client',
+          reportDate: null,
+        ),
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      expect(model.propertyTitle, 'Confirmed Report Title');
+      expect(model.clientName, 'Confirmed Client');
+    });
+
+    test('the whole-inspection note and each area\'s note flow into the '
+        'report model', () {
+      final bathroomWithNote = _bathroomSection().copyWith(
+        note: 'Ponding test started at 10:15 AM.',
+      );
+      final session = _session(
+        sections: [bathroomWithNote],
+        findings: const [],
+        inspectionNote: 'Unit occupied during inspection.',
+      );
+
+      final model = buildReportModel(
+        session: session,
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 1, 2),
+      );
+
+      expect(model.inspectionNote, 'Unit occupied during inspection.');
+      expect(model.areas.single.note, 'Ponding test started at 10:15 AM.');
     });
   });
 }

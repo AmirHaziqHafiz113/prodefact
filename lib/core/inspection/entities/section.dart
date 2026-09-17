@@ -16,6 +16,7 @@ class Section {
     required this.elements,
     this.isPlumbing = false,
     this.isIncluded = true,
+    this.note,
   });
 
   final String id;
@@ -24,11 +25,22 @@ class Section {
   final bool isPlumbing;
   final bool isIncluded;
 
+  /// An optional, contextual note about this area — e.g. "Ponding test
+  /// started at 10:15 AM." or "Area inaccessible behind cabinet." Not a
+  /// defect, never sent through AI classification; surfaced under this
+  /// area's heading in the generated report when present.
+  final String? note;
+
+  /// [clearNote] explicitly sets [note] back to null — needed because
+  /// the `??` pattern used for every other optional field here can't
+  /// distinguish "leave unchanged" from "clear it".
   Section copyWith({
     String? name,
     List<InspectionElement>? elements,
     bool? isPlumbing,
     bool? isIncluded,
+    String? note,
+    bool clearNote = false,
   }) {
     return Section(
       id: id,
@@ -36,6 +48,7 @@ class Section {
       elements: elements ?? this.elements,
       isPlumbing: isPlumbing ?? this.isPlumbing,
       isIncluded: isIncluded ?? this.isIncluded,
+      note: clearNote ? null : (note ?? this.note),
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
@@ -7,6 +9,7 @@ import 'package:prodefact/core/inspection/report/report_file_store.dart';
 import 'package:prodefact/core/inspection/report/report_renderer.dart';
 import 'package:prodefact/core/inspection/report/report_share_service.dart';
 import 'package:prodefact/core/inspection/repository/inspection_repository.dart';
+import 'package:prodefact/core/inspection/services/connectivity_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_file_store.dart';
 import 'package:prodefact/data/local/database.dart';
@@ -54,6 +57,44 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
   }
 }
 
+/// A fake connectivity service so tests never touch `connectivity_plus`'s
+/// real platform channel (unavailable/unmocked in the test environment).
+/// Defaults to always-online; tests exercising offline/reconnect
+/// behavior construct their own instance and push values via [setStatus].
+class FakeConnectivityService implements ConnectivityService {
+  FakeConnectivityService({
+    ConnectivityStatus initial = ConnectivityStatus.online,
+  }) : _status = initial;
+
+  ConnectivityStatus _status;
+  final _controller = StreamController<ConnectivityStatus>.broadcast();
+
+  void setStatus(ConnectivityStatus status) {
+    _status = status;
+    _controller.add(status);
+  }
+
+  @override
+  Future<ConnectivityStatus> checkStatus() async => _status;
+
+  /// Emits the current status immediately on listen (like a real
+  /// `StreamProvider`'s first value would settle to), then forwards
+  /// subsequent [setStatus] calls — mirrors `FakeAuthService`'s
+  /// `authStateChanges()` for the same reason: a `StreamProvider`
+  /// watcher should never see a prolonged "loading" (null `.value`)
+  /// window for a status this fake already knows synchronously.
+  @override
+  Stream<ConnectivityStatus> statusChanges() {
+    return Stream.multi((controller) {
+      controller.add(_status);
+      final subscription = _controller.stream.listen(controller.add);
+      controller.onCancel = subscription.cancel;
+    });
+  }
+
+  void dispose() => unawaited(_controller.close());
+}
+
 /// Provider overrides every test that touches persistence-backed
 /// providers should pass to `ProviderContainer`/`ProviderScope`, so
 /// tests use an in-memory database and a fake image picker instead of
@@ -65,6 +106,7 @@ List<Override> testOverrides({
   ReportRenderer? reportRenderer,
   ReportFileStore? reportFileStore,
   ReportShareService? reportShareService,
+  ConnectivityService? connectivityService,
 }) {
   return [
     inspectionRepositoryProvider.overrideWithValue(
@@ -72,6 +114,9 @@ List<Override> testOverrides({
     ),
     evidenceCaptureServiceProvider.overrideWithValue(
       captureService ?? FakeEvidenceCaptureService(),
+    ),
+    connectivityServiceProvider.overrideWithValue(
+      connectivityService ?? FakeConnectivityService(),
     ),
     // Evidence/report file "deletion" in tests never touches the real
     // filesystem, device camera/gallery picker, PDF rendering, or the
@@ -99,9 +144,13 @@ List<Override> testOverridesWithSync({
   EvidenceCaptureService? captureService,
   FakeAuthService? authService,
   FakeCloudInspectionRepository? cloudRepository,
+  ConnectivityService? connectivityService,
 }) {
   return [
-    ...testOverrides(captureService: captureService),
+    ...testOverrides(
+      captureService: captureService,
+      connectivityService: connectivityService,
+    ),
     firebaseReadyProvider.overrideWithValue(true),
     authServiceProvider.overrideWithValue(authService ?? FakeAuthService()),
     cloudInspectionRepositoryProvider.overrideWithValue(

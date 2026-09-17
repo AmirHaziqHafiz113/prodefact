@@ -240,6 +240,19 @@ void main() {
         owner_uid TEXT,
         ai_review_state TEXT NOT NULL DEFAULT 'notStarted'
       );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, id)
+      );
       CREATE TABLE finding_rows (
         id TEXT NOT NULL PRIMARY KEY,
         session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
@@ -351,6 +364,19 @@ void main() {
         owner_uid TEXT,
         ai_review_state TEXT NOT NULL DEFAULT 'notStarted'
       );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, id)
+      );
       CREATE TABLE report_rows (
         id TEXT NOT NULL,
         session_id TEXT NOT NULL PRIMARY KEY REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
@@ -394,8 +420,90 @@ void main() {
     expect(userProfiles, isEmpty);
   });
 
-  test('a fresh install (onCreate) also gets the v5 indexes and the v7 '
-      'table', () async {
+  test('upgrading from v7 adds the v8 note/report-metadata columns '
+      'without dropping the existing area row', () async {
+    final dbFile = File('${tempDir.path}/v7.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        owner_uid TEXT,
+        ai_review_state TEXT NOT NULL DEFAULT 'notStarted',
+        property_title TEXT,
+        property_address TEXT,
+        project_name TEXT,
+        block_tower TEXT,
+        unit_number TEXT,
+        client_name TEXT,
+        inspector_name TEXT,
+        developer_name TEXT,
+        contact_number TEXT,
+        inspection_date INTEGER
+      );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, id)
+      );
+      CREATE TABLE report_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL PRIMARY KEY REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        generated_at INTEGER NOT NULL,
+        source_updated_at INTEGER NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        version INTEGER NOT NULL DEFAULT 1
+      );
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, created_at, updated_at, property_title)
+      VALUES
+        ('session_7', 'homeInspection', 'highRise', 'inProgress', 7000, 7000, 'Residensi Vista');
+      INSERT INTO section_rows
+        (id, session_id, name, elements_json, order_index, created_at, updated_at)
+      VALUES
+        ('bathroom', 'session_7', 'Master Bathroom', '[]', 0, 7000, 7000);
+    ''');
+    raw.execute('PRAGMA user_version = 7');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_7'))).getSingle();
+    // Pre-existing v7 data is untouched.
+    expect(sessionRow.propertyTitle, 'Residensi Vista');
+    // New v8 columns default to null.
+    expect(sessionRow.reportMetadataJson, isNull);
+    expect(sessionRow.inspectionNote, isNull);
+
+    final sectionRow = await (db.select(
+      db.sectionRows,
+    )..where((t) => t.id.equals('bathroom'))).getSingle();
+    expect(sectionRow.name, 'Master Bathroom');
+    expect(sectionRow.note, isNull);
+  });
+
+  test('a fresh install (onCreate) also gets the v5 indexes and the v7/v8 '
+      'tables/columns', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -414,5 +522,9 @@ void main() {
     // v7's new table exists and is queryable on a fresh install too.
     final userProfiles = await db.select(db.userProfileRows).get();
     expect(userProfiles, isEmpty);
+
+    // v8's new columns are queryable on a fresh install too.
+    final sessions = await db.select(db.inspectionSessionRows).get();
+    expect(sessions, isEmpty);
   });
 }

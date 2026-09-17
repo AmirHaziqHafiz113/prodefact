@@ -87,7 +87,7 @@ void main() {
 
     expect(find.text('No saved inspections yet.'), findsNothing);
     expect(find.text('Test Property'), findsOneWidget);
-    expect(find.text('Unfinished'), findsOneWidget);
+    expect(find.text('In Progress'), findsOneWidget);
 
     await tester.tap(find.text('Test Property'));
     await tester.pumpAndSettle();
@@ -142,11 +142,56 @@ void main() {
 
       await tester.enterText(find.byType(TextField), '');
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ChoiceChip, 'In Progress'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Active'));
       await tester.pumpAndSettle();
 
       expect(find.text('Residensi Vista'), findsOneWidget);
       expect(find.text('Taman Sinar House'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'the dashboard pill only reads "Completed" once a report has actually '
+    'been generated — physical/AI-review completion alone show their own '
+    'distinct, honest labels',
+    (tester) async {
+      final container = ProviderContainer(overrides: testOverrides());
+      addTearDown(container.dispose);
+      final repository = container.read(inspectionRepositoryProvider);
+
+      final physicalDone = await repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: const [],
+        propertyDetails: const PropertyDetails(title: 'Physical Done House'),
+      );
+      await repository.setSessionStatus(
+        physicalDone.id,
+        InspectionStatus.physicalInspectionComplete,
+      );
+      final reported = await repository.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: 'highRise',
+        initialSections: const [],
+        propertyDetails: const PropertyDetails(title: 'Reported House'),
+      );
+      await repository.setSessionStatus(reported.id, InspectionStatus.reported);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const ProDefactApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Never a bare "Completed"/"Unfinished" binary — a session that's
+      // merely physically done (no report yet) gets its own label. Only
+      // the reported session's own pill contributes "Completed" text
+      // beyond the dashboard's "Completed" filter chip, hence >= 1
+      // rather than exactly 1.
+      expect(find.text('AI Processing'), findsOneWidget);
+      expect(find.text('Completed'), findsWidgets);
     },
   );
 }

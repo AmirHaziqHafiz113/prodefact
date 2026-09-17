@@ -217,6 +217,28 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _reportMetadataJsonMeta =
+      const VerificationMeta('reportMetadataJson');
+  @override
+  late final GeneratedColumn<String> reportMetadataJson =
+      GeneratedColumn<String>(
+        'report_metadata_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _inspectionNoteMeta = const VerificationMeta(
+    'inspectionNote',
+  );
+  @override
+  late final GeneratedColumn<String> inspectionNote = GeneratedColumn<String>(
+    'inspection_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -238,6 +260,8 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     developerName,
     contactNumber,
     inspectionDate,
+    reportMetadataJson,
+    inspectionNote,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -401,6 +425,24 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         ),
       );
     }
+    if (data.containsKey('report_metadata_json')) {
+      context.handle(
+        _reportMetadataJsonMeta,
+        reportMetadataJson.isAcceptableOrUnknown(
+          data['report_metadata_json']!,
+          _reportMetadataJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inspection_note')) {
+      context.handle(
+        _inspectionNoteMeta,
+        inspectionNote.isAcceptableOrUnknown(
+          data['inspection_note']!,
+          _inspectionNoteMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -486,6 +528,14 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}inspection_date'],
       ),
+      reportMetadataJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}report_metadata_json'],
+      ),
+      inspectionNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}inspection_note'],
+      ),
     );
   }
 
@@ -522,6 +572,20 @@ class InspectionSessionRow extends DataClass
   final String? developerName;
   final String? contactNumber;
   final DateTime? inspectionDate;
+
+  /// The inspector-confirmed report cover-page metadata (added in
+  /// schema v8), JSON-encoded — see `ReportMetadata`. Null until
+  /// confirmed at least once via the Report Details step; the report
+  /// falls back to deriving it fresh from the property-details columns
+  /// above in that case. A blob column (like `SectionRows.elementsJson`)
+  /// rather than one column per field, since it's edited as a whole
+  /// unit on one screen and never queried by individual field.
+  final String? reportMetadataJson;
+
+  /// An optional, contextual note about the whole inspection (added in
+  /// schema v8) — e.g. "Unit occupied during inspection." Not a defect;
+  /// never sent through AI classification.
+  final String? inspectionNote;
   const InspectionSessionRow({
     required this.id,
     required this.industry,
@@ -542,6 +606,8 @@ class InspectionSessionRow extends DataClass
     this.developerName,
     this.contactNumber,
     this.inspectionDate,
+    this.reportMetadataJson,
+    this.inspectionNote,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -586,6 +652,12 @@ class InspectionSessionRow extends DataClass
     }
     if (!nullToAbsent || inspectionDate != null) {
       map['inspection_date'] = Variable<DateTime>(inspectionDate);
+    }
+    if (!nullToAbsent || reportMetadataJson != null) {
+      map['report_metadata_json'] = Variable<String>(reportMetadataJson);
+    }
+    if (!nullToAbsent || inspectionNote != null) {
+      map['inspection_note'] = Variable<String>(inspectionNote);
     }
     return map;
   }
@@ -633,6 +705,12 @@ class InspectionSessionRow extends DataClass
       inspectionDate: inspectionDate == null && nullToAbsent
           ? const Value.absent()
           : Value(inspectionDate),
+      reportMetadataJson: reportMetadataJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reportMetadataJson),
+      inspectionNote: inspectionNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inspectionNote),
     );
   }
 
@@ -661,6 +739,10 @@ class InspectionSessionRow extends DataClass
       developerName: serializer.fromJson<String?>(json['developerName']),
       contactNumber: serializer.fromJson<String?>(json['contactNumber']),
       inspectionDate: serializer.fromJson<DateTime?>(json['inspectionDate']),
+      reportMetadataJson: serializer.fromJson<String?>(
+        json['reportMetadataJson'],
+      ),
+      inspectionNote: serializer.fromJson<String?>(json['inspectionNote']),
     );
   }
   @override
@@ -686,6 +768,8 @@ class InspectionSessionRow extends DataClass
       'developerName': serializer.toJson<String?>(developerName),
       'contactNumber': serializer.toJson<String?>(contactNumber),
       'inspectionDate': serializer.toJson<DateTime?>(inspectionDate),
+      'reportMetadataJson': serializer.toJson<String?>(reportMetadataJson),
+      'inspectionNote': serializer.toJson<String?>(inspectionNote),
     };
   }
 
@@ -709,6 +793,8 @@ class InspectionSessionRow extends DataClass
     Value<String?> developerName = const Value.absent(),
     Value<String?> contactNumber = const Value.absent(),
     Value<DateTime?> inspectionDate = const Value.absent(),
+    Value<String?> reportMetadataJson = const Value.absent(),
+    Value<String?> inspectionNote = const Value.absent(),
   }) => InspectionSessionRow(
     id: id ?? this.id,
     industry: industry ?? this.industry,
@@ -741,6 +827,12 @@ class InspectionSessionRow extends DataClass
     inspectionDate: inspectionDate.present
         ? inspectionDate.value
         : this.inspectionDate,
+    reportMetadataJson: reportMetadataJson.present
+        ? reportMetadataJson.value
+        : this.reportMetadataJson,
+    inspectionNote: inspectionNote.present
+        ? inspectionNote.value
+        : this.inspectionNote,
   );
   InspectionSessionRow copyWithCompanion(InspectionSessionRowsCompanion data) {
     return InspectionSessionRow(
@@ -789,6 +881,12 @@ class InspectionSessionRow extends DataClass
       inspectionDate: data.inspectionDate.present
           ? data.inspectionDate.value
           : this.inspectionDate,
+      reportMetadataJson: data.reportMetadataJson.present
+          ? data.reportMetadataJson.value
+          : this.reportMetadataJson,
+      inspectionNote: data.inspectionNote.present
+          ? data.inspectionNote.value
+          : this.inspectionNote,
     );
   }
 
@@ -813,13 +911,15 @@ class InspectionSessionRow extends DataClass
           ..write('inspectorName: $inspectorName, ')
           ..write('developerName: $developerName, ')
           ..write('contactNumber: $contactNumber, ')
-          ..write('inspectionDate: $inspectionDate')
+          ..write('inspectionDate: $inspectionDate, ')
+          ..write('reportMetadataJson: $reportMetadataJson, ')
+          ..write('inspectionNote: $inspectionNote')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     industry,
     assetTypeId,
@@ -839,7 +939,9 @@ class InspectionSessionRow extends DataClass
     developerName,
     contactNumber,
     inspectionDate,
-  );
+    reportMetadataJson,
+    inspectionNote,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -862,7 +964,9 @@ class InspectionSessionRow extends DataClass
           other.inspectorName == this.inspectorName &&
           other.developerName == this.developerName &&
           other.contactNumber == this.contactNumber &&
-          other.inspectionDate == this.inspectionDate);
+          other.inspectionDate == this.inspectionDate &&
+          other.reportMetadataJson == this.reportMetadataJson &&
+          other.inspectionNote == this.inspectionNote);
 }
 
 class InspectionSessionRowsCompanion
@@ -886,6 +990,8 @@ class InspectionSessionRowsCompanion
   final Value<String?> developerName;
   final Value<String?> contactNumber;
   final Value<DateTime?> inspectionDate;
+  final Value<String?> reportMetadataJson;
+  final Value<String?> inspectionNote;
   final Value<int> rowid;
   const InspectionSessionRowsCompanion({
     this.id = const Value.absent(),
@@ -907,6 +1013,8 @@ class InspectionSessionRowsCompanion
     this.developerName = const Value.absent(),
     this.contactNumber = const Value.absent(),
     this.inspectionDate = const Value.absent(),
+    this.reportMetadataJson = const Value.absent(),
+    this.inspectionNote = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InspectionSessionRowsCompanion.insert({
@@ -929,6 +1037,8 @@ class InspectionSessionRowsCompanion
     this.developerName = const Value.absent(),
     this.contactNumber = const Value.absent(),
     this.inspectionDate = const Value.absent(),
+    this.reportMetadataJson = const Value.absent(),
+    this.inspectionNote = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        industry = Value(industry),
@@ -956,6 +1066,8 @@ class InspectionSessionRowsCompanion
     Expression<String>? developerName,
     Expression<String>? contactNumber,
     Expression<DateTime>? inspectionDate,
+    Expression<String>? reportMetadataJson,
+    Expression<String>? inspectionNote,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -978,6 +1090,9 @@ class InspectionSessionRowsCompanion
       if (developerName != null) 'developer_name': developerName,
       if (contactNumber != null) 'contact_number': contactNumber,
       if (inspectionDate != null) 'inspection_date': inspectionDate,
+      if (reportMetadataJson != null)
+        'report_metadata_json': reportMetadataJson,
+      if (inspectionNote != null) 'inspection_note': inspectionNote,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1002,6 +1117,8 @@ class InspectionSessionRowsCompanion
     Value<String?>? developerName,
     Value<String?>? contactNumber,
     Value<DateTime?>? inspectionDate,
+    Value<String?>? reportMetadataJson,
+    Value<String?>? inspectionNote,
     Value<int>? rowid,
   }) {
     return InspectionSessionRowsCompanion(
@@ -1024,6 +1141,8 @@ class InspectionSessionRowsCompanion
       developerName: developerName ?? this.developerName,
       contactNumber: contactNumber ?? this.contactNumber,
       inspectionDate: inspectionDate ?? this.inspectionDate,
+      reportMetadataJson: reportMetadataJson ?? this.reportMetadataJson,
+      inspectionNote: inspectionNote ?? this.inspectionNote,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1088,6 +1207,12 @@ class InspectionSessionRowsCompanion
     if (inspectionDate.present) {
       map['inspection_date'] = Variable<DateTime>(inspectionDate.value);
     }
+    if (reportMetadataJson.present) {
+      map['report_metadata_json'] = Variable<String>(reportMetadataJson.value);
+    }
+    if (inspectionNote.present) {
+      map['inspection_note'] = Variable<String>(inspectionNote.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1116,6 +1241,8 @@ class InspectionSessionRowsCompanion
           ..write('developerName: $developerName, ')
           ..write('contactNumber: $contactNumber, ')
           ..write('inspectionDate: $inspectionDate, ')
+          ..write('reportMetadataJson: $reportMetadataJson, ')
+          ..write('inspectionNote: $inspectionNote, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1244,6 +1371,15 @@ class $SectionRowsTable extends SectionRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1256,6 +1392,7 @@ class $SectionRowsTable extends SectionRows
     orderIndex,
     createdAt,
     updatedAt,
+    note,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1343,6 +1480,12 @@ class $SectionRowsTable extends SectionRows
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
     return context;
   }
 
@@ -1392,6 +1535,10 @@ class $SectionRowsTable extends SectionRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
     );
   }
 
@@ -1412,6 +1559,10 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
   final int orderIndex;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// An optional, contextual note about this area (added in schema v8)
+  /// — see `Section.note`.
+  final String? note;
   const SectionRow({
     required this.id,
     required this.sessionId,
@@ -1423,6 +1574,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
     required this.orderIndex,
     required this.createdAt,
     required this.updatedAt,
+    this.note,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1437,6 +1589,9 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
     map['order_index'] = Variable<int>(orderIndex);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
     return map;
   }
 
@@ -1452,6 +1607,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
       orderIndex: Value(orderIndex),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
     );
   }
 
@@ -1471,6 +1627,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
       orderIndex: serializer.fromJson<int>(json['orderIndex']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      note: serializer.fromJson<String?>(json['note']),
     );
   }
   @override
@@ -1487,6 +1644,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
       'orderIndex': serializer.toJson<int>(orderIndex),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'note': serializer.toJson<String?>(note),
     };
   }
 
@@ -1501,6 +1659,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
     int? orderIndex,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Value<String?> note = const Value.absent(),
   }) => SectionRow(
     id: id ?? this.id,
     sessionId: sessionId ?? this.sessionId,
@@ -1512,6 +1671,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
     orderIndex: orderIndex ?? this.orderIndex,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    note: note.present ? note.value : this.note,
   );
   SectionRow copyWithCompanion(SectionRowsCompanion data) {
     return SectionRow(
@@ -1533,6 +1693,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
           : this.orderIndex,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      note: data.note.present ? data.note.value : this.note,
     );
   }
 
@@ -1548,7 +1709,8 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
           ..write('elementsJson: $elementsJson, ')
           ..write('orderIndex: $orderIndex, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('note: $note')
           ..write(')'))
         .toString();
   }
@@ -1565,6 +1727,7 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
     orderIndex,
     createdAt,
     updatedAt,
+    note,
   );
   @override
   bool operator ==(Object other) =>
@@ -1579,7 +1742,8 @@ class SectionRow extends DataClass implements Insertable<SectionRow> {
           other.elementsJson == this.elementsJson &&
           other.orderIndex == this.orderIndex &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.note == this.note);
 }
 
 class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
@@ -1593,6 +1757,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
   final Value<int> orderIndex;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<String?> note;
   final Value<int> rowid;
   const SectionRowsCompanion({
     this.id = const Value.absent(),
@@ -1605,6 +1770,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
     this.orderIndex = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SectionRowsCompanion.insert({
@@ -1618,6 +1784,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
     required int orderIndex,
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sessionId = Value(sessionId),
@@ -1637,6 +1804,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
     Expression<int>? orderIndex,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? note,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1650,6 +1818,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
       if (orderIndex != null) 'order_index': orderIndex,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (note != null) 'note': note,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1665,6 +1834,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
     Value<int>? orderIndex,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<String?>? note,
     Value<int>? rowid,
   }) {
     return SectionRowsCompanion(
@@ -1678,6 +1848,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
       orderIndex: orderIndex ?? this.orderIndex,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      note: note ?? this.note,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1715,6 +1886,9 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1734,6 +1908,7 @@ class SectionRowsCompanion extends UpdateCompanion<SectionRow> {
           ..write('orderIndex: $orderIndex, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('note: $note, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5329,6 +5504,8 @@ typedef $$InspectionSessionRowsTableCreateCompanionBuilder =
       Value<String?> developerName,
       Value<String?> contactNumber,
       Value<DateTime?> inspectionDate,
+      Value<String?> reportMetadataJson,
+      Value<String?> inspectionNote,
       Value<int> rowid,
     });
 typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
@@ -5352,6 +5529,8 @@ typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
       Value<String?> developerName,
       Value<String?> contactNumber,
       Value<DateTime?> inspectionDate,
+      Value<String?> reportMetadataJson,
+      Value<String?> inspectionNote,
       Value<int> rowid,
     });
 
@@ -5544,6 +5723,16 @@ class $$InspectionSessionRowsTableFilterComposer
 
   ColumnFilters<DateTime> get inspectionDate => $composableBuilder(
     column: $table.inspectionDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reportMetadataJson => $composableBuilder(
+    column: $table.reportMetadataJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get inspectionNote => $composableBuilder(
+    column: $table.inspectionNote,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5751,6 +5940,16 @@ class $$InspectionSessionRowsTableOrderingComposer
     column: $table.inspectionDate,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get reportMetadataJson => $composableBuilder(
+    column: $table.reportMetadataJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get inspectionNote => $composableBuilder(
+    column: $table.inspectionNote,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InspectionSessionRowsTableAnnotationComposer
@@ -5842,6 +6041,16 @@ class $$InspectionSessionRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get inspectionDate => $composableBuilder(
     column: $table.inspectionDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reportMetadataJson => $composableBuilder(
+    column: $table.reportMetadataJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get inspectionNote => $composableBuilder(
+    column: $table.inspectionNote,
     builder: (column) => column,
   );
 
@@ -6009,6 +6218,8 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String?> developerName = const Value.absent(),
                 Value<String?> contactNumber = const Value.absent(),
                 Value<DateTime?> inspectionDate = const Value.absent(),
+                Value<String?> reportMetadataJson = const Value.absent(),
+                Value<String?> inspectionNote = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion(
                 id: id,
@@ -6030,6 +6241,8 @@ class $$InspectionSessionRowsTableTableManager
                 developerName: developerName,
                 contactNumber: contactNumber,
                 inspectionDate: inspectionDate,
+                reportMetadataJson: reportMetadataJson,
+                inspectionNote: inspectionNote,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6053,6 +6266,8 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String?> developerName = const Value.absent(),
                 Value<String?> contactNumber = const Value.absent(),
                 Value<DateTime?> inspectionDate = const Value.absent(),
+                Value<String?> reportMetadataJson = const Value.absent(),
+                Value<String?> inspectionNote = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion.insert(
                 id: id,
@@ -6074,6 +6289,8 @@ class $$InspectionSessionRowsTableTableManager
                 developerName: developerName,
                 contactNumber: contactNumber,
                 inspectionDate: inspectionDate,
+                reportMetadataJson: reportMetadataJson,
+                inspectionNote: inspectionNote,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -6232,6 +6449,7 @@ typedef $$SectionRowsTableCreateCompanionBuilder =
       required int orderIndex,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<String?> note,
       Value<int> rowid,
     });
 typedef $$SectionRowsTableUpdateCompanionBuilder =
@@ -6246,6 +6464,7 @@ typedef $$SectionRowsTableUpdateCompanionBuilder =
       Value<int> orderIndex,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<String?> note,
       Value<int> rowid,
     });
 
@@ -6323,6 +6542,11 @@ class $$SectionRowsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6405,6 +6629,11 @@ class $$SectionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$InspectionSessionRowsTableOrderingComposer get sessionId {
     final $$InspectionSessionRowsTableOrderingComposer composer =
         $composerBuilder(
@@ -6474,6 +6703,9 @@ class $$SectionRowsTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
   $$InspectionSessionRowsTableAnnotationComposer get sessionId {
     final $$InspectionSessionRowsTableAnnotationComposer composer =
         $composerBuilder(
@@ -6537,6 +6769,7 @@ class $$SectionRowsTableTableManager
                 Value<int> orderIndex = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SectionRowsCompanion(
                 id: id,
@@ -6549,6 +6782,7 @@ class $$SectionRowsTableTableManager
                 orderIndex: orderIndex,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                note: note,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6563,6 +6797,7 @@ class $$SectionRowsTableTableManager
                 required int orderIndex,
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<String?> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SectionRowsCompanion.insert(
                 id: id,
@@ -6575,6 +6810,7 @@ class $$SectionRowsTableTableManager
                 orderIndex: orderIndex,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                note: note,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

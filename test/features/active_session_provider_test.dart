@@ -4,6 +4,7 @@ import 'package:prodefact/core/inspection/entities/ai_finding_status.dart';
 import 'package:prodefact/core/inspection/entities/ai_review.dart';
 import 'package:prodefact/core/inspection/entities/defect_catalogue.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
+import 'package:prodefact/core/inspection/entities/report_metadata.dart';
 import 'package:prodefact/core/inspection/entities/section_status.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
@@ -191,6 +192,112 @@ void main() {
           .toList();
       expect(suggestions, hasLength(1));
       expect(suggestions.single.finalCatalogueEntryId, entryId);
+    });
+  });
+
+  group('notes and report metadata', () {
+    test('an area note can be set, edited, cleared, and survives a '
+        'reload', () async {
+      final repository = createInMemoryRepository();
+      final container = ProviderContainer(
+        overrides: testOverrides(repository: repository),
+      );
+      addTearDown(container.dispose);
+      await container
+          .read(selectedPropertyTypeProvider.notifier)
+          .select(PropertyType.highRise);
+      final sessionId = container.read(activeSessionProvider)!.id;
+      final section = container.read(inspectionQueueProvider).first;
+
+      container
+          .read(activeSessionProvider.notifier)
+          .setAreaNote(section.id, 'Ponding test started at 10:15 AM.');
+      expect(
+        container
+            .read(activeSessionProvider)!
+            .sections
+            .firstWhere((s) => s.id == section.id)
+            .note,
+        'Ponding test started at 10:15 AM.',
+      );
+
+      // Survives a fresh repository read (durable, not just in-memory).
+      final reloaded = await repository.loadSession(sessionId);
+      expect(
+        reloaded!.sections.firstWhere((s) => s.id == section.id).note,
+        'Ponding test started at 10:15 AM.',
+      );
+
+      // Blank input clears it rather than storing an empty string.
+      container
+          .read(activeSessionProvider.notifier)
+          .setAreaNote(section.id, '  ');
+      expect(
+        container
+            .read(activeSessionProvider)!
+            .sections
+            .firstWhere((s) => s.id == section.id)
+            .note,
+        isNull,
+      );
+    });
+
+    test('an inspection note can be set and survives a reload', () async {
+      final repository = createInMemoryRepository();
+      final container = ProviderContainer(
+        overrides: testOverrides(repository: repository),
+      );
+      addTearDown(container.dispose);
+      await container
+          .read(selectedPropertyTypeProvider.notifier)
+          .select(PropertyType.highRise);
+      final sessionId = container.read(activeSessionProvider)!.id;
+
+      container
+          .read(activeSessionProvider.notifier)
+          .setInspectionNote('Unit occupied during inspection.');
+      expect(
+        container.read(activeSessionProvider)!.inspectionNote,
+        'Unit occupied during inspection.',
+      );
+
+      final reloaded = await repository.loadSession(sessionId);
+      expect(reloaded!.inspectionNote, 'Unit occupied during inspection.');
+    });
+
+    test('confirmed report metadata is stored separately from property '
+        'details and survives a reload', () async {
+      final repository = createInMemoryRepository();
+      final container = ProviderContainer(
+        overrides: testOverrides(repository: repository),
+      );
+      addTearDown(container.dispose);
+      await container
+          .read(selectedPropertyTypeProvider.notifier)
+          .select(PropertyType.highRise);
+      final session = container.read(activeSessionProvider)!;
+      // This session was created without going through Property
+      // Details setup, so propertyDetails starts empty.
+      expect(session.propertyDetails.isEmpty, isTrue);
+
+      const metadata = ReportMetadata(
+        title: 'Residensi Vista',
+        clientName: 'Jane Client',
+      );
+      container
+          .read(activeSessionProvider.notifier)
+          .setReportMetadata(metadata);
+
+      final updated = container.read(activeSessionProvider)!;
+      expect(updated.reportMetadata?.title, 'Residensi Vista');
+      // Confirming report metadata never touches the original
+      // (still-empty) property details.
+      expect(updated.propertyDetails.isEmpty, isTrue);
+
+      final reloaded = await repository.loadSession(session.id);
+      expect(reloaded!.reportMetadata?.title, 'Residensi Vista');
+      expect(reloaded.reportMetadata?.clientName, 'Jane Client');
+      expect(reloaded.propertyDetails.isEmpty, isTrue);
     });
   });
 

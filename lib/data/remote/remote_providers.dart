@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/inspection/inspection_domain.dart';
 import '../local/database_providers.dart';
 import '../sync/default_sync_coordinator.dart';
+import 'connectivity_plus_service.dart';
 import 'firebase_auth_service.dart';
 import 'firestore_cloud_inspection_repository.dart';
 
@@ -36,20 +37,53 @@ final cloudInspectionRepositoryProvider = Provider<CloudInspectionRepository>((
   return FirestoreCloudInspectionRepository();
 });
 
+/// Real device connectivity — see `ConnectivityService`'s doc comment
+/// for why "online" doesn't guarantee working internet access. Tests
+/// override this provider with a fake instead of driving real platform
+/// connectivity events.
+final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
+  return ConnectivityPlusService();
+});
+
+/// The device's current connectivity status, updated live. Callers that
+/// need a value before the first stream event (e.g. on cold start)
+/// should prefer `isOnlineForAiProvider`, which already accounts for
+/// that — `.value` is null until this resolves once.
+final connectivityStatusProvider = StreamProvider<ConnectivityStatus>((ref) {
+  final service = ref.watch(connectivityServiceProvider);
+  return service.statusChanges();
+});
+
 /// Whether progressive AI classification can proceed right now — the
 /// signal `AiCardSummary`/the classification queue use to distinguish
 /// "actively analysing" from "waiting for connection". True whenever
 /// Firebase isn't configured at all (local-only/demo mode always works
-/// offline via the fake AI service), otherwise true only once the
-/// inspector is signed in. This does not detect genuine loss of
-/// internet connectivity while otherwise signed in — a queued finding
-/// simply stays queued if the network call itself fails, which is safe
-/// (never lost, never duplicated) even though the card's label may lag
-/// briefly in that specific case; see `docs/production_readiness.md`
-/// ("Known limitations").
+/// offline via the fake AI service); otherwise requires both being
+/// signed in **and** the device not being definitively offline
+/// (`ConnectivityStatus.offline`) — an `unknown`/not-yet-resolved
+/// reading is treated as online rather than blocking work on an
+/// ambiguous signal. This still isn't a guarantee the network call
+/// will actually succeed (see `ConnectivityService`) — a queued finding
+/// safely stays queued if the real request fails anyway, never lost or
+/// duplicated; see `docs/production_readiness.md` ("Known
+/// limitations").
 final isOnlineForAiProvider = Provider<bool>((ref) {
   if (!ref.watch(firebaseReadyProvider)) return true;
-  return ref.watch(authStateProvider).value != null;
+  // Watches the stream (not just `authServiceProvider.currentUser`) so
+  // a dependent that watches this provider reactively still rebuilds on
+  // sign-in/out. But the stream can still be `AsyncLoading` (`.value`
+  // null) for one microtask right after container/notifier creation —
+  // e.g. exactly when a finding is saved and queued in the same tick a
+  // session starts — in which case fall back to the always-current,
+  // synchronous getter rather than misreading "not yet resolved" as
+  // "signed out".
+  final authState = ref.watch(authStateProvider);
+  final signedIn = authState.hasValue
+      ? authState.value != null
+      : ref.watch(authServiceProvider).currentUser != null;
+  if (!signedIn) return false;
+  final connectivity = ref.watch(connectivityStatusProvider).value;
+  return connectivity != ConnectivityStatus.offline;
 });
 
 final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {

@@ -5,6 +5,7 @@ import 'industry.dart';
 import 'inspection.dart';
 import 'property_details.dart';
 import 'report.dart';
+import 'report_metadata.dart';
 import 'section.dart';
 import 'section_status.dart';
 import 'sync_status.dart';
@@ -33,6 +34,8 @@ class InspectionSession {
     this.aiSuggestions = const [],
     this.report,
     this.propertyDetails = PropertyDetails.empty,
+    this.reportMetadata,
+    this.inspectionNote,
   });
 
   final String id;
@@ -46,6 +49,19 @@ class InspectionSession {
   /// see `PropertyDetails`. `PropertyDetails.empty` for a session
   /// created before this existed (schema v6 and earlier).
   final PropertyDetails propertyDetails;
+
+  /// The inspector-confirmed report cover-page metadata (Report Details
+  /// step) — null until confirmed at least once, in which case the
+  /// report falls back to deriving it fresh from [propertyDetails]. See
+  /// `ReportMetadata`'s doc comment for why this is a separate field
+  /// rather than sharing [propertyDetails] directly.
+  final ReportMetadata? reportMetadata;
+
+  /// An optional, contextual note about the whole inspection — e.g.
+  /// "Unit occupied during inspection." Not a defect, never sent
+  /// through AI classification; surfaced in the report's summary/
+  /// information section when present.
+  final String? inspectionNote;
 
   final List<Section> sections;
   final Map<String, SectionStatus> sectionStatuses;
@@ -92,6 +108,9 @@ class InspectionSession {
     List<AiSuggestion>? aiSuggestions,
     Report? report,
     PropertyDetails? propertyDetails,
+    ReportMetadata? reportMetadata,
+    String? inspectionNote,
+    bool clearInspectionNote = false,
   }) {
     return InspectionSession(
       id: id,
@@ -106,6 +125,10 @@ class InspectionSession {
       syncStatus: syncStatus ?? this.syncStatus,
       ownerUid: ownerUid ?? this.ownerUid,
       aiReviewState: aiReviewState ?? this.aiReviewState,
+      reportMetadata: reportMetadata ?? this.reportMetadata,
+      inspectionNote: clearInspectionNote
+          ? null
+          : (inspectionNote ?? this.inspectionNote),
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
       report: report ?? this.report,
       propertyDetails: propertyDetails ?? this.propertyDetails,
@@ -129,6 +152,7 @@ class InspectionSessionSummary {
     this.aiProcessedFindingsCount = 0,
     this.aiPendingReviewCount = 0,
     this.aiFailedFindingsCount = 0,
+    this.pendingSyncCount = 0,
     this.propertyTitle,
     this.propertyAddress,
     this.unitNumber,
@@ -156,6 +180,11 @@ class InspectionSessionSummary {
   /// retry) — the dashboard's "Needs attention" section surfaces a
   /// session with any of these, alongside `aiPendingReviewCount`.
   final int aiFailedFindingsCount;
+
+  /// Evidence photos not yet uploaded to the cloud for this session —
+  /// the real count behind "N items waiting" (see `SyncStatusPill`).
+  /// Always 0 for a fully `synced`/`localOnly` session.
+  final int pendingSyncCount;
 
   /// A subset of `PropertyDetails`, mirrored here so the dashboard list
   /// never needs to load a session's full details just to show its

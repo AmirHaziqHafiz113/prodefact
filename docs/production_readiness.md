@@ -1034,3 +1034,115 @@ simulator against a real Firebase project in this environment:
 6. **Profile prefill.** Set an inspector name in Profile, start a new
    inspection, and confirm Property Details' inspector name field is
    pre-filled with it (and can still be overridden per-inspection).
+
+## P0 workflow-closure pass
+
+A follow-up pass closing the P0 gaps the previous pass's own P1
+backlog called out explicitly — see
+`docs/home_inspection_product_flow.md` ("P0 items closed this pass")
+for the full description of each. No redesign; every change below is
+additive to the existing architecture.
+
+**Added**:
+
+- **Per-area AI/review counts** on the Inspection Overview area cards
+  (`InspectionQueueScreen`) — real, count-based, never a fake `0/0`.
+- **Real connectivity detection** — new `ConnectivityService`
+  abstraction (`lib/core/inspection/services/connectivity_service.dart`),
+  implemented via `connectivity_plus` in
+  `lib/data/remote/connectivity_plus_service.dart` (the only file that
+  imports it — enforced by the architecture boundary test). Used as a
+  fast-path gate right before an AI upload attempt (a fresh
+  `checkStatus()` call, not a cached value) and to auto-resume queued
+  AI work the moment connectivity returns, reusing the existing
+  idempotency guarantees — no duplicate classifications, ever. Device
+  connectivity is explicitly documented as not the same as working
+  internet access; a real request failure is still the ultimate source
+  of truth.
+- **Visible sync state on Inspection Overview**, plus a real
+  "N items waiting" count (evidence not yet synced) on both the
+  dashboard card and the overview app bar, replacing the generic
+  "Pending sync" label when the count is known.
+- **Friendlier sync failure feedback**: "We couldn't sync some
+  changes. Your inspection is still saved on this device." with a
+  Retry action, replacing a raw `result.outcome.name`/message string.
+- **Area notes** (`Section.note`) and **inspection notes**
+  (`InspectionSession.inspectionNote`) — optional, contextual, never
+  defects, never sent through AI classification. Editable from the
+  area screen and the Inspection Overview app bar respectively; both
+  appear in the generated report (area note under that area's heading,
+  inspection note in the report summary).
+- **Report Details** (`ReportDetailsScreen`) — a confirm/edit step for
+  the report's cover-page metadata, reached from the Report screen,
+  without returning to Property Details. Stored as a new
+  `ReportMetadata` value, deliberately **separate** from
+  `PropertyDetails` (the original setup record) so confirming/editing
+  what appears on a report can never corrupt the inspection's own
+  setup data. The PDF now uses `reportMetadata` when present, falling
+  back to `PropertyDetails`, then the property type label.
+- **Explicit "Completed" lifecycle status** — the dashboard pill now
+  distinguishes In Progress / AI Processing / Report Ready / Completed
+  instead of a binary Completed/Unfinished; only `reported` (an actual
+  report exists) reads "Completed". An inline warning — "This
+  inspection is completed. Changes may require a new report version."
+  — appears on Inspection Overview when resuming a `reported` session;
+  nothing is blocked or silently overwritten.
+
+**Database**: schema v7 -> v8, strictly additive (`reportMetadataJson`
++ `inspectionNote` on sessions, `note` on sections) — see
+`test/data/database_migration_test.dart` for the v7->v8 upgrade
+coverage.
+
+**Tests**: net +14 test cases (per-area progress rendering, the
+connectivity abstraction's online/offline/unknown matrix, the offline-
+save-then-reconnect-resume integration test, area/inspection-note
+persistence, report-metadata precedence over property details, the
+explicit lifecycle-status pill, and v7->v8 migration coverage). Full
+suite: 235 passing, 0 failing; Functions unaffected (57 passing,
+unchanged — no backend code was touched this pass).
+
+**A genuine bug caught and fixed while implementing this**:
+`isOnlineForAiProvider` originally read sign-in state only via the
+async `authStateProvider` stream, which can still be `AsyncLoading`
+(momentarily unresolved) in the exact window right after a session is
+created and a finding is immediately saved — misreading "not yet
+resolved" as "signed out" and therefore "offline". Fixed by falling
+back to the synchronous, always-current `authServiceProvider.
+currentUser` getter whenever the stream hasn't resolved yet. Caught by
+`test/features/connectivity_ai_resume_test.dart` during development,
+not by production usage.
+
+**Known limitation carried forward from this pass's own implementation**:
+`tester.runAsync()` is required in any `testWidgets` test that mixes
+real async provider/repository work with widget pumping — the fake-time
+test binding otherwise stalls indefinitely on real `Future`/`Timer`
+completion (discovered writing
+`test/inspection_queue_screen_test.dart`; no such issue exists in the
+codebase's many plain `test()`-based provider tests, which run in real
+async already).
+
+### Manual E2E additions for this pass
+
+1. **Per-area progress.** Open Inspection Overview with a mix of
+   zero-finding and multi-finding areas; confirm each card's AI/review
+   lines match reality and a zero-finding area reads "No findings"/"Not
+   required" rather than "0/0".
+2. **Real offline behavior.** Turn on airplane mode, save a finding,
+   confirm it stays "Waiting for connection" (never briefly flashes
+   "AI analysing"), turn airplane mode off, and confirm it resumes and
+   completes without any manual retry.
+3. **Sync item count.** With several unsynced photos, confirm the
+   dashboard card and Inspection Overview both show the same real "N
+   items waiting" count, and that it reaches 0 after a successful sync.
+4. **Report Details round-trip.** From the Report screen, open Report
+   Details, change the title/client, save, generate the report, and
+   confirm the PDF cover page reflects the edited values — while
+   Property Details (checked separately, e.g. by returning to a fresh
+   New Inspection flow) is unaffected.
+5. **Area/inspection notes in the PDF.** Add a note to one area and an
+   inspection-level note, generate the report, and confirm both appear
+   in the expected places (area heading; report summary).
+6. **Completed-inspection warning.** Resume an inspection that already
+   has a generated report, add or edit a finding, and confirm the
+   "changes may require a new report version" banner is visible before
+   any edit is made (not just after).

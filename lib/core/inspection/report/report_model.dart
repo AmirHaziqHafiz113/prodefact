@@ -34,11 +34,16 @@ class ReportAreaSection {
     required this.name,
     required this.isPlumbing,
     this.findings = const [],
+    this.note,
   });
 
   final String name;
   final bool isPlumbing;
   final List<ReportFinding> findings;
+
+  /// The area's contextual note (`Section.note`), if any — rendered
+  /// under this area's heading, distinct from any finding.
+  final String? note;
 }
 
 /// A fully resolved, print-ready representation of one inspection —
@@ -64,6 +69,8 @@ class ReportModel {
     this.unitNumber,
     this.clientName,
     this.inspectorName,
+    this.reportDate,
+    this.inspectionNote,
   });
 
   final String sessionId;
@@ -79,8 +86,9 @@ class ReportModel {
   /// This report's version number — see `Report.version`.
   final int version;
 
-  // ---- property/report metadata (from `PropertyDetails`) — all null
-  // for a session with none captured (schema v6 and earlier); the
+  // ---- property/report metadata (from the inspector-confirmed
+  // `ReportMetadata`, falling back to `PropertyDetails`) — all null for
+  // a session with neither captured (schema v6 and earlier); the
   // renderer falls back to [propertyTypeLabel] in that case.
   final String? propertyTitle;
   final String? propertyAddress;
@@ -89,4 +97,13 @@ class ReportModel {
   final String? unitNumber;
   final String? clientName;
   final String? inspectorName;
+
+  /// The confirmed report date (distinct from [generatedAt], the actual
+  /// render timestamp) — see `ReportMetadata.reportDate`.
+  final DateTime? reportDate;
+
+  /// The whole-inspection contextual note (`InspectionSession.
+  /// inspectionNote`), if any — rendered in the report's summary/
+  /// information section.
+  final String? inspectionNote;
 }

@@ -114,6 +114,7 @@ class DriftInspectionRepository implements InspectionRepository {
             orderIndex: orderIndex,
             createdAt: timestamp,
             updatedAt: timestamp,
+            note: Value(section.note),
           ),
         );
   }
@@ -158,6 +159,7 @@ class DriftInspectionRepository implements InspectionRepository {
             elements: decodeElements(row.elementsJson),
             isPlumbing: row.isPlumbing,
             isIncluded: row.isIncluded,
+            note: row.note,
           ),
         )
         .toList();
@@ -253,7 +255,41 @@ class DriftInspectionRepository implements InspectionRepository {
               version: reportRow.version,
             ),
       propertyDetails: _propertyDetailsFromRow(sessionRow),
+      reportMetadata: _reportMetadataFromJson(sessionRow.reportMetadataJson),
+      inspectionNote: sessionRow.inspectionNote,
     );
+  }
+
+  ReportMetadata? _reportMetadataFromJson(String? json) {
+    if (json == null) return null;
+    final decoded = jsonDecode(json) as Map<String, dynamic>;
+    DateTime? parseDate(String? value) =>
+        value == null ? null : DateTime.parse(value);
+    return ReportMetadata(
+      title: decoded['title'] as String,
+      projectName: decoded['projectName'] as String?,
+      address: decoded['address'] as String?,
+      blockTower: decoded['blockTower'] as String?,
+      unitNumber: decoded['unitNumber'] as String?,
+      clientName: decoded['clientName'] as String?,
+      inspectorName: decoded['inspectorName'] as String?,
+      inspectionDate: parseDate(decoded['inspectionDate'] as String?),
+      reportDate: parseDate(decoded['reportDate'] as String?),
+    );
+  }
+
+  String _reportMetadataToJson(ReportMetadata metadata) {
+    return jsonEncode({
+      'title': metadata.title,
+      'projectName': metadata.projectName,
+      'address': metadata.address,
+      'blockTower': metadata.blockTower,
+      'unitNumber': metadata.unitNumber,
+      'clientName': metadata.clientName,
+      'inspectorName': metadata.inspectorName,
+      'inspectionDate': metadata.inspectionDate?.toIso8601String(),
+      'reportDate': metadata.reportDate?.toIso8601String(),
+    });
   }
 
   PropertyDetails _propertyDetailsFromRow(InspectionSessionRow row) {
@@ -321,6 +357,15 @@ class DriftInspectionRepository implements InspectionRepository {
       'GROUP BY session_id',
       sessionIds,
     );
+    final pendingSync = await _countPerSession(
+      'SELECT f.session_id as session_id, COUNT(*) as c '
+      'FROM evidence_rows e '
+      'JOIN finding_rows f ON f.id = e.finding_id '
+      'WHERE f.session_id IN (${_placeholders(sessionIds.length)}) '
+      "AND e.sync_status != 'synced' "
+      'GROUP BY f.session_id',
+      sessionIds,
+    );
 
     return rows
         .map(
@@ -337,6 +382,7 @@ class DriftInspectionRepository implements InspectionRepository {
             aiProcessedFindingsCount: processed[row.id] ?? 0,
             aiPendingReviewCount: pendingReview[row.id] ?? 0,
             aiFailedFindingsCount: failed[row.id] ?? 0,
+            pendingSyncCount: pendingSync[row.id] ?? 0,
             propertyTitle: row.propertyTitle,
             propertyAddress: row.propertyAddress,
             unitNumber: row.unitNumber,
@@ -638,6 +684,27 @@ class DriftInspectionRepository implements InspectionRepository {
   }
 
   static const _localProfileId = 'local';
+
+  @override
+  Future<void> saveReportMetadata(
+    String sessionId,
+    ReportMetadata metadata,
+  ) async {
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(
+        reportMetadataJson: Value(_reportMetadataToJson(metadata)),
+      ),
+    );
+  }
+
+  @override
+  Future<void> saveInspectionNote(String sessionId, String? note) async {
+    await (_db.update(_db.inspectionSessionRows)
+          ..where((t) => t.id.equals(sessionId)))
+        .write(InspectionSessionRowsCompanion(inspectionNote: Value(note)));
+  }
 
   Future<void> _touchSession(String sessionId, DateTime timestamp) {
     return (_db.update(_db.inspectionSessionRows)

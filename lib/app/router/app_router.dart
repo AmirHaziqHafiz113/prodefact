@@ -11,6 +11,7 @@ import '../../features/home_inspection/presentation/screens/inspection_sessions_
 import '../../features/home_inspection/presentation/screens/profile_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_details_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
+import '../../features/home_inspection/presentation/screens/report_details_screen.dart';
 import '../../features/home_inspection/presentation/screens/report_screen.dart';
 import '../../features/home_inspection/presentation/screens/review_setup_screen.dart';
 import 'go_router_refresh_stream.dart';
@@ -106,6 +107,10 @@ GoRouter buildAppRouter(WidgetRef ref) {
       GoRoute(
         path: ReportScreen.routePath,
         builder: (context, state) => const ReportScreen(),
+      ),
+      GoRoute(
+        path: ReportDetailsScreen.routePath,
+        builder: (context, state) => const ReportDetailsScreen(),
       ),
     ],
   );

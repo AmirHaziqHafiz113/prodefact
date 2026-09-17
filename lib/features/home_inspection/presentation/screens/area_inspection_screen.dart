@@ -68,7 +68,20 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text(section.name)),
+      appBar: AppBar(
+        title: Text(section.name),
+        actions: [
+          IconButton(
+            tooltip: section.note == null ? 'Add area note' : 'Edit area note',
+            icon: Icon(
+              section.note == null
+                  ? Icons.note_add_outlined
+                  : Icons.sticky_note_2,
+            ),
+            onPressed: () => _editAreaNote(context, ref, section),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
@@ -85,6 +98,35 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 icon: Icons.plumbing_outlined,
                 foreground: AppColors.plumbing,
                 background: AppColors.plumbingBg,
+              ),
+            ),
+          if (section.note != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.sticky_note_2_outlined,
+                      size: 16,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        section.note!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           Text(
@@ -177,6 +219,41 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
       photo: photo,
       note: result.note,
     );
+  }
+
+  Future<void> _editAreaNote(
+    BuildContext context,
+    WidgetRef ref,
+    Section section,
+  ) async {
+    final controller = TextEditingController(text: section.note ?? '');
+    final newNote = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Area note'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Note',
+            hintText: 'e.g. "Ponding test started at 10:15 AM."',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newNote == null) return;
+    ref.read(activeSessionProvider.notifier).setAreaNote(section.id, newNote);
   }
 }
 

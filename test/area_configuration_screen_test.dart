@@ -290,6 +290,6 @@ void main() {
       navigator.pop();
     }
     await tester.pumpAndSettle();
-    expect(find.text('Unfinished'), findsOneWidget);
+    expect(find.text('In Progress'), findsOneWidget);
   });
 }

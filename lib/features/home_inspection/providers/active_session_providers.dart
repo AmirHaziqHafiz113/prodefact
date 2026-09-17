@@ -68,7 +68,27 @@ final activeSessionErrorProvider =
 /// Null until a session is started ([startNew]) or resumed ([resume]).
 class ActiveInspectionSession extends Notifier<InspectionSession?> {
   @override
-  InspectionSession? build() => null;
+  InspectionSession? build() {
+    // Auto-resume: the moment real device connectivity transitions to
+    // online, re-attempt every queued/failed finding — see
+    // `processQueuedAiClassifications`, which is already idempotent
+    // (an in-flight guard plus a deterministic suggestion id) and only
+    // ever touches findings not already in a terminal state, so this
+    // can safely fire on every reconnect without risking a duplicate
+    // classification or finding. Only relevant once Firebase is
+    // configured — local-only/demo mode never needs connectivity at
+    // all (AI runs synchronously, offline, via the fake service).
+    if (ref.watch(firebaseReadyProvider)) {
+      ref.listen(connectivityStatusProvider, (previous, next) {
+        final wasOnline = previous?.value == ConnectivityStatus.online;
+        final isOnlineNow = next.value == ConnectivityStatus.online;
+        if (!wasOnline && isOnlineNow) {
+          unawaited(processQueuedAiClassifications());
+        }
+      });
+    }
+    return null;
+  }
 
   InspectionRepository get _repository =>
       ref.read(inspectionRepositoryProvider);
@@ -259,6 +279,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     _updateSections([
       ...session.sections,
       HomeInspectionConfig.customSection(trimmed),
+    ]);
+  }
+
+  /// Records a contextual note for one area — not a defect, never sent
+  /// through AI classification. Pass an empty/blank string (or null) to
+  /// clear it.
+  void setAreaNote(String sectionId, String? note) {
+    final session = state;
+    if (session == null) return;
+    final trimmed = note?.trim();
+    final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _updateSections([
+      for (final section in session.sections)
+        if (section.id == sectionId)
+          section.copyWith(note: normalized, clearNote: normalized == null)
+        else
+          section,
     ]);
   }
 
@@ -733,6 +770,24 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           // (not signed in) until the inspector signs in.
           return;
         }
+        // A fresh check right now, not the (occasionally momentarily
+        // stale, right after a reconnect event) cached stream value —
+        // this is the one place correctness actually matters, since a
+        // wrong "online" read here would otherwise cost an attempted
+        // (and safely-failed) upload rather than just a UI label.
+        final connectivity = await ref
+            .read(connectivityServiceProvider)
+            .checkStatus();
+        if (!ref.mounted) return;
+        if (connectivity == ConnectivityStatus.offline) {
+          // Definitively offline (real device connectivity, not just a
+          // proxy) — stays `queued` without ever showing `uploading`/
+          // `analyzing`. A genuine request failure despite a
+          // "connected"/unknown reading is still handled below by the
+          // sync try/catch — this is only a fast-path for the common
+          // case.
+          return;
+        }
         _setFindingAiStatusLocal(findingId, AiFindingStatus.uploading);
         unawaited(
           _repository.setFindingAiStatus(
@@ -977,6 +1032,49 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       _logAnalytics(AnalyticsEvent.aiReviewCompleted);
     }
     ref.invalidate(sessionSummariesProvider);
+  }
+
+  // ---- notes / report metadata (P0 workflow-closure pass) ----
+
+  /// Records the whole-inspection contextual note. Pass null/blank to
+  /// clear it. Not a defect, never sent through AI classification.
+  void setInspectionNote(String? note) {
+    final session = state;
+    if (session == null) return;
+    final trimmed = note?.trim();
+    final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    state = session.copyWith(
+      inspectionNote: normalized,
+      clearInspectionNote: normalized == null,
+      updatedAt: DateTime.now(),
+    );
+    unawaited(
+      _persist(
+        () => _repository.saveInspectionNote(session.id, normalized),
+        previous: session,
+        action: 'update inspection note',
+      ),
+    );
+  }
+
+  /// Confirms/edits the report's cover-page metadata (the Report
+  /// Details step) — deliberately never touches [PropertyDetails], the
+  /// original New Inspection setup record; see `ReportMetadata`'s doc
+  /// comment.
+  void setReportMetadata(ReportMetadata metadata) {
+    final session = state;
+    if (session == null) return;
+    state = session.copyWith(
+      reportMetadata: metadata,
+      updatedAt: DateTime.now(),
+    );
+    unawaited(
+      _persist(
+        () => _repository.saveReportMetadata(session.id, metadata),
+        previous: session,
+        action: 'update report details',
+      ),
+    );
   }
 
   // ---- report generation (Phase 7) ----

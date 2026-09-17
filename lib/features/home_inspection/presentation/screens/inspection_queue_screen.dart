@@ -21,6 +21,8 @@ class InspectionQueueScreen extends ConsumerWidget {
     final queue = ref.watch(inspectionQueueProvider);
     final statuses = ref.watch(sectionStatusesProvider);
     final findings = ref.watch(inspectionFindingsProvider);
+    final suggestions =
+        ref.watch(activeSessionProvider)?.aiSuggestions ?? const [];
     final canComplete = ref.watch(isPhysicalInspectionCompleteProvider);
 
     final completedCount = queue
@@ -33,88 +35,183 @@ class InspectionQueueScreen extends ConsumerWidget {
     final nextArea = queue.firstWhereOrNullStatus(statuses);
     final remainingCount = queue.length - completedCount;
 
+    final activeSession = ref.watch(activeSessionProvider);
+    final pendingSyncCount = activeSession == null
+        ? 0
+        : activeSession.findings
+              .expand((f) => f.evidence)
+              .where((e) => e.syncStatus != SyncStatus.synced)
+              .length;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Physical Inspection')),
+      appBar: AppBar(
+        title: const Text('Physical Inspection'),
+        actions: [
+          if (activeSession != null)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: Center(
+                child: SyncStatusPill(
+                  status: activeSession.syncStatus,
+                  pendingCount: pendingSyncCount,
+                  dense: true,
+                ),
+              ),
+            ),
+          IconButton(
+            tooltip: activeSession?.inspectionNote == null
+                ? 'Add inspection note'
+                : 'Edit inspection note',
+            icon: Icon(
+              activeSession?.inspectionNote == null
+                  ? Icons.note_add_outlined
+                  : Icons.sticky_note_2,
+            ),
+            onPressed: () => _editInspectionNote(context, ref, activeSession),
+          ),
+        ],
+      ),
       body: queue.isEmpty
           ? const AppEmptyView(
               icon: Icons.checklist_outlined,
               title: 'No areas to inspect.',
               message: 'Go back and include at least one area.',
             )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                96,
-              ),
+          : Column(
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AppProgressBar(
-                          value: queue.isEmpty
-                              ? 0
-                              : completedCount / queue.length,
-                          label: 'Inspection progress',
-                          valueLabel:
-                              '$completedCount of ${queue.length} '
-                              'areas',
+                if (activeSession?.status == InspectionStatus.reported)
+                  const AppInlineWarningBanner(
+                    message:
+                        'This inspection is completed. Changes may require '
+                        'a new report version.',
+                  ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      96,
+                    ),
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppProgressBar(
+                                value: queue.isEmpty
+                                    ? 0
+                                    : completedCount / queue.length,
+                                label: 'Inspection progress',
+                                valueLabel:
+                                    '$completedCount of ${queue.length} '
+                                    'areas',
+                              ),
+                              const SizedBox(height: AppSpacing.lg),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatTile(
+                                      icon: Icons.pending_actions_outlined,
+                                      label: '$remainingCount',
+                                      caption: 'Remaining',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _StatTile(
+                                      icon: Icons.report_gmailerrorred_outlined,
+                                      label: '${findings.length}',
+                                      caption: 'Findings',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _StatTile(
+                                      icon: Icons.photo_camera_outlined,
+                                      label:
+                                          '${findings.fold<int>(0, (sum, f) => sum + f.evidence.length)}',
+                                      caption: 'Photos',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: AppSpacing.lg),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _StatTile(
-                                icon: Icons.pending_actions_outlined,
-                                label: '$remainingCount',
-                                caption: 'Remaining',
+                      ),
+                      if (activeSession?.inspectionNote != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.sticky_note_2_outlined,
+                                size: 16,
+                                color: AppColors.textMuted,
                               ),
-                            ),
-                            Expanded(
-                              child: _StatTile(
-                                icon: Icons.report_gmailerrorred_outlined,
-                                label: '${findings.length}',
-                                caption: 'Findings',
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  activeSession!.inspectionNote!,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               ),
-                            ),
-                            Expanded(
-                              child: _StatTile(
-                                icon: Icons.photo_camera_outlined,
-                                label:
-                                    '${findings.fold<int>(0, (sum, f) => sum + f.evidence.length)}',
-                                caption: 'Photos',
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: AppSpacing.lg),
+                      const AppSectionHeader(title: 'Areas'),
+                      for (final section in queue)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: _AreaQueueCard(
+                            section: section,
+                            status:
+                                statuses[section.id] ??
+                                SectionStatus.notStarted,
+                            isUpNext: section.id == nextArea?.id,
+                            findingCount: findings
+                                .where((f) => f.sectionId == section.id)
+                                .length,
+                            evidenceCount: findings
+                                .where((f) => f.sectionId == section.id)
+                                .fold<int>(
+                                  0,
+                                  (sum, f) => sum + f.evidence.length,
+                                ),
+                            aiProcessing: AiProcessingProgress.forFindings(
+                              findings
+                                  .where((f) => f.sectionId == section.id)
+                                  .toList(),
+                            ),
+                            review: AiReviewProgress.forSuggestions(
+                              suggestions
+                                  .where(
+                                    (s) => findings.any(
+                                      (f) =>
+                                          f.id == s.findingId &&
+                                          f.sectionId == section.id,
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            onTap: () => context.push(
+                              '/home-inspection/inspection/${section.id}',
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const AppSectionHeader(title: 'Areas'),
-                for (final section in queue)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: _AreaQueueCard(
-                      section: section,
-                      status: statuses[section.id] ?? SectionStatus.notStarted,
-                      isUpNext: section.id == nextArea?.id,
-                      findingCount: findings
-                          .where((f) => f.sectionId == section.id)
-                          .length,
-                      evidenceCount: findings
-                          .where((f) => f.sectionId == section.id)
-                          .fold<int>(0, (sum, f) => sum + f.evidence.length),
-                      onTap: () => context.push(
-                        '/home-inspection/inspection/${section.id}',
-                      ),
-                    ),
-                  ),
               ],
             ),
       bottomNavigationBar: SafeArea(
@@ -189,6 +286,8 @@ class _AreaQueueCard extends StatelessWidget {
     required this.isUpNext,
     required this.findingCount,
     required this.evidenceCount,
+    required this.aiProcessing,
+    required this.review,
     required this.onTap,
   });
 
@@ -197,6 +296,12 @@ class _AreaQueueCard extends StatelessWidget {
   final bool isUpNext;
   final int findingCount;
   final int evidenceCount;
+
+  /// Per-area AI processing progress — see `AiProcessingProgress`.
+  /// Distinct from [status] (physical) and [review] (inspector review):
+  /// the three axes are never combined into one misleading number.
+  final AiProcessingProgress aiProcessing;
+  final AiReviewProgress review;
   final VoidCallback onTap;
 
   @override
@@ -281,6 +386,23 @@ class _AreaQueueCard extends StatelessWidget {
                         ],
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      aiProcessing.totalEligible == 0
+                          ? 'AI: No findings'
+                          : 'AI: ${aiProcessing.processed}/'
+                                '${aiProcessing.totalEligible} analysed',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: AppColors.textMuted),
+                    ),
+                    Text(
+                      aiProcessing.totalEligible == 0
+                          ? 'Review: Not required'
+                          : 'Review: ${review.resolved}/${review.total} '
+                                'reviewed',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: AppColors.textMuted),
+                    ),
                   ],
                 ),
               ),
@@ -323,4 +445,40 @@ class _StatusChip extends StatelessWidget {
     };
     return StatusPill(label: label, icon: icon, foreground: fg, background: bg);
   }
+}
+
+Future<void> _editInspectionNote(
+  BuildContext context,
+  WidgetRef ref,
+  InspectionSession? session,
+) async {
+  if (session == null) return;
+  final controller = TextEditingController(text: session.inspectionNote ?? '');
+  final newNote = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Inspection note'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          labelText: 'Note',
+          hintText: 'e.g. "Unit occupied during inspection."',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (newNote == null) return;
+  ref.read(activeSessionProvider.notifier).setInspectionNote(newNote);
 }

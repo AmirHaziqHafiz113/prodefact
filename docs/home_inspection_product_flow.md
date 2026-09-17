@@ -1,5 +1,9 @@
 # Home Inspection Product Flow (Consolidation Pass)
 
+> Updated by the P0 workflow-closure pass (schema v8) — see "P0
+> closure pass" near the end for exactly what changed in that pass; the
+> body of this document already reflects the current state.
+
 This is the canonical, end-to-end description of ProDefact's Home
 Inspection product — the source of truth for how the screens/workflows
 fit together as one coherent lifecycle. It supersedes
@@ -30,7 +34,7 @@ App launch
   -> Physical Area Inspection
        -> Take Defect Photo -> Preview -> optional note -> Save Finding
        -> Add Another Photo (same finding, more evidence)
-       -> Area Notes / Inspection Notes (P1 — see below)
+       -> Area Notes / Inspection Notes (contextual, never a defect)
   -> Background AI Classification (progressive, per finding)
   -> Area Completion -> Continue Property
   -> Physical Inspection Complete
@@ -141,11 +145,33 @@ along the new, longer setup path in
 
 ## 4. Inspection Overview
 
-`InspectionQueueScreen` (`/home-inspection/inspection`) — unchanged
-this pass. Plumbing areas are listed first with the explanatory pill
-("Plumbing area — inspect first"); each area card shows physical status
-plus finding/photo counts. (AI/review counts per area card are not yet
-surfaced here — see "P1 backlog" below.)
+`InspectionQueueScreen` (`/home-inspection/inspection`). Plumbing areas
+are listed first with the explanatory pill ("Plumbing area — inspect
+first"); each area card shows physical status plus finding/photo
+counts.
+
+**Per-area AI/review counts (new this pass)**: each card now also shows
+two more real, independent lines — `AI: 6/8 analysed` and
+`Review: 4/8 reviewed` — computed by scoping `AiProcessingProgress`/
+`AiReviewProgress` to that area's own findings/suggestions. A
+zero-finding area reads `AI: No findings` / `Review: Not required`
+rather than a misleading `0/0`. Physical, AI, and review are still
+three genuinely independent counts, never combined into one number —
+see `test/inspection_queue_screen_test.dart`.
+
+**Sync status (new this pass)**: the app bar shows the active session's
+sync pill (`Synced` / `N items waiting` / `Local only`), with the same
+real pending-item count described in §2. A warning banner appears here
+— *"This inspection is completed. Changes may require a new report
+version."* — whenever the session's status is already `reported` (see
+§11, "Completed inspection lifecycle").
+
+**Area/Inspection notes (new this pass)**: an app-bar icon opens an
+"Inspection note" editor (`ActiveInspectionSession.setInspectionNote`);
+each area screen (§5) has the equivalent "Area note" action. Both are
+optional, contextual, and never sent through AI classification —
+persisted on `Section.note`/`InspectionSession.inspectionNote`
+respectively, and surfaced in the generated report (see §10).
 
 ## 5. Physical Area Inspection — camera-first capture
 
@@ -262,40 +288,108 @@ unchanged) — no historical v1/v2/v3 PDF archive. That would be a
 follow-up storage change, not a data-model one (the version number is
 already durable).
 
-### Report metadata (new this pass)
+### Report metadata confirmation (new this pass)
 
-The PDF cover page now uses the captured `PropertyDetails` (title,
-project/development, block/unit, address, client, inspector) when
-present, falling back to the property type label for a session with no
-property details (schema v6 and earlier) — see
-`lib/data/report/pdf_report_renderer.dart`. There is no separate
-"confirm metadata" dialog before generating; the report always reflects
-whatever was captured during Property Details setup — editing it after
-generation is future work (see P1 below).
+`ReportDetailsScreen` (`/home-inspection/report-details`, reached via
+"Report Details" in the Report screen's app bar) lets the inspector
+review/edit the report's cover-page metadata — title, project,
+address, block/unit, client, inspector, inspection date, and a
+separate **report date** — right before generating, without going back
+to Property Details. Saving writes a `ReportMetadata` (see
+`lib/core/inspection/entities/report_metadata.dart`), stored
+**separately** from `PropertyDetails` on
+`InspectionSession.reportMetadata` — editing it can never corrupt the
+original New Inspection setup record. `buildReportModel` prefers
+`reportMetadata` when present, falling back to `PropertyDetails`, then
+to the property type label for a session with neither (schema v6 and
+earlier). The generated PDF also now includes the whole-inspection note
+in its summary and each area's note under that area's heading, when
+present — see `lib/data/report/pdf_report_renderer.dart`.
 
 ## 11. Completed Inspection / History
 
-Unchanged data model this pass — `InspectionSessionsScreen`'s
-"Completed" section, plus the dashboard search/filter above, is how a
-completed inspection is found again. Full detail (evidence, AI
-original-vs-final, report) is reached by resuming the session as
-before.
+**Explicit lifecycle status (new this pass)**: a session's dashboard
+pill (`_LifecycleStatusPill`) no longer collapses every non-`inProgress`
+state into one "Completed" label. Each `InspectionStatus` value gets
+its own honest label:
+
+```
+inProgress                    -> In Progress
+physicalInspectionComplete    -> AI Processing
+aiReviewComplete              -> Report Ready
+reported                      -> Completed
+```
+
+Only `reported` (a report has actually been generated) reads
+"Completed" — see `test/inspection_sessions_screen_test.dart`, "the
+dashboard pill only reads 'Completed' once a report has actually been
+generated." The dashboard's coarser Active/Recent grouping
+(`InspectionSessionSummary.isComplete`, `status != inProgress`) is
+unchanged, since that's a pre-existing Phase 4 contract several other
+tests already depend on — only the *label* on each card became more
+precise, not the grouping.
+
+**Editing a completed inspection**: `InspectionQueueScreen` shows an
+inline warning — *"This inspection is completed. Changes may require a
+new report version."* — whenever the resumed session's status is
+already `reported` (see §4). Nothing is blocked or silently modified;
+the inspector can still add/edit findings, and doing so simply means
+the next `Generate Report` produces the next version (§10, "Report
+versioning") rather than silently overwriting the existing one.
+
+`InspectionSessionsScreen`'s "Recent" section (renamed this pass — see
+§2), plus the dashboard search/filter, is how a completed inspection is
+found again. Full detail (evidence, AI original-vs-final, report) is
+reached by resuming the session as before — unchanged data model.
 
 ## Offline / Sync / Error Handling
 
-Unchanged this pass — see `docs/production_readiness.md`
-("Offline-first guarantees", "Durable write safety", "Error handling")
-and `docs/firebase.md` ("Sync lifecycle"). Every new screen this pass
-(Property Details, Review Setup, Profile) reads/writes only through the
-same `NewInspectionDraftNotifier`/`ActiveInspectionSession`/
+`docs/production_readiness.md` ("Offline-first guarantees", "Durable
+write safety", "Error handling") and `docs/firebase.md` ("Sync
+lifecycle") remain authoritative. Every new screen this pass (Property
+Details, Review Setup, Profile, Report Details) reads/writes only
+through the same `NewInspectionDraftNotifier`/`ActiveInspectionSession`/
 `InspectionRepository` seams every existing screen already used, so
 none of the offline-first guarantees needed to change.
 
+### Real connectivity detection (new this pass)
+
+`ConnectivityService` (`lib/core/inspection/services/connectivity_service.dart`)
+is a new abstraction — `ConnectivityStatus { online, offline, unknown }`
+— implemented by `ConnectivityPlusService`
+(`lib/data/remote/connectivity_plus_service.dart`, the only file that
+imports `connectivity_plus`; enforced by
+`test/architecture/repository_boundary_test.dart`). It replaces the old
+signed-in-only proxy:
+
+- **Gating**: right before attempting to upload/classify a finding,
+  `ActiveInspectionSession._enqueueAiClassification` awaits a **fresh**
+  `ConnectivityService.checkStatus()` call (not a cached stream value —
+  see the code comment on why) and stays `queued` (never shows
+  `uploading`/`analyzing`) when it reads `offline`. An `unknown`
+  reading is treated as online rather than blocking work on an
+  ambiguous signal, and a genuine request failure despite a
+  "connected"/`unknown` reading is still handled by the existing sync
+  try/catch fallback — connectivity is a fast-path hint, never the sole
+  source of truth (device connectivity ≠ working internet).
+- **Auto-resume**: `ActiveInspectionSession.build()` listens to
+  `connectivityStatusProvider` (a live stream) and calls the existing
+  `processQueuedAiClassifications()` the moment the signal transitions
+  to `online` — reusing its pre-existing idempotency guarantees (an
+  in-flight guard plus a deterministic suggestion id), so a flaky
+  reconnect signal firing twice can never duplicate a classification or
+  a finding. See `test/features/connectivity_ai_resume_test.dart`.
+- **Local-only/demo mode** (`firebaseReadyProvider` false) never
+  touches connectivity at all — AI runs synchronously offline via the
+  fake service regardless, exactly as before.
+
 ## Schema
 
-Drift schema bumped **v6 -> v7**, strictly additive (see the doc
-comment on `AppDatabase` in `lib/data/local/database.dart` for the
-authoritative version history):
+Drift schema bumped **v6 -> v8** across this pass and the prior one,
+strictly additive throughout (see the doc comment on `AppDatabase` in
+`lib/data/local/database.dart` for the authoritative version history).
+
+**v7** (prior pass):
 
 - Nine nullable property-details columns + `inspectionDate` on
   `InspectionSessionRows`.
@@ -306,7 +400,30 @@ Covered by `test/data/database_migration_test.dart`: v5->v7 and v6->v7
 upgrade paths (including the specific "table already existed" edge
 case the v6 migration already had to handle), plus a fresh install.
 
-## P1 backlog (documented, not built this pass)
+**v8** (this pass):
+
+- `InspectionSessionRows.reportMetadataJson` (nullable, JSON-encoded
+  `ReportMetadata` — deliberately separate from the v7 property-details
+  columns; see §10) and `InspectionSessionRows.inspectionNote`
+  (nullable).
+- `SectionRows.note` (nullable) — per-area contextual notes.
+
+Covered by `test/data/database_migration_test.dart`: a new v7->v8
+upgrade test (confirms a pre-existing area row survives untouched) and
+the fresh-install test extended to check the v8 columns.
+
+## P0 items closed this pass (were P1 backlog)
+
+- **Per-area AI/review counts** — done, §4.
+- **Real connectivity detection** — done, "Real connectivity detection"
+  above.
+- **Area notes / inspection notes** — done, §4/§10 (schema v8).
+- **Visible sync state on Inspection Overview** — done, §4.
+- **Report metadata confirmation before generating** — done, §10
+  (`ReportDetailsScreen`, schema v8 `ReportMetadata`).
+- **Explicit "Completed" lifecycle status** — done, §11.
+
+## P1 backlog (still deferred, documented, not built)
 
 These were explicitly allowed to be partial/deferred per the brief's
 P0/P1/P2 scope, to avoid destabilizing the P0 lifecycle above:
@@ -316,32 +433,15 @@ P0/P1/P2 scope, to avoid destabilizing the P0 lifecycle above:
   path when this is built is a `Finding.kind` (`defect`/`reference`)
   enum reusing the existing capture/evidence plumbing, with
   `isAiEligible` gated to `kind == defect`, rather than a new table.
-- **Area notes / inspection notes**. No field exists yet on `Section`
-  or `InspectionSession` — this is new schema work (an additive
-  `notes` column on each), not a repurposing of an existing field.
-- **Real connectivity detection**. `isOnlineForAiProvider`
-  (`lib/data/remote/remote_providers.dart`) is still a proxy
-  (Firebase-configured-and-signed-in), not real network-reachability
-  detection — see `docs/production_readiness.md` ("Known
-  limitations"). Adding `connectivity_plus` was scoped for this pass
-  but not implemented, to keep the change set focused on lifecycle
-  coherence; it's an isolated, additive change to that one provider
-  when picked up.
+- **Historical report PDF archive**. `Report.version` is tracked and
+  displayed, but only the current version's PDF file is kept on disk —
+  a future pass could keep every version's file (or re-render on
+  demand from a stored `ReportModel` snapshot) rather than just the
+  latest.
 - **Cloud/push-delete sync**. Unchanged and still documented as a
   deliberate scope cut in `docs/production_readiness.md` ("Session
   deletion", "Known limitations") — deleting a session/finding locally
   never deletes previously-synced cloud data.
-- **Per-area AI/review counts on the Inspection Overview screen**. The
-  area card still shows only physical status + finding/photo counts;
-  AI/review status is visible per-finding on the area screen itself and
-  in aggregate on AI Review, just not yet rolled up per-area on the
-  overview list.
-- **Editable report metadata / re-confirm before generating**. The
-  report always uses whatever was captured at Property Details setup
-  time; there's no separate "confirm/edit metadata" step immediately
-  before Generate Report.
-- **Historical report PDF archive**. `Report.version` is tracked and
-  displayed, but only the current version's PDF file is kept on disk.
 
 ## P2 (explicitly out of scope this pass)
 

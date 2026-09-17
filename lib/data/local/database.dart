@@ -56,6 +56,15 @@ part 'database.g.dart';
 ///   single local row) for on-device inspector/company prefill data —
 ///   see `UserProfile`. All additive; no existing column or table is
 ///   altered or dropped.
+/// - v8: (P0 workflow-closure pass) added `InspectionSessionRows.
+///   reportMetadataJson` (nullable, JSON-encoded `ReportMetadata` —
+///   the inspector-confirmed report cover-page values, deliberately
+///   separate from the v7 property-details columns so confirming/
+///   editing report metadata can never corrupt the original New
+///   Inspection setup) and `InspectionSessionRows.inspectionNote`
+///   (nullable). Added `SectionRows.note` (nullable) for per-area
+///   contextual notes. All additive/nullable; no existing data
+///   affected.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -75,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -172,6 +181,17 @@ class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(reportRows, reportRows.version);
         }
         await migrator.createTable(userProfileRows);
+      }
+      if (from < 8) {
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.reportMetadataJson,
+        );
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.inspectionNote,
+        );
+        await migrator.addColumn(sectionRows, sectionRows.note);
       }
     },
   );
