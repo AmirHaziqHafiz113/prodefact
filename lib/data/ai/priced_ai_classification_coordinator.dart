@@ -2,42 +2,39 @@ import 'package:collection/collection.dart';
 
 import '../../core/inspection/inspection_domain.dart';
 
-/// Orchestrates one finding's progressive AI classification: enforces
-/// idempotency (never two concurrent runs for the same finding, never
-/// re-classifying a finding that's already terminal), builds the
-/// structured request from local data, calls the AI backend, validates
-/// its response against the controlled catalogue, and persists the
-/// result — all through the same [InspectionRepository] every other
-/// write in the app goes through, so physical inspection data is never
-/// at risk from an AI failure.
+/// Orchestrates one finding's progressive AI classification through
+/// the **priced** protocol — this is what
+/// `aiClassificationCoordinatorProvider` resolves to since the
+/// commercial pass, replacing the unpriced `classifyFinding` callable
+/// path `DefaultAiClassificationCoordinator` used. See
+/// docs/commercial_model.md ("The estimate -> approval -> reservation
+/// -> settlement protocol").
 ///
-/// Unlike the old whole-session batch coordinator, there is no "AI
-/// timing gate" here at all — this runs the moment it's called
-/// (immediately after a finding is saved with a photo), independent of
-/// whether the rest of the physical inspection is complete. See
+/// Structurally this mirrors `DefaultAiClassificationCoordinator`
+/// closely (same idempotency guard, same session/finding/section
+/// lookup, same catalogue-id defense-in-depth, same persistence) — the
+/// only real difference is the source of the classification:
+/// [BillingService.analyseFinding] (which reserves/settles real
+/// Credits server-side) instead of the unpriced
+/// `AiInspectionService.classifyFinding`. Both coordinator
+/// implementations are kept (rather than merging them with a runtime
+/// flag) so the pre-existing, unpriced `classifyFinding` callable path
+/// stays intact and independently testable — see
 /// `docs/ai_provider_architecture.md`.
-class DefaultAiClassificationCoordinator
-    implements AiClassificationCoordinator {
-  DefaultAiClassificationCoordinator({
+class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
+  PricedAiClassificationCoordinator({
     required InspectionRepository localRepository,
-    required AiInspectionService aiService,
+    required BillingService billingService,
   }) : _local = localRepository,
-       _ai = aiService;
+       _billing = billingService;
 
   final InspectionRepository _local;
-  final AiInspectionService _ai;
+  final BillingService _billing;
 
   /// Guards against two concurrent `classifyFinding` calls for the
-  /// same finding racing each other — e.g. a retry triggered while a
-  /// previous attempt is still in flight. Per-coordinator-instance,
-  /// sufficient since the app only ever holds one via
-  /// `aiClassificationCoordinatorProvider`.
+  /// same finding racing each other.
   final Set<String> _inFlight = {};
 
-  /// Deterministic, not timestamp-based: a retry for the same finding
-  /// always resolves to the same suggestion row (upsert), so a retry
-  /// after a partial failure can never create a second, duplicate
-  /// suggestion for one finding.
   String _suggestionIdFor(String findingId) => 'suggestion_$findingId';
 
   @override
@@ -51,7 +48,7 @@ class DefaultAiClassificationCoordinator
       return const AiClassificationResult.alreadyInFlight();
     }
     try {
-      return await _classifyFinding(sessionId, findingId);
+      return await _classifyFinding(sessionId, findingId, aiLevel);
     } finally {
       _inFlight.remove(key);
     }
@@ -60,6 +57,7 @@ class DefaultAiClassificationCoordinator
   Future<AiClassificationResult> _classifyFinding(
     String sessionId,
     String findingId,
+    AiLevel? requestedLevel,
   ) async {
     final session = await _local.loadSession(sessionId);
     if (session == null) return const AiClassificationResult.sessionNotFound();
@@ -68,11 +66,6 @@ class DefaultAiClassificationCoordinator
     if (finding == null) return const AiClassificationResult.findingNotFound();
     if (!finding.isAiEligible) return const AiClassificationResult.noEvidence();
 
-    // Already settled — never re-run over an inspector's in-progress
-    // review of an existing suggestion. A caller wanting a retry after
-    // `failed` should still reach here (failed is not terminal-safe in
-    // the sense of blocking retry) — only completed/needsReview (which
-    // already has a suggestion row for the inspector to act on) block.
     if (finding.aiStatus == AiFindingStatus.completed ||
         finding.aiStatus == AiFindingStatus.needsReview) {
       return const AiClassificationResult.alreadyInFlight();
@@ -92,9 +85,24 @@ class DefaultAiClassificationCoordinator
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
     );
 
+    final aiLevel = requestedLevel ?? session.selectedAiLevel ?? AiLevel.smart;
+    // A fresh key per attempt: safe to reuse across an in-flight call's
+    // own transport-level hiccups (there are none at this layer — the
+    // callable either succeeds or throws once), and a genuinely new
+    // attempt (auto-requeue after a restart, or an explicit inspector
+    // Retry) always deserves its own — never replays a stale cached
+    // failure. See docs/commercial_model.md.
+    final idempotencyKey =
+        '${findingId}_${DateTime.now().microsecondsSinceEpoch}';
+
     final AiFindingClassification classification;
     try {
-      classification = await _ai.classifyFinding(request);
+      final result = await _billing.analyseFinding(
+        request: request,
+        aiLevel: aiLevel,
+        idempotencyKey: idempotencyKey,
+      );
+      classification = result.classification;
     } catch (error) {
       await _local.setFindingAiStatus(
         session.id,
@@ -105,9 +113,7 @@ class DefaultAiClassificationCoordinator
     }
 
     // Defense in depth: never trust a catalogue id at face value, even
-    // though the backend gateway already validated it — a fake/local
-    // provider or a future bug shouldn't be able to persist a
-    // hallucinated id either.
+    // though the backend gateway already validated it.
     final catalogue = DefectCatalogue.instance;
     final validEntryId =
         classification.catalogueEntryId != null &&
@@ -131,10 +137,6 @@ class DefaultAiClassificationCoordinator
         suggestedConfidence: classification.confidence,
         suggestedShortReason: classification.shortReason,
         suggestedCandidateEntryIds: validCandidates,
-        // A confident match starts out as its own final value —
-        // Accept keeps it; Change/Reject replace it later. A
-        // needs-review finding starts with no final value at all;
-        // the inspector must pick one via the catalogue picker.
         finalCatalogueEntryId: validEntryId,
       ),
     );

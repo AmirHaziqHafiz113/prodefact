@@ -6,6 +6,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
+import '../../providers/user_profile_providers.dart';
 import 'review_setup_screen.dart';
 
 /// New Inspection setup, inserted between Area Configuration and Review
@@ -39,6 +40,9 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
   @override
   Widget build(BuildContext context) {
     final configAsync = ref.watch(commercialConfigProvider);
+    // A best-effort default only — never blocks rendering on this being
+    // ready, and never overrides an explicit choice already made.
+    final profileDefault = ref.watch(userProfileProvider).value?.defaultAiLevel;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Choose AI Plan')),
@@ -52,14 +56,14 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
             onRetry: () => ref.invalidate(commercialConfigProvider),
           ),
           data: (config) {
-            _level ??= config.aiLevels.first.level == AiLevel.smart
-                ? AiLevel.smart
-                : config.aiLevels
-                      .firstWhere(
-                        (l) => l.level == AiLevel.smart,
-                        orElse: () => config.aiLevels.first,
-                      )
-                      .level;
+            _level ??=
+                profileDefault ??
+                config.aiLevels
+                    .firstWhere(
+                      (l) => l.level == AiLevel.smart,
+                      orElse: () => config.aiLevels.first,
+                    )
+                    .level;
             return _buildContent(context, config);
           },
         ),

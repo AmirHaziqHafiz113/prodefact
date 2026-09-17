@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../data/local/database_providers.dart';
@@ -27,6 +26,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _inspectorName = TextEditingController();
   bool _prefilled = false;
   bool _saving = false;
+  AiLevel? _defaultAiLevel;
 
   @override
   void dispose() {
@@ -45,6 +45,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!_prefilled) {
         _companyName.text = profile.companyName ?? '';
         _inspectorName.text = profile.inspectorName ?? '';
+        _defaultAiLevel = profile.defaultAiLevel;
         _prefilled = true;
       }
     });
@@ -83,6 +84,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Inspector name'),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            AppSectionHeader(
+              title: 'AI analysis',
+              subtitle: 'Default quality tier for new inspections',
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            SegmentedButton<AiLevel>(
+              segments: const [
+                ButtonSegment(value: AiLevel.fast, label: Text('Fast')),
+                ButtonSegment(value: AiLevel.smart, label: Text('Smart')),
+                ButtonSegment(value: AiLevel.expert, label: Text('Expert')),
+              ],
+              selected: {_defaultAiLevel ?? AiLevel.smart},
+              onSelectionChanged: (selection) =>
+                  setState(() => _defaultAiLevel = selection.first),
+            ),
             const SizedBox(height: AppSpacing.md),
             FilledButton(
               onPressed: _saving ? null : _save,
@@ -99,10 +116,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               OutlinedButton.icon(
                 icon: const Icon(Icons.logout),
                 label: const Text('Sign out'),
-                onPressed: () async {
-                  await ref.read(authServiceProvider).signOut();
-                  if (context.mounted) context.pop();
-                },
+                onPressed: () => ref.read(authServiceProvider).signOut(),
               ),
             const SizedBox(height: AppSpacing.xl),
             Text(
@@ -126,6 +140,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           UserProfile(
             companyName: orNull(_companyName),
             inspectorName: orNull(_inspectorName),
+            defaultAiLevel: _defaultAiLevel,
           ),
         );
     ref.invalidate(userProfileProvider);

@@ -9,6 +9,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
 
 /// Camera-first physical inspection of a single area: "Take Defect
@@ -489,6 +490,26 @@ class _AiStatusLine extends ConsumerWidget {
           icon: Icons.hourglass_empty,
           color: AppColors.textMuted,
           text: 'Waiting for connection',
+        );
+      case AiFindingStatus.awaitingApproval:
+        return Row(
+          children: [
+            const Expanded(
+              child: _StatusText(
+                icon: Icons.smart_toy_outlined,
+                color: AppColors.textMuted,
+                text: 'Ready to analyse',
+              ),
+            ),
+            TextButton(
+              onPressed: () => showAnalyseApprovalDialog(
+                context: context,
+                ref: ref,
+                findingId: finding.id,
+              ),
+              child: const Text('Analyse'),
+            ),
+          ],
         );
       case AiFindingStatus.uploading:
         return const _StatusText(

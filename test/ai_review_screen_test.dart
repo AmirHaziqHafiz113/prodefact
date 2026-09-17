@@ -39,6 +39,10 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
+  // Auto Analyse on so saving a finding queues AI immediately — this
+  // suite is about AI review, not the separate estimate/approval gate
+  // (covered by `ai_gating_regression_test.dart`).
+  container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
 
   // Add one camera-first finding (with a photo) so there's something
   // for progressive AI to classify.

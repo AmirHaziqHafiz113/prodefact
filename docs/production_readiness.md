@@ -1147,18 +1147,23 @@ async already).
    "changes may require a new report version" banner is visible before
    any edit is made (not just after).
 
-## Commercial layer (backend-only pass)
+## Commercial layer
 
 A commercial layer (AI Credits, Flex Credits, House Pass, wallet
-ledger, sandbox-only payment architecture) was added this pass —
-**backend/Cloud Functions only; see `docs/commercial_model.md` for the
-full design.** No Flutter UI exists yet (no splash/bottom nav/Wallet/
-Top Up/Choose AI Plan screens, no Drift migration, Save Finding still
-behaves exactly as before with no commercial gating). This does not
-change this document's overall pilot-readiness status — it is
-additional scope layered on top of the existing, unaffected inspection
-workflow, not yet exercised end to end. Notable items that don't fit
-neatly into the sections above:
+ledger, sandbox-only payment architecture) was added across two
+passes — backend (`functions/src/billing/`) and Flutter (splash/bottom
+nav/Wallet/Top Up/Choose AI Plan screens, Drift v9, and Save Finding no
+longer auto-queuing AI). See `docs/commercial_model.md` for the full
+design, including its own "What's still needed" list (missing
+`OPENAI_API_KEY`, no House Pass purchase screen, no real payment
+gateway, an explicitly-test House Pass allowance, and no manual/device
+QA pass). This does not change this document's overall pilot-readiness
+status — it is additional scope layered on top of the existing
+inspection workflow, validated via `flutter analyze`/`flutter test`
+(283 tests)/`flutter build ios --simulator --debug`/
+`flutter build apk --debug` and the `functions/` suite, but never a
+real device or a human clicking through the commercial flows. Notable
+items that don't fit neatly into the sections above:
 
 - `analyseFinding` (the priced AI-classification callable) cannot be
   deployed until `OPENAI_API_KEY` is provisioned in Secret Manager for

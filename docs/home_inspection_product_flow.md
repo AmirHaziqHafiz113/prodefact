@@ -217,14 +217,18 @@ controlled 11-main-element / 34-component / 222-defect-entry catalogue
 (`tool/generate_defect_catalogue.py` — counts verified this pass, exact
 match).
 
-**Pending commercial-layer change (backend built, Flutter not yet
-wired up — see `docs/commercial_model.md`).** Save Finding queuing AI
-automatically, as described above, is the behavior this app has today.
-A commercial pass has since built (but not yet integrated into this
-screen) a backend contract where Save Finding stays free/physical-only
-and AI analysis becomes a separate, explicit step: an estimate ("Up to
-N Credits"), inspector approval, then `analyseFinding`. Until that
-Flutter integration lands, this section's description remains accurate.
+**Superseded by the commercial-layer pass — see
+`docs/commercial_model.md`.** Save Finding no longer auto-queues AI.
+The camera-first capture flow above (Take Photo -> Preview -> optional
+note -> Save) is unchanged and remains purely physical/free, but the
+finding now starts `awaitingApproval` (for the default Flex Credits
+mode) rather than `queued`: the inspector taps "Analyse" on the finding
+card, sees a real Credits estimate, and only after approving does
+`analyseFinding` actually run (see `docs/commercial_model.md`, "The
+estimate -> approval -> reservation -> settlement protocol"). An
+inspection with an active House Pass and Auto Analyse enabled can still
+skip the manual tap and queue AI immediately on save, exactly like this
+section originally described — that path is unchanged.
 
 ## 7. Area / Continue Property / Physical Inspection Complete
 

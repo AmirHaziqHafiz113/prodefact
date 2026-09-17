@@ -36,6 +36,7 @@ void main() {
             .read(newInspectionDraftProvider.notifier)
             .startInspection();
         final notifier = container.read(activeSessionProvider.notifier);
+        notifier.setAutoAnalyseEnabled(true);
         final sections = container.read(inspectionQueueProvider);
         // Plumbing areas are ordered first — the first one is a
         // bathroom, which the deterministic fake AI resolves to a real

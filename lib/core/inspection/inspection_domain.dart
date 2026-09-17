@@ -16,6 +16,8 @@ export 'billing/analysis_estimate.dart';
 export 'billing/billing_service.dart';
 export 'billing/commercial_config.dart';
 export 'billing/payment_intent.dart';
+export 'billing/wallet_activity_service.dart';
+export 'billing/wallet_transaction.dart';
 export 'entities/ai_finding_status.dart';
 export 'entities/ai_level.dart';
 export 'entities/ai_review.dart';

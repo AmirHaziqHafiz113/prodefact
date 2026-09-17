@@ -201,4 +201,68 @@ void main() {
       expect(confirmation.newBalance, 3000);
     });
   });
+
+  group('WalletActivityService (loadBalance / loadRecentTransactions)', () {
+    test(
+      'loadBalance matches the balance used for pricing decisions',
+      () async {
+        final service = FakeBillingService(initialBalanceCredits: 777);
+        expect(await service.loadBalance('any-uid'), 777);
+      },
+    );
+
+    test(
+      'a fresh service already has a "Starting balance" ledger entry',
+      () async {
+        final service = FakeBillingService(initialBalanceCredits: 500);
+        final transactions = await service.loadRecentTransactions('any-uid');
+        expect(transactions, hasLength(1));
+        expect(transactions.single.type, WalletTransactionType.topup);
+        expect(transactions.single.amountCredits, 500);
+      },
+    );
+
+    test(
+      'a successful analysis appends a usage entry, most-recent-first',
+      () async {
+        final service = FakeBillingService(initialBalanceCredits: 1000);
+        await service.analyseFinding(
+          request: _request(),
+          aiLevel: AiLevel.smart,
+          idempotencyKey: 'idem_1',
+        );
+
+        final transactions = await service.loadRecentTransactions('any-uid');
+        expect(transactions.first.type, WalletTransactionType.usage);
+        expect(transactions.first.direction, LedgerDirection.debit);
+        expect(transactions.length, 2); // starting balance + this usage
+      },
+    );
+
+    test('a confirmed top-up appends a topup entry', () async {
+      final service = FakeBillingService(initialBalanceCredits: 0);
+      final intent = await service.createTopUpIntent(10);
+      await service.confirmSandboxPayment(intent.intentId);
+
+      final transactions = await service.loadRecentTransactions('any-uid');
+      expect(transactions.first.type, WalletTransactionType.topup);
+      expect(transactions.first.amountCredits, 1000);
+    });
+
+    test('loadRecentTransactions respects the limit', () async {
+      final service = FakeBillingService(initialBalanceCredits: 10_000);
+      for (var i = 0; i < 5; i++) {
+        await service.analyseFinding(
+          request: _request(note: 'finding_$i'),
+          aiLevel: AiLevel.fast,
+          idempotencyKey: 'idem_$i',
+        );
+      }
+      final transactions = await service.loadRecentTransactions(
+        'any-uid',
+        limit: 2,
+      );
+      expect(transactions, hasLength(2));
+    });
+  });
 }

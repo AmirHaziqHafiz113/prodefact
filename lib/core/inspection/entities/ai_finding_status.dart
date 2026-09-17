@@ -13,6 +13,17 @@ enum AiFindingStatus {
   /// e.g. a legacy finding from before progressive AI existed.
   notQueued,
 
+  /// Saved and eligible, but AI has not been queued yet because it
+  /// hasn't been explicitly approved — AI Credits cost money, so
+  /// Save Finding alone never spends any; the inspector must see the
+  /// estimate and approve before analysis runs. Set instead of
+  /// [queued] whenever `InspectionSession.autoAnalyseEnabled` is
+  /// false (the default for Flex Credits) — see
+  /// docs/commercial_model.md ("The estimate -> approval -> reservation
+  /// -> settlement protocol"). Never used when auto-analyse is on,
+  /// where a finding goes straight to [queued] instead.
+  awaitingApproval,
+
   /// Queued for analysis. Also the state shown as "waiting for
   /// connection" whenever the app is offline/signed out — queued is
   /// queued either way; only the *display* distinguishes the reason
@@ -52,6 +63,7 @@ bool aiFindingStatusIsInFlight(AiFindingStatus status) => switch (status) {
   AiFindingStatus.uploading ||
   AiFindingStatus.analyzing => true,
   AiFindingStatus.notQueued ||
+  AiFindingStatus.awaitingApproval ||
   AiFindingStatus.completed ||
   AiFindingStatus.failed ||
   AiFindingStatus.needsReview => false,

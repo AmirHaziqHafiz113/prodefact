@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:prodefact/core/inspection/billing/billing_service.dart';
+import 'package:prodefact/core/inspection/billing/wallet_activity_service.dart';
 import 'package:prodefact/core/inspection/entities/auth_user.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
 import 'package:prodefact/core/inspection/report/report_file_store.dart';
@@ -12,6 +14,8 @@ import 'package:prodefact/core/inspection/repository/inspection_repository.dart'
 import 'package:prodefact/core/inspection/services/connectivity_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_file_store.dart';
+import 'package:prodefact/data/billing/billing_providers.dart';
+import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
@@ -107,7 +111,13 @@ List<Override> testOverrides({
   ReportFileStore? reportFileStore,
   ReportShareService? reportShareService,
   ConnectivityService? connectivityService,
+  BillingService? billingService,
 }) {
+  final resolvedBillingService = billingService ?? FakeBillingService();
+  final resolvedWalletActivityService =
+      resolvedBillingService is WalletActivityService
+      ? resolvedBillingService as WalletActivityService
+      : FakeBillingService();
   return [
     inspectionRepositoryProvider.overrideWithValue(
       repository ?? createInMemoryRepository(),
@@ -132,6 +142,15 @@ List<Override> testOverrides({
     ),
     reportShareServiceProvider.overrideWithValue(
       reportShareService ?? FakeReportShareService(),
+    ),
+    // Never a real `FirebaseBillingService`/`FirestoreWalletActivityService`
+    // in a test — even a test that sets `firebaseReadyProvider` true has
+    // no real Firebase project behind it. The same fake instance backs
+    // both providers, exactly like production's local-only mode (see
+    // `billing_providers.dart`).
+    billingServiceProvider.overrideWithValue(resolvedBillingService),
+    walletActivityServiceProvider.overrideWithValue(
+      resolvedWalletActivityService,
     ),
   ];
 }

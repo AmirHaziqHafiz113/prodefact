@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
-import 'package:prodefact/data/ai/ai_providers.dart';
 import 'package:prodefact/data/analytics/analytics_providers.dart';
+import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
@@ -10,22 +10,56 @@ import 'package:prodefact/features/home_inspection/providers/physical_inspection
 
 import 'support/test_repository.dart';
 
-/// Captures every request handed to it instead of calling a real
-/// backend — lets a test inspect exactly what data would leave the
-/// device.
-class _CapturingAiInspectionService implements AiInspectionService {
+/// Captures every request handed to [analyseFinding] instead of just
+/// delegating silently — lets a test inspect exactly what data would
+/// leave the device, while still running the real (fake) pricing/
+/// classification logic underneath.
+class _CapturingBillingService implements BillingService {
+  _CapturingBillingService(this._inner);
+
+  final BillingService _inner;
   final List<AiFindingClassificationRequest> requests = [];
 
   @override
-  Future<AiFindingClassification> classifyFinding(
-    AiFindingClassificationRequest request,
-  ) async {
+  Future<AnalyseFindingResult> analyseFinding({
+    required AiFindingClassificationRequest request,
+    required AiLevel aiLevel,
+    required String idempotencyKey,
+  }) async {
     requests.add(request);
-    return AiFindingClassification(
-      findingId: request.findingId,
-      needsReview: true,
+    return _inner.analyseFinding(
+      request: request,
+      aiLevel: aiLevel,
+      idempotencyKey: idempotencyKey,
     );
   }
+
+  @override
+  Future<CommercialConfig> getCommercialConfig() =>
+      _inner.getCommercialConfig();
+
+  @override
+  Future<AnalysisEstimate> estimateFindingAnalysis({
+    required String inspectionId,
+    required String findingId,
+    required AiLevel aiLevel,
+  }) => _inner.estimateFindingAnalysis(
+    inspectionId: inspectionId,
+    findingId: findingId,
+    aiLevel: aiLevel,
+  );
+
+  @override
+  Future<TopUpIntent> createTopUpIntent(double amountMyr) =>
+      _inner.createTopUpIntent(amountMyr);
+
+  @override
+  Future<HousePassPurchaseIntent> purchaseHousePass(String inspectionId) =>
+      _inner.purchaseHousePass(inspectionId);
+
+  @override
+  Future<SandboxPaymentConfirmation> confirmSandboxPayment(String intentId) =>
+      _inner.confirmSandboxPayment(intentId);
 }
 
 /// Records every event logged instead of calling Firebase Analytics.
@@ -73,12 +107,9 @@ void main() {
         'owner\'s uid, email, or any auth token — only redacted area '
         'context (structurally: AiFindingClassificationRequest has no '
         'such fields at all)', () async {
-      final capturingAi = _CapturingAiInspectionService();
+      final capturingBilling = _CapturingBillingService(FakeBillingService());
       final container = ProviderContainer(
-        overrides: [
-          ...testOverrides(),
-          aiInspectionServiceProvider.overrideWithValue(capturingAi),
-        ],
+        overrides: testOverrides(billingService: capturingBilling),
       );
       addTearDown(container.dispose);
       container
@@ -88,6 +119,7 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
+      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
 
       final photo = await notifier.captureFindingPhoto(
@@ -101,8 +133,8 @@ void main() {
       // The queue is fire-and-forget; give it a tick to run.
       await Future<void>.delayed(Duration.zero);
 
-      expect(capturingAi.requests, hasLength(1));
-      final request = capturingAi.requests.single;
+      expect(capturingBilling.requests, hasLength(1));
+      final request = capturingBilling.requests.single;
       // Only redacted, area-shaped data — session id (a local,
       // non-identifying opaque string), area name/plumbing flag, note,
       // and evidence ids. No owner uid/email field exists on this type
@@ -132,6 +164,7 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
+      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final statusNotifier = container.read(sectionStatusesProvider.notifier);
 
@@ -195,6 +228,7 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
+      notifier.setAutoAnalyseEnabled(true);
 
       // Must not throw — the whole point of the hardening is that
       // this awaits cleanly to completion.

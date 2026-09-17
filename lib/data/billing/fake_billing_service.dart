@@ -14,14 +14,61 @@ import '../ai/fake_ai_inspection_service.dart';
 /// Starts with a small, deliberately non-generous balance (enough for
 /// a couple of analyses) so the low-balance/insufficient-Credits UI
 /// stays reachable in local-only/demo mode too, not just online.
-class FakeBillingService implements BillingService {
+///
+/// Also implements [WalletActivityService] — in local-only mode
+/// there's no Firestore to read a ledger from, so this same instance
+/// (see `billing_providers.dart`) is the one source of truth for both
+/// the mutating (`BillingService`) and read-only (`WalletActivityService`)
+/// surfaces, exactly mirroring how the real backend's ledger and
+/// callables both describe the same underlying wallet.
+class FakeBillingService implements BillingService, WalletActivityService {
   FakeBillingService({int initialBalanceCredits = 500})
-    : _balanceCredits = initialBalanceCredits;
+    : _balanceCredits = initialBalanceCredits {
+    if (initialBalanceCredits > 0) {
+      _record(
+        type: WalletTransactionType.topup,
+        direction: LedgerDirection.credit,
+        amountCredits: initialBalanceCredits,
+        description: 'Starting balance',
+      );
+    }
+  }
 
   int _balanceCredits;
   final Map<String, _FakeHousePass> _housePassByInspection = {};
   final Map<String, _FakePendingIntent> _pendingIntents = {};
   final FakeAiInspectionService _aiService = FakeAiInspectionService();
+  final List<WalletTransactionSummary> _ledger = [];
+  int _ledgerSequence = 0;
+
+  void _record({
+    required WalletTransactionType type,
+    required LedgerDirection direction,
+    required int amountCredits,
+    required String description,
+  }) {
+    _ledgerSequence++;
+    _ledger.insert(
+      0,
+      WalletTransactionSummary(
+        id: 'fake_ledger_$_ledgerSequence',
+        type: type,
+        direction: direction,
+        amountCredits: amountCredits,
+        description: description,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<int> loadBalance(String uid) async => _balanceCredits;
+
+  @override
+  Future<List<WalletTransactionSummary>> loadRecentTransactions(
+    String uid, {
+    int limit = 30,
+  }) async => _ledger.take(limit).toList();
 
   static const Map<AiLevel, int> _maxCreditsByLevel = {
     AiLevel.fast: 150,
@@ -160,6 +207,14 @@ class FakeBillingService implements BillingService {
         ? (maxCharge * 0.5).round()
         : maxCharge;
     _balanceCredits -= actualCharge;
+    if (actualCharge > 0) {
+      _record(
+        type: WalletTransactionType.usage,
+        direction: LedgerDirection.debit,
+        amountCredits: actualCharge,
+        description: 'AI analysis (${aiLevel.name})',
+      );
+    }
 
     if (estimate.paymentMode == CommercialMode.housePass) {
       _housePassByInspection[request.sessionId]?.recordUsage();
@@ -213,6 +268,12 @@ class FakeBillingService implements BillingService {
 
     if (intent.purpose == PaymentPurpose.topup) {
       _balanceCredits += intent.creditsAmount!;
+      _record(
+        type: WalletTransactionType.topup,
+        direction: LedgerDirection.credit,
+        amountCredits: intent.creditsAmount!,
+        description: 'Top up — RM${intent.amountMyr.toStringAsFixed(0)}',
+      );
       return SandboxPaymentConfirmation(
         purpose: PaymentPurpose.topup,
         newBalance: _balanceCredits,
@@ -221,6 +282,13 @@ class FakeBillingService implements BillingService {
     }
     _housePassByInspection[intent.inspectionId!] = _FakeHousePass(
       allowanceLimit: _housePassAllowanceFindings,
+    );
+    _record(
+      type: WalletTransactionType.housePassPurchase,
+      direction: LedgerDirection.credit,
+      amountCredits: 0,
+      description:
+          'House Pass purchase — RM${intent.amountMyr.toStringAsFixed(0)}',
     );
     return SandboxPaymentConfirmation(
       purpose: PaymentPurpose.housePass,

@@ -7,17 +7,24 @@ settlement protocol, and the payment architecture (sandbox-only today).
 It complements `docs/ai_provider_architecture.md` (which covers the AI
 provider gateway itself) and `docs/production_readiness.md`.
 
-**Status: backend/Cloud Functions only.** This pass implemented the
-Firestore data model, pricing/wallet/House Pass domain logic, and the
-six new callables under `functions/src/billing/`, all covered by unit
-tests (`npm test` in `functions/`). **No Flutter UI has been built
-yet** — there is no splash screen, bottom navigation, Wallet screen, Top
-Up screen, Choose AI Plan step, or Drift schema migration. Save Finding
-in the Flutter app still behaves exactly as before (it does not yet
-call `estimateFindingAnalysis`/`analyseFinding` at all). This document
-describes the backend contract the Flutter work still needs to be built
-against — **the app is not commercially functional yet, and none of
-this makes any claim of production readiness.**
+**Status: backend and Flutter UI both built; not production-ready.**
+The backend (Firestore data model, pricing/wallet/House Pass domain
+logic, and the six callables under `functions/src/billing/`, all
+covered by unit tests — `npm test` in `functions/`) and the Flutter
+commercial UX (splash screen, bottom navigation, Wallet/Top Up/Choose
+AI Plan screens, Drift schema v9, and the estimate → approve → analyse
+flow replacing auto-AI-on-save) are both implemented and covered by
+`flutter test` (283 tests passing at the time of writing). What's
+**not** done: `OPENAI_API_KEY` is still unprovisioned in Secret
+Manager (so `analyseFinding` cannot actually run in a real deployment
+yet — see "AI levels and provider mapping" below), no real payment
+gateway exists (Top Up only works via the debug-only sandbox path), the
+House Pass allowance is still an explicitly-labeled test value, and
+none of this has had a real device/manual QA pass. **This is
+functionally complete against the fake/local-only backend and the
+callables' own test suites, but is not a claim of production
+readiness** — see "What's still needed" at the end of this document for
+the concrete remaining gaps.
 
 ## Principles
 
@@ -65,8 +72,8 @@ a Firestore document edit, never an app rebuild.
 ## Flex Credits vs. House Pass
 
 Two commercial modes, persisted once per inspection as
-`InspectionSession.commercialMode` (Flutter-side field, not yet added —
-see "What's still needed on the Flutter side"). `computeEstimate` in
+`InspectionSession.commercialMode` (a Drift-backed field, set once via
+the Choose AI Plan step). `computeEstimate` in
 `handle_estimate_finding_analysis.ts` is the one place that resolves
 which mode actually applies for a given AI analysis, re-derived fresh
 on every estimate/analyse call (never cached client-side as
@@ -167,21 +174,28 @@ No key has been fabricated anywhere in this codebase. `classifyFinding`
 (the pre-existing, unpriced classification path) is unaffected and
 keeps using DeepSeek.
 
-Model selection exists at three levels in the domain model
-(`AiLevel` chosen per finding via `analyseFinding`'s request), but only
-the finding-level selection is wired up this pass — a global default
-and a per-inspection default are Flutter-side preferences
-(`Default AI Level` in Profile, `selectedAiLevel` on the inspection)
-that still need to be built; see "What's still needed."
+Model selection exists at three levels in the domain model: a
+per-inspection default (`selectedAiLevel`, chosen once via Choose AI
+Plan and persisted on `InspectionSession`), a Profile-level default
+(`UserProfile.defaultAiLevel`, offered as the Choose AI Plan screen's
+own pre-selected default), and the finding-level value actually sent
+with each `analyseFinding` call. All three are built and wired up.
 
 ## The estimate -> approval -> reservation -> settlement protocol
 
 This is the behavior change from the existing flow: **Save Finding no
-longer auto-triggers AI.** The intended sequence (backend fully built;
-Flutter integration still needed):
+longer auto-triggers AI.** Both the backend and the Flutter integration
+are built (see `ActiveInspectionSession.saveCameraFinding`/
+`approveAndRunAnalysis`/`estimateFindingAnalysis` in
+`active_session_providers.dart`, and the "Analyse" action on an
+`AiFindingStatus.awaitingApproval` finding card in
+`area_inspection_screen.dart` / `ai_analysis_approval_dialog.dart`):
 
 1. Inspector saves a finding (photo + optional note) — purely physical,
-   free, unchanged from before.
+   free, unchanged from before. The finding's `aiStatus` becomes
+   `awaitingApproval` (Flex Credits, the default) or `queued` (an
+   active inspection with `autoAnalyseEnabled` on — see "Auto
+   Analyse" below).
 2. Flutter calls `estimateFindingAnalysis` (`inspectionId`, `findingId`,
    `aiLevel`) -> `handle_estimate_finding_analysis.ts`. Verifies
    ownership, resolves the effective commercial mode, and returns an
@@ -191,9 +205,11 @@ Flutter integration still needed):
    runs), `currentBalance`, `paymentMode`, `includedInHousePass`,
    `surchargeCredits`, and `eligible`/`reason`. This step **never runs
    AI and never reserves anything** — purely informational, shown to
-   the inspector as "Up to N Credits."
-3. The inspector explicitly approves ("Analyse" button — not yet built
-   in Flutter).
+   the inspector as "Up to N Credits" in `_EstimateApprovalDialog`.
+3. The inspector explicitly approves (the "Analyse" button on the
+   finding card, then "Approve" in the estimate dialog) — or, if
+   `estimate.eligible` is false, sees a plain-language reason and,
+   for `insufficientCredits`, a direct "Top Up" action.
 4. Flutter calls `analyseFinding` with the same request plus a
    **client-generated `idempotencyKey`** (one per approval tap, reused
    verbatim on any retry of that same tap — never regenerated for a
@@ -229,10 +245,22 @@ Flutter integration still needed):
      originally reserved/approved even if the computed actual is
      somehow higher), records House Pass usage if applicable
      (`recordHousePassUsage`), and stores a `succeeded` job doc.
-5. Flutter shows the real stage progress during this call (queued ->
-   uploading evidence -> analysing -> done) — **never a fake token-level
-   percentage**, since the callable is a single request/response, not a
-   stream. (UI not yet built.)
+5. Flutter shows real, count-based AI status per finding (`awaitingApproval`
+   -> `queued` -> `uploading` -> `analyzing` -> `completed`/`needsReview`/
+   `failed`, per `AiFindingStatus` in `area_inspection_screen.dart`'s
+   `_AiStatusLine`) — **never a fake token-level percentage**, since the
+   callable is a single request/response, not a stream. A failed
+   analysis offers Retry (a fresh `idempotencyKey`) and Classify
+   Manually, exactly like the pre-existing unpriced path did.
+
+**Auto Analyse.** `InspectionSession.autoAnalyseEnabled` (default
+false) skips the manual approval tap: `saveCameraFinding` queues AI
+immediately instead of stopping at `awaitingApproval`. This still goes
+through the exact same priced `analyseFinding` protocol above —
+"automatic" only means the client-side tap is skipped, never that
+pricing/reservation is bypassed. Toggled via
+`ActiveInspectionSession.setAutoAnalyseEnabled` — no dedicated Settings
+UI for it yet (see "What's still needed").
 
 ## The wallet ledger
 
@@ -320,14 +348,15 @@ this boundary directly (confirmation is rejected both when
 `PAYMENTS_MODE` is unset — the real deploy default — and when it's set
 to any value other than `"sandbox"`).
 
-Flutter's payment UI is not yet built. When it is, it should call
-`createTopUpIntent`/`purchaseHousePass`, then — **only in a debug/test
-build, and only if the backend's `PAYMENTS_MODE` happens to be
-sandbox** — `confirmSandboxPayment`. There is no code path in this pass
-that would let a release build reach a fake-success screen; that guard
-needs to be added on the Flutter side too once the UI exists (e.g. never
-compiling the "Simulate Payment" button into a release build), and is
-listed under "What's still needed."
+Flutter's Top Up flow is built (`top_up_screen.dart`): it calls
+`createTopUpIntent`, then shows a "Simulate Payment (Debug Only)"
+button wrapped in `if (kDebugMode)` — a compile-time constant, so that
+branch is not compiled into a release build at all, not merely hidden
+behind a runtime flag. In release builds, the screen instead shows
+"Online payment isn't available yet." There is no House Pass purchase
+screen yet (`purchaseHousePass`/`confirmSandboxPayment` for the
+House Pass path are implemented and tested on the backend, but nothing
+in Flutter calls them yet) — see "What's still needed."
 
 ## Firestore data model
 
@@ -427,27 +456,90 @@ payment gateway (none was already configured for this project). House
 Pass `expired`/`cancelled` states exist in the type but have no driving
 code path yet (no subscription/expiry concept exists to drive them).
 
-## What's still needed on the Flutter side
+## What's built on the Flutter side
 
-None of this exists yet — this pass is backend-only:
+- **Splash screen** (`splash_screen.dart`) and **bottom navigation**
+  (`app_shell_screen.dart`, a `StatefulShellRoute.indexedStack` with
+  Home/Inspections/Wallet/Profile branches; "+" pushes New Inspection
+  rather than being a fifth branch). The Inspections tab (not Home)
+  stays the actual post-launch landing screen — see "Routing audit"
+  below for why.
+- **Choose AI Plan** step (`choose_ai_plan_screen.dart`), inserted
+  between Area Configuration and Review Setup, defaulting to Flex
+  Credits / the Profile's `defaultAiLevel` (falling back to Smart).
+- **Wallet screen** (balance, this-month stats, a real 7-day
+  usage-over-time bar chart, and an activity feed from
+  `walletTransactions`) and **Top Up screen** (package/custom amount ->
+  `createTopUpIntent` -> the debug-only, `kDebugMode`-gated sandbox
+  confirmation path).
+- The **estimate -> approve -> analyse** flow fully replaces
+  auto-AI-on-save: `AiFindingStatus.awaitingApproval`, the "Analyse"
+  action and its estimate/approval dialogs
+  (`ai_analysis_approval_dialog.dart`), and the Auto Analyse toggle
+  (`ActiveInspectionSession.setAutoAnalyseEnabled`).
+- **Real-data graphs**: Home progress rings (physical/AI-analysed/
+  reviewed, aggregated across active inspections), Wallet's
+  usage-over-time bar chart, and a findings-by-area bar chart on the
+  Report screen's readiness card.
+- **Drift schema v9** (additive): `commercialMode`/`selectedAiLevel`/
+  `autoAnalyseEnabled` on `InspectionSessionRows`, `defaultAiLevel` on
+  `UserProfileRows`, and the new `WalletCacheRows` table — a **local
+  display cache only**, never the authoritative balance (the backend
+  ledger always is; see `walletBalanceProvider`'s doc comment).
+- **Profile**: Default AI Level (a `SegmentedButton`, never exposing
+  API keys, provider names, or raw model ids).
+- New reusable chart widgets (`AppRingProgress`, `AppBarChart`) added
+  to the shared design system rather than a new charting dependency.
 
-- Splash/startup screen, authenticated bottom navigation (Home/
-  Inspections/+/Wallet/Profile).
-- Choose AI Plan step in New Inspection (Flex Credits vs. House Pass).
-- Wallet screen (balance, this-month stats, usage graph, activity feed
-  from `walletTransactions`), Top Up screen and flow (including the
-  debug-only sandbox confirmation path and its release-build guard),
-  House Pass purchase UI.
-- Replacing the existing auto-AI-on-save behavior with the explicit
-  estimate -> approve -> analyse flow described above, plus an "Auto
-  Analyse" preference (default off for Flex, may default on for an
-  active House Pass subject to allowance).
-- Real-data graphs: Home progress rings, Wallet usage-over-time,
-  completed-inspection findings-by-area.
-- Drift schema v8 -> v9 (additive): `commercialMode`,
-  `selectedAiLevel`, `autoAnalyseEnabled` on the inspection, and a
-  **local wallet display cache only** — never the authoritative balance
-  (the backend ledger always is).
-- Profile: Default AI Level preference (never exposing API keys,
-  provider names, or raw model ids).
-- A full routing audit once the above screens exist.
+## Routing audit
+
+- The dashboard (Inspections tab) — not Home — remains the app's actual
+  landing screen after sign-in/launch, preserving the pre-existing
+  "the dashboard is the inspections list" behavior exactly; Home is an
+  additive aggregate/wallet-glance tab, one tap away, not a
+  replacement. This was a deliberate choice made during this pass (see
+  `buildAppRouter`'s doc comment) rather than an oversight.
+- Every New Inspection setup screen, physical inspection, AI review,
+  and the report all remain top-level routes pushed **outside** the
+  bottom-nav shell, so the tab bar is hidden during those focused task
+  flows — unchanged from the pre-commercial-pass routing structure,
+  now confirmed to still hold with the shell added around it.
+- The splash screen's redirect is synchronous (`firebaseReadyProvider`
+  and `authServiceProvider.currentUser` are both already resolved by
+  the time the router is built, since `main.dart` fully awaits
+  `Firebase.initializeApp` first) — see `splash_screen.dart`'s doc
+  comment for why a more elaborate async-gated splash was deliberately
+  not attempted this pass.
+- Not yet audited: deep-linking directly into a specific finding's
+  estimate/approval dialog, or into the Top Up flow, from a push
+  notification or external link — no such entry points exist yet
+  elsewhere in the app either.
+
+## What's still needed
+
+- **`OPENAI_API_KEY`** is still not provisioned in Secret Manager — see
+  "AI levels and provider mapping." `analyseFinding` cannot actually
+  run AI in a real deployment until this is set; everything else
+  (pricing, reservation, settlement, the Flutter UI) is fully built and
+  tested against it.
+- **House Pass purchase UI** — the backend (`purchaseHousePass`,
+  `confirmSandboxPayment`'s House Pass branch) is built and tested, but
+  no Flutter screen calls it yet.
+- **A real Malaysia payment gateway** — out of scope per the spec (none
+  was already configured); Top Up only works via the debug-only sandbox
+  path today.
+- **The real House Pass allowance** — still the explicitly-labeled test
+  value (`allowanceFindings: 200`, `environment: "test"`); a real
+  commercial number is a business decision this pass doesn't attempt.
+- **Manual/device QA** — this pass validated via `flutter analyze`,
+  `flutter test` (283 tests), `flutter build ios --simulator --debug`,
+  `flutter build apk --debug`, and the `functions/` suite (lint/build/
+  102 tests) — never a real device or a human clicking through the
+  commercial flows. See docs/production_readiness.md for the standing
+  "do not call this production-ready" position this pass doesn't
+  change.
+- Minor polish gaps: no dedicated Settings surface for the Auto Analyse
+  toggle (only the notifier method exists), and House Pass's
+  baseline-tier-included / premium-tier-surcharge distinction is shown
+  in the estimate dialog but not given its own dedicated House Pass
+  status UI on Home/Wallet.

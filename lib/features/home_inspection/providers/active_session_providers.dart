@@ -7,12 +7,14 @@ import '../../../core/inspection/inspection_domain.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../data/ai/ai_providers.dart';
 import '../../../data/analytics/analytics_providers.dart';
+import '../../../data/billing/billing_providers.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/remote/remote_providers.dart';
 import '../../../data/report/report_providers.dart';
 import '../config/home_inspection_config.dart';
 import '../config/property_type.dart';
 import 'session_list_providers.dart';
+import 'wallet_providers.dart';
 
 String? _orNull(String? value) {
   final trimmed = value?.trim();
@@ -516,11 +518,18 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     // A new photo can change an already-settled classification — a
     // finding whose AI processing already finished is re-queued so the
     // extra evidence actually gets considered, rather than silently
-    // never being looked at by AI at all.
+    // never being looked at by AI at all. Re-queuing never bypasses the
+    // approval gate below: a re-analysis costs Credits exactly like the
+    // first one did, so it defers to the same `autoAnalyseEnabled`
+    // check rather than always auto-running.
     final target = findings.firstWhereOrNull((f) => f.id == findingId);
     if (target != null && !aiFindingStatusIsInFlight(target.aiStatus)) {
-      _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
-      unawaited(_enqueueAiClassification(session.id, findingId));
+      if (session.autoAnalyseEnabled) {
+        _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+        unawaited(_enqueueAiClassification(session.id, findingId));
+      } else {
+        _setFindingAiStatusLocal(findingId, AiFindingStatus.awaitingApproval);
+      }
     }
   }
 
@@ -573,10 +582,16 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Commits a photo captured via [captureFindingPhoto] as a new
   /// camera-first finding: creates the `Finding` row (no pre-chosen
   /// element/component — see `Finding`'s doc comment), attaches the
-  /// photo as its first evidence, persists both, and queues AI
-  /// classification. This is the **only** place a camera-first finding
-  /// is created, and it's also the only place AI is ever queued for a
-  /// finding — never merely from capturing/previewing a photo.
+  /// photo as its first evidence, and persists both. This is the
+  /// **only** place a camera-first finding is created — but, since the
+  /// commercial pass, saving a finding is purely physical and **never**
+  /// spends Credits: AI is only auto-queued here when
+  /// `InspectionSession.autoAnalyseEnabled` is on (an active House
+  /// Pass's preference); otherwise the finding starts
+  /// `awaitingApproval` and the inspector must explicitly see the
+  /// estimate and approve via [approveAndRunAnalysis] before anything
+  /// runs — see docs/commercial_model.md ("The estimate -> approval ->
+  /// reservation -> settlement protocol").
   Finding saveCameraFinding({
     required String sectionId,
     required CapturedFindingPhoto photo,
@@ -601,7 +616,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       createdAt: now,
       updatedAt: now,
       evidence: [evidence],
-      aiStatus: AiFindingStatus.queued,
+      aiStatus: session.autoAnalyseEnabled
+          ? AiFindingStatus.queued
+          : AiFindingStatus.awaitingApproval,
     );
 
     state = session.copyWith(
@@ -620,7 +637,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
     ref.invalidate(sessionSummariesProvider);
     _logAnalytics(AnalyticsEvent.findingSaved);
-    unawaited(_enqueueAiClassification(session.id, finding.id));
+    if (session.autoAnalyseEnabled) {
+      unawaited(_enqueueAiClassification(session.id, finding.id));
+    }
     return finding;
   }
 
@@ -752,6 +771,52 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     unawaited(_enqueueAiClassification(session.id, findingId));
   }
 
+  // ---- commercial: estimate/approve (see docs/commercial_model.md) ----
+
+  /// The price-check step shown before the inspector ever sees an
+  /// "Analyse" action they can actually approve — purely informational,
+  /// never queues or charges anything. Returns null if there's no
+  /// active session or [findingId] doesn't exist in it.
+  Future<AnalysisEstimate?> estimateFindingAnalysis(
+    String findingId, {
+    AiLevel? aiLevel,
+  }) async {
+    final session = state;
+    if (session == null) return null;
+    final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null) return null;
+    return ref
+        .read(billingServiceProvider)
+        .estimateFindingAnalysis(
+          inspectionId: session.id,
+          findingId: findingId,
+          aiLevel: aiLevel ?? session.selectedAiLevel ?? AiLevel.smart,
+        );
+  }
+
+  /// The explicit approval action — the **only** way a finding that's
+  /// `awaitingApproval` ever actually starts spending Credits. Only
+  /// valid for a finding that's currently `awaitingApproval` or
+  /// `failed` (a manual retry after approval already happened once);
+  /// a no-op for any other status.
+  Future<void> approveAndRunAnalysis(
+    String findingId, {
+    AiLevel? aiLevel,
+  }) async {
+    final session = state;
+    if (session == null) return;
+    final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null) return;
+    if (finding.aiStatus != AiFindingStatus.awaitingApproval &&
+        finding.aiStatus != AiFindingStatus.failed) {
+      return;
+    }
+    _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
+    unawaited(
+      _enqueueAiClassification(session.id, findingId, aiLevel: aiLevel),
+    );
+  }
+
   /// Runs one finding's classification in the background: never awaited
   /// by a caller, and safe to call redundantly (idempotent — a finding
   /// already in flight, or already terminal, is skipped). This is what
@@ -760,8 +825,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// UI thread or any other provider call.
   Future<void> _enqueueAiClassification(
     String sessionId,
-    String findingId,
-  ) async {
+    String findingId, {
+    AiLevel? aiLevel,
+  }) async {
     if (!_classifyingFindingIds.add(findingId)) return;
     try {
       // The notifier (and its `ref`) may already be disposed by the
@@ -847,7 +913,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
 
       await ref
           .read(aiClassificationCoordinatorProvider)
-          .classifyFinding(sessionId, findingId);
+          .classifyFinding(sessionId, findingId, aiLevel: aiLevel);
 
       if (!ref.mounted) return;
       // Reload from the durable store rather than patching in-memory
@@ -863,6 +929,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           ref.invalidate(sessionSummariesProvider);
         }
       }
+      // The run may have just charged real Credits — never leave
+      // Wallet/Home showing a stale balance.
+      ref.invalidate(walletBalanceProvider);
     } catch (error, stackTrace) {
       AppLogger.error(
         'AI classification failed unexpectedly',
@@ -1057,6 +1126,25 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         () => _repository.saveInspectionNote(session.id, normalized),
         previous: session,
         action: 'update inspection note',
+      ),
+    );
+  }
+
+  /// Records the Auto Analyse preference for this inspection — never
+  /// inferred from wallet/House Pass state; see
+  /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.
+  void setAutoAnalyseEnabled(bool enabled) {
+    final session = state;
+    if (session == null) return;
+    state = session.copyWith(
+      autoAnalyseEnabled: enabled,
+      updatedAt: DateTime.now(),
+    );
+    unawaited(
+      _persist(
+        () => _repository.setAutoAnalyseEnabled(session.id, enabled),
+        previous: session,
+        action: 'update Auto Analyse preference',
       ),
     );
   }

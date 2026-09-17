@@ -29,6 +29,7 @@ void main() {
         .read(selectedPropertyTypeProvider.notifier)
         .select(PropertyType.highRise);
     final notifier = container.read(activeSessionProvider.notifier);
+    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final statusNotifier = container.read(sectionStatusesProvider.notifier);
 
@@ -98,6 +99,7 @@ void main() {
         .select(PropertyType.highRise);
     final sessionId = container.read(activeSessionProvider)!.id;
     final notifier = container.read(activeSessionProvider.notifier);
+    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final photo = await notifier.captureFindingPhoto(
       source: EvidenceSource.camera,

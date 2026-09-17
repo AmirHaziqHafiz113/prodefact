@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
-import 'package:prodefact/data/ai/ai_providers.dart';
-import 'package:prodefact/data/ai/fake_ai_inspection_service.dart';
 import 'package:prodefact/data/remote/remote_providers.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
@@ -118,15 +116,11 @@ void main() {
         initial: ConnectivityStatus.offline,
       );
       addTearDown(connectivity.dispose);
-      final aiService = FakeAiInspectionService();
       final container = ProviderContainer(
-        overrides: [
-          ...testOverridesWithSync(
-            authService: FakeAuthService(initialUser: testAuthUser),
-            connectivityService: connectivity,
-          ),
-          aiInspectionServiceProvider.overrideWithValue(aiService),
-        ],
+        overrides: testOverridesWithSync(
+          authService: FakeAuthService(initialUser: testAuthUser),
+          connectivityService: connectivity,
+        ),
       );
       addTearDown(container.dispose);
 
@@ -142,6 +136,12 @@ void main() {
       container.listen(authStateProvider, (_, _) {});
       await _pumpAiQueue();
       final notifier = container.read(activeSessionProvider.notifier);
+      // Auto Analyse on so saving a finding queues AI immediately, the
+      // same as this test's pre-commercial-pass behavior — this test is
+      // about offline/reconnect resume, not the separate
+      // estimate/approval gate (covered by
+      // `ai_gating_regression_test.dart`).
+      notifier.setAutoAnalyseEnabled(true);
       final section = container.read(inspectionQueueProvider).first;
 
       final photo = await notifier.captureFindingPhoto(

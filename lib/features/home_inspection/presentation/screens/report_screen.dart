@@ -183,6 +183,14 @@ class _ReadinessCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (findingCount > 0) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Findings by area',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              AppBarChart(points: _findingsByArea(session), height: 56),
+            ],
             const Divider(height: AppSpacing.xl),
             _ReadinessRow(
               label: 'Physical inspection',
@@ -236,6 +244,24 @@ class _ReadinessCard extends StatelessWidget {
     final local = dateTime.toLocal();
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)}';
+  }
+
+  /// Real per-area finding counts, in the same plumbing-first order the
+  /// rest of the app already uses — never fabricated/estimated. Areas
+  /// with zero findings are included too, so an area's absence from
+  /// this chart is never mistaken for "not inspected."
+  List<AppBarChartPoint> _findingsByArea(InspectionSession session) {
+    final included = session.sections.where((s) => s.isIncluded);
+    return [
+      for (final section in included)
+        AppBarChartPoint(
+          label: section.name,
+          value: session.findings
+              .where((f) => f.sectionId == section.id)
+              .length
+              .toDouble(),
+        ),
+    ];
   }
 }
 

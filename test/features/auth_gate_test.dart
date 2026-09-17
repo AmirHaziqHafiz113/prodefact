@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:prodefact/app/app.dart';
 import 'package:prodefact/data/remote/remote_providers.dart';
 import 'package:prodefact/features/auth/presentation/sign_in_screen.dart';
+import 'package:prodefact/features/auth/presentation/splash_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 
 import '../support/fake_auth_service.dart';
@@ -34,7 +35,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // The dashboard is the app's initial route — redirected to Sign
-      // In immediately, before it ever builds.
+      // In immediately, before it ever builds. The splash screen
+      // (the router's actual initial route) never lingers either.
+      expect(find.byType(SplashScreen), findsNothing);
       expect(find.byType(InspectionSessionsScreen), findsNothing);
       expect(find.text('Sign in'), findsWidgets);
     },
@@ -91,6 +94,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byType(SplashScreen), findsNothing);
     expect(find.byType(InspectionSessionsScreen), findsOneWidget);
     expect(find.byType(SignInScreen), findsNothing);
   });

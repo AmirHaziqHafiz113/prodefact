@@ -14,8 +14,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // No industry-picker splash — the dashboard is the app's initial
-    // route (see `buildAppRouter`).
-    expect(find.text('Inspections'), findsOneWidget);
+    // route (see `buildAppRouter`). "Inspections" also appears as a
+    // bottom-nav destination label now, so this specifically checks the
+    // AppBar title rather than a bare `find.text`.
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Inspections'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('No saved inspections yet.'), findsOneWidget);
 
     await tester.tap(find.text('New Inspection'));

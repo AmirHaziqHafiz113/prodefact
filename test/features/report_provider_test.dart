@@ -68,6 +68,7 @@ void main() {
         .select(PropertyType.highRise);
 
     final notifier = container.read(activeSessionProvider.notifier);
+    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final statusNotifier = container.read(sectionStatusesProvider.notifier);
     for (final section in queue) {
@@ -116,6 +117,7 @@ void main() {
         .select(PropertyType.highRise);
 
     final notifier = container.read(activeSessionProvider.notifier);
+    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final statusNotifier = container.read(sectionStatusesProvider.notifier);
     for (final section in queue) {
@@ -156,6 +158,7 @@ void main() {
           .select(PropertyType.highRise);
 
       final notifier = container.read(activeSessionProvider.notifier);
+      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final statusNotifier = container.read(sectionStatusesProvider.notifier);
       for (final section in queue) {

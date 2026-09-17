@@ -48,6 +48,10 @@ Future<ProviderContainer> _pumpToReportScreen(
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
+  // Auto Analyse on so saving a finding queues AI immediately — this
+  // suite is about report generation, not the separate estimate/
+  // approval gate (covered by `ai_gating_regression_test.dart`).
+  container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
 
   final queue = container.read(inspectionQueueProvider);
   final section = queue.first;
