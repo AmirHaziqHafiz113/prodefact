@@ -109,10 +109,10 @@ class WalletScreen extends ConsumerWidget {
                         icon: Icons.receipt_long_outlined,
                         title: 'No activity yet.',
                       )
-                    : Column(
+                    : AppGroupedList(
                         children: [
                           for (final transaction in transactions)
-                            _ActivityTile(transaction: transaction),
+                            _ActivityRow(transaction: transaction),
                         ],
                       ),
                 orElse: () => const SizedBox.shrink(),
@@ -329,6 +329,10 @@ class _UsageSummary extends StatelessWidget {
                     dense: true,
                   ),
                 ),
+                const SizedBox(
+                  height: 48,
+                  child: VerticalDivider(width: AppSpacing.lg),
+                ),
                 Expanded(
                   child: AppMetricCard(
                     icon: Icons.smart_toy_outlined,
@@ -338,6 +342,10 @@ class _UsageSummary extends StatelessWidget {
                     iconColor: AppColors.info,
                     dense: true,
                   ),
+                ),
+                const SizedBox(
+                  height: 48,
+                  child: VerticalDivider(width: AppSpacing.lg),
                 ),
                 Expanded(
                   child: AppMetricCard(
@@ -351,6 +359,8 @@ class _UsageSummary extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.lg),
+            const Divider(height: 1),
             const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -391,8 +401,11 @@ class _UsageSummary extends StatelessWidget {
       const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
 }
 
-class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({required this.transaction});
+/// One row in the grouped transaction list (§9/§19) — the list itself
+/// is the container (`AppGroupedList`), not each individual row, so a
+/// long activity feed reads as one unit rather than a stack of cards.
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.transaction});
 
   final WalletTransactionSummary transaction;
 
@@ -428,31 +441,26 @@ class _ActivityTile extends StatelessWidget {
       ),
     };
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Card(
-        child: ListTile(
-          leading: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: isCredit ? AppColors.successBg : AppColors.dangerBg,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          title: Text(transaction.description),
-          subtitle: Text(_formatDate(transaction.createdAt)),
-          trailing: transaction.amountCredits == 0
-              ? null
-              : Text(
-                  '${isCredit ? '+' : '-'}${transaction.amountCredits}',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: isCredit ? AppColors.success : AppColors.textPrimary,
-                  ),
-                ),
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: isCredit ? AppColors.successBg : AppColors.dangerBg,
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, color: color, size: 18),
       ),
+      title: Text(transaction.description),
+      subtitle: Text(_formatDate(transaction.createdAt)),
+      trailing: transaction.amountCredits == 0
+          ? null
+          : Text(
+              '${isCredit ? '+' : '-'}${transaction.amountCredits}',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: isCredit ? AppColors.success : AppColors.textPrimary,
+              ),
+            ),
     );
   }
 

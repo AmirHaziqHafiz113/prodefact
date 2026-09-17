@@ -9,6 +9,7 @@ export 'widgets/app_avatar.dart';
 export 'widgets/app_bar_chart.dart';
 export 'widgets/app_brand_mark.dart';
 export 'widgets/app_fallback_thumbnail.dart';
+export 'widgets/app_grouped_list.dart';
 export 'widgets/app_hero_card.dart';
 export 'widgets/app_metric_card.dart';
 export 'widgets/app_progress_bar.dart';

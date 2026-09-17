@@ -239,38 +239,57 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
         ),
         const SizedBox(height: AppSpacing.lg),
         if (sessions.isNotEmpty)
-          Row(
-            children: [
-              Expanded(
-                child: AppMetricCard(
-                  icon: Icons.assignment_outlined,
-                  value: '$activeCount',
-                  label: 'Active',
-                  caption: 'In progress',
-                  dense: true,
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.outline),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.assignment_outlined,
+                    value: '$activeCount',
+                    label: 'Active',
+                    caption: 'In progress',
+                    dense: true,
+                  ),
                 ),
-              ),
-              Expanded(
-                child: AppMetricCard(
-                  icon: Icons.priority_high,
-                  value: '$needsReviewCount',
-                  label: 'Needs Review',
-                  caption: 'Awaiting review',
-                  iconColor: AppColors.danger,
-                  dense: true,
+                const SizedBox(
+                  height: 44,
+                  child: VerticalDivider(width: AppSpacing.lg),
                 ),
-              ),
-              Expanded(
-                child: AppMetricCard(
-                  icon: Icons.check_circle_outline,
-                  value: '$completedCount',
-                  label: 'Completed',
-                  caption: 'All time',
-                  iconColor: AppColors.success,
-                  dense: true,
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.priority_high,
+                    value: '$needsReviewCount',
+                    label: 'Needs Review',
+                    caption: 'Awaiting review',
+                    iconColor: AppColors.danger,
+                    dense: true,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(
+                  height: 44,
+                  child: VerticalDivider(width: AppSpacing.lg),
+                ),
+                Expanded(
+                  child: AppMetricCard(
+                    icon: Icons.check_circle_outline,
+                    value: '$completedCount',
+                    label: 'Completed',
+                    caption: 'All time',
+                    iconColor: AppColors.success,
+                    dense: true,
+                  ),
+                ),
+              ],
+            ),
           ),
         const SizedBox(height: AppSpacing.lg),
         if (sessions.isEmpty)
@@ -379,22 +398,15 @@ class _SessionCard extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatUpdatedAt(summary.updatedAt),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                       const SizedBox(height: AppSpacing.sm),
+                      // Priority order: status first, then AI progress —
+                      // sync state and the timestamp are tertiary
+                      // metadata and sit below, muted (§31).
                       Wrap(
                         spacing: AppSpacing.sm,
                         runSpacing: AppSpacing.sm,
                         children: [
                           SessionLifecyclePill(status: summary.status),
-                          SyncStatusPill(
-                            status: summary.syncStatus,
-                            dense: true,
-                            pendingCount: summary.pendingSyncCount,
-                          ),
                           if (summary.needsAttention)
                             StatusPill(
                               label: summary.aiFailedFindingsCount > 0
@@ -411,6 +423,26 @@ class _SessionCard extends ConsumerWidget {
                         const SizedBox(height: AppSpacing.sm),
                         _AiProgressLine(summary: summary),
                       ],
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        children: [
+                          SyncStatusPill(
+                            status: summary.syncStatus,
+                            dense: true,
+                            pendingCount: summary.pendingSyncCount,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _formatUpdatedAt(summary.updatedAt),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.textMuted),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

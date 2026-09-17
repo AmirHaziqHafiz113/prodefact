@@ -68,70 +68,67 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onAttentionTap: () => showAttentionSheet(context, ref),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Text('Profile', style: Theme.of(context).textTheme.headlineMedium),
-            Text(
-              'Manage your account, preferences and app settings.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Row(
-                  children: [
-                    AppAvatar(
-                      displayName: _inspectorName.text,
-                      email: user?.email,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          Text(
-                            user?.email ??
-                                'Not signed in — working offline, local only',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          if (_companyName.text.isNotEmpty)
-                            Text(
-                              _companyName.text,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: AppColors.textMuted),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+            // A compact identity header, not a card — removing the border
+            // here loses no meaning, so it doesn't get one (§9).
+            Row(
+              children: [
+                AppAvatar(
+                  displayName: _inspectorName.text,
+                  email: user?.email,
+                  size: 56,
                 ),
-              ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        user?.email ??
+                            'Not signed in — working offline, local only',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      if (_companyName.text.isNotEmpty)
+                        Text(
+                          _companyName.text,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.textMuted),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            _SettingsRow(
-              icon: Icons.person_outline,
-              title: 'Account',
-              subtitle: user != null
-                  ? 'Signed in as ${user.email}'
-                  : 'Not signed in — working offline, local only',
-            ),
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.xl),
             _SectionCard(
               icon: Icons.psychology_outlined,
               title: 'AI Preferences',
-              subtitle: 'Choose the default AI level for new inspections',
-              child: SegmentedButton<AiLevel>(
-                segments: const [
-                  ButtonSegment(value: AiLevel.fast, label: Text('Fast')),
-                  ButtonSegment(value: AiLevel.smart, label: Text('Smart')),
-                  ButtonSegment(value: AiLevel.expert, label: Text('Expert')),
+              subtitle: 'Default AI level for new inspections',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SegmentedButton<AiLevel>(
+                    segments: const [
+                      ButtonSegment(value: AiLevel.fast, label: Text('Fast')),
+                      ButtonSegment(value: AiLevel.smart, label: Text('Smart')),
+                      ButtonSegment(
+                        value: AiLevel.expert,
+                        label: Text('Expert'),
+                      ),
+                    ],
+                    selected: {_defaultAiLevel ?? AiLevel.smart},
+                    onSelectionChanged: (selection) =>
+                        setState(() => _defaultAiLevel = selection.first),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    _aiLevelDescription(_defaultAiLevel ?? AiLevel.smart),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
-                selected: {_defaultAiLevel ?? AiLevel.smart},
-                onSelectionChanged: (selection) =>
-                    setState(() => _defaultAiLevel = selection.first),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -177,33 +174,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            _SettingsRow(
-              icon: Icons.info_outline,
-              title: 'App Info',
-              subtitle:
-                  'Version ${AppBuildInfo.version} · Build ${AppBuildInfo.build}',
-              showChevron: false,
+            const SizedBox(height: AppSpacing.xl),
+            // Subtle metadata, not a prominent card (§21 of the mission —
+            // build info is informational only, never a destination).
+            Center(
+              child: Text(
+                'Version ${AppBuildInfo.version} · Build ${AppBuildInfo.build}',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            if (user != null)
+            if (user != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              const Divider(height: 1),
+              const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.dangerBg,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
                   ),
                   icon: const Icon(Icons.logout),
                   label: const Text('Sign Out'),
                   onPressed: () => ref.read(authServiceProvider).signOut(),
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  String _aiLevelDescription(AiLevel level) => switch (level) {
+    AiLevel.fast =>
+      'Fastest results — best for straightforward inspections where '
+          'speed matters most.',
+    AiLevel.smart =>
+      'Balanced speed and thoroughness — the right default for most '
+          'inspections.',
+    AiLevel.expert =>
+      'Most thorough analysis — best for complex properties or when '
+          'accuracy matters most.',
+  };
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -223,44 +237,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _saving = false);
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Profile saved.')));
-  }
-}
-
-/// A settings row matching the mockup's icon + title + subtitle
-/// pattern — [showChevron] is false for purely informational rows
-/// (e.g. App Info) that have no destination to navigate to, so the row
-/// never implies a tap does something it doesn't.
-class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.showChevron = true,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool showChevron;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-          ),
-          child: Icon(icon, size: 18, color: AppColors.primary),
-        ),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: showChevron ? const Icon(Icons.chevron_right) : null,
-      ),
-    );
   }
 }
 

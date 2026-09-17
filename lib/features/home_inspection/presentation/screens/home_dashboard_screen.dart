@@ -59,7 +59,8 @@ class HomeDashboardScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
             Text(
               _greeting(profileAsync.value?.inspectorName),
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             Text(
               "Let's keep your inspections moving.",
@@ -122,88 +123,70 @@ class _CreditsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final resolvedBalance =
         balanceAsync.value ?? cacheAsync.value?.balanceCredits;
+    // Compact by design — this is a secondary summary, not Home's hero;
+    // the active inspection below (when there is one) carries that role.
+    // The row itself opens Wallet ("View Usage"); Top Up is the one
+    // explicit button, so it never has to compete with a second one.
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                  child: const Icon(
-                    Icons.monetization_on_outlined,
-                    color: AppColors.primary,
-                  ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onViewUsage,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: const Icon(
+                  Icons.monetization_on_outlined,
+                  size: 18,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      resolvedBalance == null
+                          ? (balanceAsync.hasError ? 'Unavailable' : 'Loading…')
+                          : '$resolvedBalance credits',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (resolvedBalance != null &&
+                        creditsPerMyr != null &&
+                        creditsPerMyr! > 0)
                       Text(
-                        'AI Credits',
+                        '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-                      Text(
-                        resolvedBalance == null
-                            ? (balanceAsync.hasError
-                                  ? 'Unavailable'
-                                  : 'Loading…')
-                            : '$resolvedBalance credits',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      if (resolvedBalance != null &&
-                          creditsPerMyr != null &&
-                          creditsPerMyr! > 0)
-                        Text(
-                          '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                      ),
-                    ),
-                    onPressed: onTopUp,
-                    child: const Text('Top Up'),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                      ),
-                    ),
-                    onPressed: onViewUsage,
-                    child: const Text('View Usage'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+                onPressed: onTopUp,
+                child: const Text('Top Up'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -269,8 +252,12 @@ class _HomeBody extends ConsumerWidget {
               child: const Text('View all'),
             ),
           ),
-          for (final summary in attention.take(2))
-            _AttentionListRow(summary: summary),
+          AppGroupedList(
+            children: [
+              for (final summary in attention.take(2))
+                _AttentionListRow(summary: summary),
+            ],
+          ),
         ],
         if (recentExcludingHero.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
@@ -447,22 +434,20 @@ class _AttentionListRow extends ConsumerWidget {
     final title = summary.propertyTitle?.isNotEmpty == true
         ? summary.propertyTitle!
         : (propertyType?.label ?? summary.assetTypeId);
-    final message = summary.aiFailedFindingsCount > 0
+    final isFailed = summary.aiFailedFindingsCount > 0;
+    final message = isFailed
         ? '${summary.aiFailedFindingsCount} AI ${summary.aiFailedFindingsCount == 1 ? 'analysis' : 'analyses'} failed'
         : '${summary.aiPendingReviewCount} finding${summary.aiPendingReviewCount == 1 ? '' : 's'} pending review';
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Card(
-        color: AppColors.dangerBg,
-        child: ListTile(
-          leading: const Icon(Icons.priority_high, color: AppColors.danger),
-          title: Text(title),
-          subtitle: Text(message),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => resumeAndOpenInspection(context, ref, summary.id),
-        ),
+    return ListTile(
+      leading: Icon(
+        Icons.priority_high,
+        color: isFailed ? AppColors.danger : AppColors.warning,
       ),
+      title: Text(title),
+      subtitle: Text(message),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => resumeAndOpenInspection(context, ref, summary.id),
     );
   }
 }
