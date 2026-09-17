@@ -36,7 +36,11 @@ class WalletScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
-              _BalanceCard(balanceAsync: balanceAsync, cacheAsync: cacheAsync),
+              _BalanceCard(
+                balanceAsync: balanceAsync,
+                cacheAsync: cacheAsync,
+                creditsPerMyr: configAsync.value?.creditsPerMyr,
+              ),
               const SizedBox(height: AppSpacing.md),
               configAsync.maybeWhen(
                 data: (config) {
@@ -101,10 +105,18 @@ class WalletScreen extends ConsumerWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.balanceAsync, required this.cacheAsync});
+  const _BalanceCard({
+    required this.balanceAsync,
+    required this.cacheAsync,
+    required this.creditsPerMyr,
+  });
 
   final AsyncValue<int> balanceAsync;
   final AsyncValue<WalletCache?> cacheAsync;
+
+  /// Null only while `commercialConfigProvider` hasn't resolved yet —
+  /// the RM equivalent is simply omitted until then, never guessed.
+  final int? creditsPerMyr;
 
   @override
   Widget build(BuildContext context) {
@@ -150,6 +162,16 @@ class _BalanceCard extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+            if (resolvedBalance != null &&
+                creditsPerMyr != null &&
+                creditsPerMyr! > 0) ...[
+              const SizedBox(height: 2),
+              Text(
+                '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: Colors.white70),
+              ),
+            ],
             if (isStale) ...[
               const SizedBox(height: 4),
               Text(

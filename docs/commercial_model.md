@@ -12,19 +12,45 @@ The backend (Firestore data model, pricing/wallet/House Pass domain
 logic, and the six callables under `functions/src/billing/`, all
 covered by unit tests — `npm test` in `functions/`) and the Flutter
 commercial UX (splash screen, bottom navigation, Wallet/Top Up/Choose
-AI Plan screens, Drift schema v9, and the estimate → approve → analyse
-flow replacing auto-AI-on-save) are both implemented and covered by
-`flutter test` (283 tests passing at the time of writing). What's
-**not** done: `OPENAI_API_KEY` is still unprovisioned in Secret
-Manager (so `analyseFinding` cannot actually run in a real deployment
-yet — see "AI levels and provider mapping" below), no real payment
-gateway exists (Top Up only works via the debug-only sandbox path), the
-House Pass allowance is still an explicitly-labeled test value, and
-none of this has had a real device/manual QA pass. **This is
-functionally complete against the fake/local-only backend and the
-callables' own test suites, but is not a claim of production
+AI Plan screens, House Pass purchase/status screen, Auto Analyse
+toggle, per-finding AI level override, House Pass surcharge UX, Drift
+schema v9, and the estimate → approve → analyse flow replacing
+auto-AI-on-save) are both implemented and covered by `flutter test`
+(291 tests passing at the time of writing). What's **not** done:
+`OPENAI_API_KEY` is still unprovisioned in Secret Manager (so
+`analyseFinding` cannot actually run in a real deployment yet — see "AI
+levels and provider mapping" below), no real payment gateway exists
+(Top Up and House Pass purchase only work via the debug-only sandbox
+path), the House Pass allowance is still an explicitly-labeled test
+value (now backend-enforced — see "House Pass allowance and the
+production launch checklist" below — never silently sellable outside
+sandbox mode), and none of this has had a real device/manual QA pass.
+**This is functionally complete against the fake/local-only backend
+and the callables' own test suites, but is not a claim of production
 readiness** — see "What's still needed" at the end of this document for
 the concrete remaining gaps.
+
+**READY** (built, tested, and does not block deployment once
+`OPENAI_API_KEY` and a production House Pass config are provisioned):
+wallet ledger and cached balance, Flex Credits estimate → approve →
+reservation → settlement protocol, House Pass backend (purchase,
+sandbox activation, allowance tracking, production-safety gate), House
+Pass Flutter UX (purchase screen, all lifecycle states, re-entry
+banner, allowance-reached interrupt), Auto Analyse (default off for
+Flex, explicit opt-in, House Pass auto-on, allowance-reached auto-off),
+AI tiers (Profile default, per-inspection override, per-finding
+override, no raw model ids ever shown), House Pass Expert surcharge UX,
+insufficient/zero-Credits UX, Top-Up-returns-to-the-same-finding flow,
+Wallet UX (balance, RM equivalent, Top Up, usage graph, customer-safe
+transaction descriptions), sandbox payment boundary (compile-time +
+backend/environment, both independently tested), OpenAI provider
+(current model ids, image support, structured output, timeout/retry,
+the `temperature` incompatibility bug found and fixed this pass).
+
+**STILL REQUIRED before a real production launch:** `OPENAI_API_KEY` in
+Secret Manager, an explicit production House Pass allowance
+(`pricing/config`), a real payment gateway, manual/real-device QA. See
+"What's still needed" for the full list.
 
 ## Principles
 
@@ -120,12 +146,27 @@ arbitrary test value. `HousePassConfig.environment` exists specifically
 so this is never mistaken for a real commercial allowance decision:
 `getCommercialConfig`'s response includes
 `housePass.isProductionReady: config.housePass.environment ===
-"production"`, so the (not-yet-built) UI can visibly flag a non-
-production config. **A real production launch requires an operator to
-explicitly write a `pricing/config` document with `environment:
-"production"` and a deliberately chosen allowance — this pass makes no
-attempt to guess what that number should be**, since that's a business
-decision, not an engineering one.
+"production"`, and `HousePassScreen` visibly flags a non-production
+config with "Preview pricing — the final allowance for a real purchase
+is still being finalized." **A real production launch requires an
+operator to explicitly write a `pricing/config` document with
+`environment: "production"` and a deliberately chosen allowance — this
+pass makes no attempt to guess what that number should be**, since
+that's a business decision, not an engineering one.
+
+**Enforcement, not just labeling.** `isHousePassSafeToSell`
+(`pricing_config.ts`) is the actual backend gate:
+`handlePurchaseHousePass` calls it before ever creating a payment
+intent, and rejects the purchase outright (`failed-precondition`)
+whenever `housePass.environment` is still `"test"` **and** this
+deployment's own `PAYMENTS_MODE` isn't explicitly `"sandbox"` — the
+same boundary `confirmSandboxPayment` already relies on (see
+`payments_mode.ts`). A production-facing deployment
+(`PAYMENTS_MODE` unset, the real deploy default) can therefore never
+silently sell the 200-finding test allowance as if it were real; it
+must either explicitly run in sandbox mode (test/QA) or have a real
+`environment: "production"` config written first. See
+`pricing_config.test.ts` and `handle_purchase_house_pass.test.ts`.
 
 ## AI levels and provider mapping
 
@@ -515,6 +556,24 @@ code path yet (no subscription/expiry concept exists to drive them).
   notification or external link — no such entry points exist yet
   elsewhere in the app either.
 
+## House Pass allowance and the production launch checklist
+
+`DEFAULT_PRICING_CONFIG.housePass.allowanceFindings` is still `200`
+with `environment: "test"` — a deliberately generous, clearly arbitrary
+test value, never a real commercial decision. As of this pass, that is
+no longer just a label: `isHousePassSafeToSell` (`pricing_config.ts`)
+is an actual backend gate that `handlePurchaseHousePass` calls before
+ever creating a payment intent. It refuses the purchase outright
+(`failed-precondition`) whenever `housePass.environment` is still
+`"test"` **and** this deployment's own `PAYMENTS_MODE` isn't explicitly
+`"sandbox"` — the same boundary `confirmSandboxPayment` already relies
+on. A production-facing deployment can therefore never silently sell
+the 200-finding test allowance as real; it must either explicitly run
+in sandbox mode (test/QA) or have an operator write a real
+`pricing/config` document with `environment: "production"` and a
+deliberately chosen allowance first. See `pricing_config.test.ts` and
+`handle_purchase_house_pass.test.ts`.
+
 ## What's still needed
 
 - **`OPENAI_API_KEY`** is still not provisioned in Secret Manager — see
@@ -522,24 +581,27 @@ code path yet (no subscription/expiry concept exists to drive them).
   run AI in a real deployment until this is set; everything else
   (pricing, reservation, settlement, the Flutter UI) is fully built and
   tested against it.
-- **House Pass purchase UI** — the backend (`purchaseHousePass`,
-  `confirmSandboxPayment`'s House Pass branch) is built and tested, but
-  no Flutter screen calls it yet.
 - **A real Malaysia payment gateway** — out of scope per the spec (none
-  was already configured); Top Up only works via the debug-only sandbox
-  path today.
+  was already configured); Top Up and House Pass purchase only work via
+  the debug-only sandbox path today (both independently protected —
+  see "House Pass allowance and the production launch checklist" above
+  and `sandbox_payment_boundary_test.dart`).
 - **The real House Pass allowance** — still the explicitly-labeled test
   value (`allowanceFindings: 200`, `environment: "test"`); a real
   commercial number is a business decision this pass doesn't attempt.
-- **Manual/device QA** — this pass validated via `flutter analyze`,
-  `flutter test` (283 tests), `flutter build ios --simulator --debug`,
-  `flutter build apk --debug`, and the `functions/` suite (lint/build/
-  102 tests) — never a real device or a human clicking through the
+  Now backend-enforced so it can never launch by accident (see above).
+- **Manual/device QA** — this pass validated via `dart format`,
+  `flutter analyze`, `flutter test` (291 tests), `flutter build ios
+  --simulator --debug`, `flutter build apk --debug`, `flutter build apk
+  --release` (and confirmed via the compiled AOT binary's own strings
+  that no "sandbox"/"Simulate Payment"/"Debug build" text survives
+  release tree-shaking), and the `functions/` suite (lint/build/111
+  tests) — never a real device or a human clicking through the
   commercial flows. See docs/production_readiness.md for the standing
   "do not call this production-ready" position this pass doesn't
   change.
-- Minor polish gaps: no dedicated Settings surface for the Auto Analyse
-  toggle (only the notifier method exists), and House Pass's
-  baseline-tier-included / premium-tier-surcharge distinction is shown
-  in the estimate dialog but not given its own dedicated House Pass
-  status UI on Home/Wallet.
+- Minor polish gaps: the Flex analysis progress line reads "Preparing
+  photo…" → "AI analysing…" → the final classification result — two
+  real stages plus the real outcome, not a fabricated third "matching"
+  stage, since the backend performs classification as a single
+  request/response with no separate matching phase to report on.

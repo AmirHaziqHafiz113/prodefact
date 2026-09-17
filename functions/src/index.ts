@@ -169,6 +169,7 @@ export const purchaseHousePass = onCall(
       auth: request.auth,
       data: request.data,
       firestore: getFirestore(),
+      env: process.env,
     })
 );
 

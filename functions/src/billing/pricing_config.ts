@@ -1,5 +1,6 @@
 import type {Firestore} from "firebase-admin/firestore";
 import {AiLevel} from "./types";
+import {resolvePaymentsMode} from "./payments_mode";
 
 /**
  * The single, centralized, server-side pricing configuration — see
@@ -46,10 +47,14 @@ export interface HousePassConfig {
    * `environment`. */
   allowanceFindings: number;
   /** `test` values must never be mistaken for a real commercial
-   * allowance — `resolvePricingConfig` refuses to treat a `test`
-   * config as authoritative for a genuine production House Pass
-   * purchase unless `allowTestHousePassInProduction` is also true
-   * (only ever set for the emulator/staging). */
+   * allowance — `isHousePassSafeToSell` refuses to let a House Pass be
+   * purchased against a `test` config unless this deployment's own
+   * `PAYMENTS_MODE` is `"sandbox"` (see `payments_mode.ts`; never true
+   * in a real production deployment). A production launch requires an
+   * operator to explicitly write `environment: "production"` with a
+   * real `allowanceFindings` to `pricing/config` first — see
+   * docs/commercial_model.md ("House Pass allowance — unfinished
+   * decision"). */
   environment: "test" | "production";
 }
 
@@ -160,4 +165,30 @@ export async function loadPricingConfig(
     throw new Error("pricing/config exists but is empty/malformed.");
   }
   return data as PricingConfig;
+}
+
+/**
+ * The actual enforcement behind `HousePassConfig.environment`'s
+ * guarantee: a House Pass may only be purchased against a `test`
+ * allowance (e.g. the generous, arbitrary 200-finding
+ * [DEFAULT_PRICING_CONFIG]) when this deployment's own `PAYMENTS_MODE`
+ * is explicitly `"sandbox"` — the same boundary that already gates
+ * `confirmSandboxPayment` (see `payments_mode.ts`), and one a real
+ * production deployment must never cross. Once an operator writes a
+ * real `pricing/config` with `housePass.environment: "production"`,
+ * House Pass is sellable regardless of `PAYMENTS_MODE`. Until then, a
+ * production-facing deployment (`PAYMENTS_MODE` unset/`"production"`)
+ * must have House Pass purchases rejected outright rather than ever
+ * silently selling the test allowance — it must NEVER become
+ * unlimited by accident.
+ * @param {HousePassConfig} config the resolved House Pass config.
+ * @param {NodeJS.ProcessEnv} env the function's process environment.
+ * @return {boolean} whether House Pass may be purchased right now.
+ */
+export function isHousePassSafeToSell(
+  config: HousePassConfig,
+  env: NodeJS.ProcessEnv
+): boolean {
+  if (config.environment === "production") return true;
+  return resolvePaymentsMode(env) === "sandbox";
 }

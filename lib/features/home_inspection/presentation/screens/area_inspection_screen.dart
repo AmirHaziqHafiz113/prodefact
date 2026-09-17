@@ -3,14 +3,17 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import '../../providers/wallet_providers.dart';
 import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
+import 'top_up_screen.dart';
 
 /// Camera-first physical inspection of a single area: "Take Defect
 /// Photo" is the primary, most prominent action — no element/component
@@ -492,6 +495,37 @@ class _AiStatusLine extends ConsumerWidget {
           text: 'Waiting for connection',
         );
       case AiFindingStatus.awaitingApproval:
+        // A zero-balance, Flex-only finding can never actually be
+        // analysed yet — surfaced up front on the card itself, rather
+        // than only after the inspector taps "Analyse" and hits the
+        // insufficient-credit dialog. Never shown for a House Pass
+        // inspection: its included allowance may well cover this
+        // finding for 0 Credits, which only the real estimate call
+        // knows for sure. Physical inspection (the card existing at
+        // all) is never affected either way.
+        final resolvedBalance =
+            ref.watch(walletBalanceProvider).value ??
+            ref.watch(walletCacheProvider).value?.balanceCredits;
+        final isFlexOnly =
+            ref.watch(activeSessionProvider)?.commercialMode !=
+            CommercialMode.housePass;
+        if (isFlexOnly && resolvedBalance == 0) {
+          return Row(
+            children: [
+              const Expanded(
+                child: _StatusText(
+                  icon: Icons.smart_toy_outlined,
+                  color: AppColors.textMuted,
+                  text: 'AI: Waiting for Credits',
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push(TopUpScreen.routePath),
+                child: const Text('Top Up'),
+              ),
+            ],
+          );
+        }
         return Row(
           children: [
             const Expanded(
@@ -515,7 +549,7 @@ class _AiStatusLine extends ConsumerWidget {
         return const _StatusText(
           icon: Icons.cloud_upload_outlined,
           color: AppColors.info,
-          text: 'Uploading photo…',
+          text: 'Preparing photo…',
         );
       case AiFindingStatus.analyzing:
         return const _StatusText(

@@ -1150,36 +1150,80 @@ async already).
 ## Commercial layer
 
 A commercial layer (AI Credits, Flex Credits, House Pass, wallet
-ledger, sandbox-only payment architecture) was added across two
+ledger, sandbox-only payment architecture) was added across three
 passes — backend (`functions/src/billing/`) and Flutter (splash/bottom
-nav/Wallet/Top Up/Choose AI Plan screens, Drift v9, and Save Finding no
-longer auto-queuing AI). See `docs/commercial_model.md` for the full
-design, including its own "What's still needed" list (missing
-`OPENAI_API_KEY`, no House Pass purchase screen, no real payment
-gateway, an explicitly-test House Pass allowance, and no manual/device
-QA pass). This does not change this document's overall pilot-readiness
-status — it is additional scope layered on top of the existing
-inspection workflow, validated via `flutter analyze`/`flutter test`
-(283 tests)/`flutter build ios --simulator --debug`/
-`flutter build apk --debug` and the `functions/` suite, but never a
-real device or a human clicking through the commercial flows. Notable
-items that don't fit neatly into the sections above:
+nav/Wallet/Top Up/Choose AI Plan/House Pass screens, Drift v9, Auto
+Analyse, per-finding AI level override, and Save Finding no longer
+auto-queuing AI). See `docs/commercial_model.md` for the full design.
+This does not change this document's overall pilot-readiness status —
+it is additional scope layered on top of the existing inspection
+workflow, validated via `dart format`/`flutter analyze`/`flutter test`
+(291 tests)/`flutter build ios --simulator --debug`/`flutter build apk
+--debug`/`flutter build apk --release` and the `functions/` suite
+(lint/build/111 tests), but never a real device or a human clicking
+through the commercial flows.
 
+**READY** (built and tested against the fake/local-only backend and
+the callables' own test suites):
+- Wallet ledger, its cached balance, and customer-safe transaction
+  descriptions (no internal ledger jargon, no literal "Sandbox" wording
+  in a description a real user could ever see).
+- The Flex Credits estimate → approve → reservation → settlement
+  protocol, including the insufficient/zero-Credits flows and a
+  Top-Up-returns-to-the-same-finding round trip.
+- House Pass: backend purchase/sandbox-activation/allowance tracking,
+  a production-safety gate that refuses to sell the test allowance
+  outside sandbox mode (`isHousePassSafeToSell` —
+  `functions/src/billing/pricing_config.ts`), and the full Flutter UX
+  (purchase screen, every lifecycle state, an inspection-queue re-entry
+  banner, and an allowance-reached interrupt that turns Auto Analyse
+  back off and asks for fresh consent before spending Flex Credits).
+- Auto Analyse: a per-inspection toggle, off by default for Flex
+  Credits (explicit opt-in required), turned on automatically the
+  moment a House Pass becomes active.
+- AI tiers: Profile default, per-inspection override, and (new this
+  pass) a per-finding override in the approval dialog itself — no raw
+  provider/model id is ever shown to a customer anywhere in Flutter.
+- House Pass Expert-surcharge UX with the backend-computed surcharge
+  amount, never computed client-side.
+- The sandbox payment boundary, independently proven on both halves:
+  backend/environment (`PAYMENTS_MODE=sandbox` required —
+  `handle_confirm_sandbox_payment.test.ts`) and Flutter compile-time
+  (every `confirmSandboxPayment` call site is `kDebugMode`-gated,
+  checked by `test/architecture/sandbox_payment_boundary_test.dart`,
+  and confirmed by grepping the compiled release AOT binary — zero
+  occurrences of "sandbox"/"Simulate Payment"/"Debug build" survive
+  release tree-shaking).
+- The OpenAI provider mapping (current model ids verified against
+  official docs, image/structured-output support, timeout/retry
+  handling) — this pass also found and fixed a real bug: the GPT-5.6
+  family rejects any non-default `temperature`, which would have made
+  every real `analyseFinding` call fail outright.
+
+**STILL REQUIRED before a real production launch:**
 - `analyseFinding` (the priced AI-classification callable) cannot be
   deployed until `OPENAI_API_KEY` is provisioned in Secret Manager for
   `prodefact-82bac` — see `docs/commercial_model.md` ("AI levels and
   provider mapping") for the exact command. No key was fabricated
   anywhere in this codebase; `classifyFinding` (the existing, unpriced
   path) is unaffected and keeps using DeepSeek.
-- New Firestore rules added for `users/{uid}/wallet`,
-  `walletTransactions`, `housePasses`, `paymentIntents`, `aiJobs`
-  (owner-read-only, no client write ever) and `pricing/config`
-  (unreadable and unwritable by any client) — see `firestore.rules`.
-- `PAYMENTS_MODE=sandbox` must never be set on a real deployment; the
-  only fake-payment-success path (`confirmSandboxPayment`) is inert
-  without it, and this boundary has its own regression test
-  (`functions/src/billing/handle_confirm_sandbox_payment.test.ts`).
-- The House Pass fair-use allowance shipped in the default pricing
-  config (`allowanceFindings: 200`) is an explicitly-labeled test value
-  (`environment: "test"`), not a real commercial decision — see
-  `docs/commercial_model.md` ("Unfinished decision").
+- An explicit production House Pass allowance — `pricing/config` still
+  needs `housePass.environment: "production"` with a deliberately
+  chosen `allowanceFindings`, a business decision this pass doesn't
+  attempt. Until then, House Pass purchases outside sandbox mode are
+  now actively refused rather than silently selling the test value.
+- A real payment gateway — Top Up and House Pass purchase only work via
+  the debug-only sandbox path today.
+- Manual/real-device QA — nothing here replaces a human clicking
+  through the commercial flows on a real device.
+
+Supporting infrastructure already in place:
+- Firestore rules for `users/{uid}/wallet`, `walletTransactions`,
+  `housePasses`, `paymentIntents`, `aiJobs` (owner-read-only, no client
+  write ever) and `pricing/config` (unreadable and unwritable by any
+  client) — see `firestore.rules`, dry-run-validated as compiling
+  successfully against project `prodefact-82bac` this pass.
+- No new Firestore composite indexes are required — every commercial
+  query (House Pass status, payment intents) uses plain equality
+  filters with client-side sorting instead of `orderBy`, deliberately
+  avoiding the need for one (`firestore.indexes.json` stays empty).

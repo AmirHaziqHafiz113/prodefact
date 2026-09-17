@@ -308,7 +308,7 @@ export async function settleReservation(
           inspectionId: reservation.inspectionId,
           findingId: reservation.findingId,
           aiLevel: reservation.aiLevel,
-          description: "Unused AI reservation returned",
+          description: "Unused AI Credits returned",
           createdAt: now,
           updatedAt: now,
         } satisfies WalletTransaction);

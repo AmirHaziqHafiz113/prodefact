@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
+import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import 'house_pass_screen.dart';
 
 /// A real field-inspection dashboard: overall progress, the ordered
 /// queue of included areas (plumbing-related areas first), each area's
@@ -85,6 +87,8 @@ class InspectionQueueScreen extends ConsumerWidget {
                         'This inspection is completed. Changes may require '
                         'a new report version.',
                   ),
+                if (activeSession?.commercialMode == CommercialMode.housePass)
+                  _HousePassBanner(inspectionId: activeSession!.id),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(
@@ -168,6 +172,10 @@ class InspectionQueueScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
+                      if (activeSession != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _AutoAnalyseToggle(session: activeSession),
+                      ],
                       const SizedBox(height: AppSpacing.lg),
                       const AppSectionHeader(title: 'Areas'),
                       for (final section in queue)
@@ -246,6 +254,172 @@ extension on List<Section> {
       }
     }
     return null;
+  }
+}
+
+/// Re-offers House Pass purchase/confirmation if it was skipped (or a
+/// payment attempt failed) right after starting the inspection — never
+/// blocks physical inspection either way, so it falls through to
+/// nothing once the pass is [HousePassLifecycleStatus.active]. Also
+/// owns the "allowance reached" interrupt: the moment a House Pass
+/// flips to [HousePassLifecycleStatus.allowanceReached] while Auto
+/// Analyse is on, it turns Auto Analyse back off (so no further
+/// finding silently starts spending Flex Credits without a fresh,
+/// explicit decision) and offers "Continue with AI Credits" to
+/// knowingly re-enable it.
+class _HousePassBanner extends ConsumerWidget {
+  const _HousePassBanner({required this.inspectionId});
+
+  final String inspectionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(housePassStatusProvider(inspectionId), (previous, next) {
+      final becameAllowanceReached =
+          next.value?.status == HousePassLifecycleStatus.allowanceReached &&
+          previous?.value?.status != HousePassLifecycleStatus.allowanceReached;
+      if (!becameAllowanceReached) return;
+      final session = ref.read(activeSessionProvider);
+      if (session?.autoAnalyseEnabled == true) {
+        ref.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(false);
+      }
+    });
+
+    final statusAsync = ref.watch(housePassStatusProvider(inspectionId));
+    return statusAsync.maybeWhen(
+      data: (summary) {
+        if (summary.status == HousePassLifecycleStatus.allowanceReached) {
+          return const _AllowanceReachedBanner();
+        }
+        final (message, icon) = switch (summary.status) {
+          HousePassLifecycleStatus.purchaseRequired => (
+            'This inspection uses House Pass — purchase required to '
+                'unlock included AI analysis.',
+            Icons.verified_outlined,
+          ),
+          HousePassLifecycleStatus.paymentPending => (
+            'House Pass payment is pending confirmation.',
+            Icons.hourglass_top_outlined,
+          ),
+          HousePassLifecycleStatus.paymentFailed => (
+            'House Pass payment failed — tap to try again.',
+            Icons.error_outline,
+          ),
+          _ => (null, null),
+        };
+        if (message == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            onTap: () =>
+                context.push('${HousePassScreen.routePath}/$inspectionId'),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.warningBg,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 18, color: AppColors.warning),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// "House Pass AI allowance reached." — shown once Auto Analyse has
+/// already been switched back off by [_HousePassBanner]'s listener;
+/// tapping the action is the fresh, explicit consent to keep going on
+/// Flex Credits, so it re-enables Auto Analyse rather than just
+/// dismissing the banner.
+class _AllowanceReachedBanner extends ConsumerWidget {
+  const _AllowanceReachedBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.warningBg,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.data_usage_outlined,
+              size: 18,
+              color: AppColors.warning,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            const Expanded(
+              child: Text(
+                'House Pass AI allowance reached.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: () => ref
+                  .read(activeSessionProvider.notifier)
+                  .setAutoAnalyseEnabled(true),
+              child: const Text('Continue with AI Credits'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A per-inspection Auto Analyse switch — explicit opt-in for Flex
+/// Credits (never defaults on for a Flex inspection), so a saved
+/// finding never silently starts spending Credits without the
+/// inspector having turned this on themselves. See
+/// `InspectionSession.autoAnalyseEnabled` and
+/// `HousePassScreen._confirmSandbox`/`_purchase`, which turn this on
+/// automatically the moment a House Pass becomes active (its allowance
+/// makes auto-analysing safe by default) — see docs/commercial_model.md.
+class _AutoAnalyseToggle extends ConsumerWidget {
+  const _AutoAnalyseToggle({required this.session});
+
+  final InspectionSession session;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isHousePass = session.commercialMode == CommercialMode.housePass;
+    return Card(
+      child: SwitchListTile(
+        title: const Text('Auto Analyse'),
+        subtitle: Text(
+          isHousePass
+              ? 'Saved findings will automatically use your House Pass '
+                    "allowance, then your AI Credits once it's used up."
+              : 'Saved findings will automatically use your AI Credits.',
+        ),
+        value: session.autoAnalyseEnabled,
+        onChanged: (enabled) => ref
+            .read(activeSessionProvider.notifier)
+            .setAutoAnalyseEnabled(enabled),
+      ),
+    );
   }
 }
 

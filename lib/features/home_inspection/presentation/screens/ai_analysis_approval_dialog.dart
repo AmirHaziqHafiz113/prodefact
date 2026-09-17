@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../data/billing/billing_providers.dart';
 import '../../providers/active_session_providers.dart';
 import 'top_up_screen.dart';
 
@@ -64,15 +65,18 @@ Future<void> showAnalyseApprovalDialog({
     return;
   }
 
-  final approved = await showDialog<bool>(
+  final approvedLevel = await showDialog<AiLevel>(
     context: context,
-    builder: (context) => _EstimateApprovalDialog(estimate: estimate!),
+    builder: (context) => _EstimateApprovalDialog(
+      findingId: findingId,
+      initialEstimate: estimate!,
+    ),
   );
-  if (approved != true || !context.mounted) return;
+  if (approvedLevel == null || !context.mounted) return;
 
   ref
       .read(activeSessionProvider.notifier)
-      .approveAndRunAnalysis(findingId, aiLevel: estimate.aiLevel);
+      .approveAndRunAnalysis(findingId, aiLevel: approvedLevel);
 }
 
 Future<void> _showIneligibleDialog(
@@ -85,11 +89,11 @@ Future<void> _showIneligibleDialog(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Not enough Credits'),
-      content: Text(_reasonMessage(estimate.reason)),
+      content: Text(_reasonMessage(estimate)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Not now'),
+          child: const Text('Not Now'),
         ),
         if (showTopUp)
           FilledButton(
@@ -97,17 +101,18 @@ Future<void> _showIneligibleDialog(
               Navigator.of(context).pop();
               context.push(TopUpScreen.routePath);
             },
-            child: const Text('Top Up'),
+            child: const Text('Top Up to Analyse'),
           ),
       ],
     ),
   );
 }
 
-String _reasonMessage(EstimateIneligibleReason? reason) {
-  return switch (reason) {
+String _reasonMessage(AnalysisEstimate estimate) {
+  return switch (estimate.reason) {
     EstimateIneligibleReason.insufficientCredits =>
-      "You don't have enough Credits for this analysis. Physical "
+      '${estimate.maximumCredits} Credits required, '
+          '${estimate.currentBalance} Credits available. Physical '
           'inspection is never affected — you can still classify this '
           'finding manually.',
     EstimateIneligibleReason.housePassAllowanceReached =>
@@ -120,38 +125,112 @@ String _reasonMessage(EstimateIneligibleReason? reason) {
   };
 }
 
-class _EstimateApprovalDialog extends StatelessWidget {
-  const _EstimateApprovalDialog({required this.estimate});
+String _levelLabel(AiLevel level) => switch (level) {
+  AiLevel.fast => 'Fast',
+  AiLevel.smart => 'Smart',
+  AiLevel.expert => 'Expert',
+};
 
-  final AnalysisEstimate estimate;
+/// The approval dialog itself — lets the inspector switch AI level for
+/// just this one finding (re-checking the real price on every change;
+/// never computed client-side) before approving. Returns the approved
+/// [AiLevel] via `Navigator.pop`, or null if cancelled/dismissed.
+class _EstimateApprovalDialog extends ConsumerStatefulWidget {
+  const _EstimateApprovalDialog({
+    required this.findingId,
+    required this.initialEstimate,
+  });
+
+  final String findingId;
+  final AnalysisEstimate initialEstimate;
+
+  @override
+  ConsumerState<_EstimateApprovalDialog> createState() =>
+      _EstimateApprovalDialogState();
+}
+
+class _EstimateApprovalDialogState
+    extends ConsumerState<_EstimateApprovalDialog> {
+  late AnalysisEstimate _estimate = widget.initialEstimate;
+  bool _reestimating = false;
+
+  Future<void> _selectLevel(AiLevel level) async {
+    if (level == _estimate.aiLevel) return;
+    setState(() => _reestimating = true);
+    final next = await ref
+        .read(activeSessionProvider.notifier)
+        .estimateFindingAnalysis(widget.findingId, aiLevel: level);
+    if (!mounted) return;
+    setState(() {
+      if (next != null) _estimate = next;
+      _reestimating = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final levelLabel = switch (estimate.aiLevel) {
-      AiLevel.fast => 'Fast',
-      AiLevel.smart => 'Smart',
-      AiLevel.expert => 'Expert',
-    };
+    final configAsync = ref.watch(commercialConfigProvider);
+    final creditsPerMyr = configAsync.value?.creditsPerMyr;
+    final housePassIncludedLevel = configAsync.value?.housePass.includedAiLevel;
+
+    final estimate = _estimate;
+    final levelLabel = _levelLabel(estimate.aiLevel);
+    final isSurcharge =
+        estimate.paymentMode == CommercialMode.housePass &&
+        !estimate.includedInHousePass &&
+        estimate.surchargeCredits > 0;
 
     return AlertDialog(
-      title: const Text('Analyse with AI'),
+      title: Text('$levelLabel AI'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Level: $levelLabel'),
-          const SizedBox(height: AppSpacing.sm),
-          if (estimate.includedInHousePass)
+          SegmentedButton<AiLevel>(
+            segments: [
+              for (final level in AiLevel.values)
+                ButtonSegment(value: level, label: Text(_levelLabel(level))),
+            ],
+            selected: {estimate.aiLevel},
+            onSelectionChanged: _reestimating
+                ? null
+                : (selection) => _selectLevel(selection.first),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (_reestimating)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (estimate.includedInHousePass)
             const Text('Included in your House Pass — no Credits charged.')
-          else
+          else if (isSurcharge) ...[
             Text(
-              'Up to ${estimate.maximumCredits} Credits — the exact '
-              'amount depends on what AI actually uses, and you are never '
-              'charged more than this.',
+              'House Pass includes ${_levelLabel(housePassIncludedLevel ?? AiLevel.smart)} '
+              'AI.',
             ),
+            const SizedBox(height: 4),
+            Text('Additional cost: ${estimate.surchargeCredits} Credits'),
+          ] else ...[
+            Text('Up to: ${estimate.maximumCredits} Credits'),
+            if (creditsPerMyr != null && creditsPerMyr > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '≈ RM${(estimate.maximumCredits / creditsPerMyr).toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
+          ],
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Current balance: ${estimate.currentBalance} Credits',
+            'Balance: ${estimate.currentBalance} Credits',
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: AppColors.textMuted),
           ),
@@ -159,12 +238,18 @@ class _EstimateApprovalDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Not Now'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Approve'),
+          onPressed: _reestimating
+              ? null
+              : () => Navigator.of(context).pop(estimate.aiLevel),
+          child: Text(
+            isSurcharge
+                ? 'Use $levelLabel · +${estimate.surchargeCredits} Credits'
+                : 'Analyse with AI',
+          ),
         ),
       ],
     );

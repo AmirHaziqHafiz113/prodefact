@@ -66,7 +66,12 @@ export class OpenAiProvider implements AiProvider {
   ): Promise<ProviderClassification> {
     const requestBody = {
       model: this.model,
-      temperature: 0.2,
+      // No `temperature` — the GPT-5.6 family are reasoning models that
+      // reject any non-default sampling temperature outright (a 400
+      // "Unsupported value" error, not a transient one), verified
+      // against OpenAI's current API docs/community reports for this
+      // pass. Never re-add a fixed temperature here without first
+      // confirming the configured model actually supports it.
       response_format: {type: "json_object"},
       messages: [
         {role: "system", content: buildSystemPrompt()},

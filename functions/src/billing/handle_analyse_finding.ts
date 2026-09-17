@@ -237,7 +237,7 @@ export async function handleAnalyseFinding(params: {
       inspectionId: input.inspectionId,
       findingId: input.findingId,
       aiLevel,
-      description: `AI analysis (${aiLevel}) — reserved`,
+      description: `AI Analysis — ${levelConfig.label}`,
     });
     reservationId = reservation.id;
   }
@@ -258,7 +258,7 @@ export async function handleAnalyseFinding(params: {
         uid,
         reservationTransactionId: reservationId,
         idempotencyKey: `${idempotencyKey}_release_failed`,
-        description: "AI analysis failed — reservation released",
+        description: "AI Analysis — Credits returned (analysis failed)",
       });
     }
     const now = Date.now();
@@ -307,7 +307,7 @@ export async function handleAnalyseFinding(params: {
       reservationTransactionId: reservationId,
       actualCredits,
       idempotencyKey: `${idempotencyKey}_settlement`,
-      description: `AI analysis (${aiLevel})`,
+      description: `AI Analysis — ${levelConfig.label}`,
     });
   }
 

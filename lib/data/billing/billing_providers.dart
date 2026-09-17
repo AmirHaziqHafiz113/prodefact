@@ -4,6 +4,7 @@ import '../../core/inspection/inspection_domain.dart';
 import '../remote/remote_providers.dart';
 import 'fake_billing_service.dart';
 import 'firebase_billing_service.dart';
+import 'firestore_house_pass_status_service.dart';
 import 'firestore_wallet_activity_service.dart';
 
 /// The commercial/billing backend. Production builds (Firebase
@@ -30,6 +31,16 @@ final walletActivityServiceProvider = Provider<WalletActivityService>((ref) {
     return ref.watch(billingServiceProvider) as WalletActivityService;
   }
   return FirestoreWalletActivityService();
+});
+
+/// Read-only House Pass lifecycle access — see
+/// `HousePassStatusService`'s doc comment for why this is separate from
+/// [billingServiceProvider].
+final housePassStatusServiceProvider = Provider<HousePassStatusService>((ref) {
+  if (!ref.watch(firebaseReadyProvider)) {
+    return ref.watch(billingServiceProvider) as HousePassStatusService;
+  }
+  return FirestoreHousePassStatusService();
 });
 
 /// The customer-safe pricing/AI-level/House Pass config that powers

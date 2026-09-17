@@ -66,6 +66,23 @@ test("a successful response is parsed into a classification, using the " +
   assert.equal(requestedModel, "gpt-5.6-terra");
 });
 
+test("never sends a `temperature` field — the GPT-5.6 family are " +
+  "reasoning models that reject any non-default value with a hard " +
+  "400 error (verified against current OpenAI docs/community reports)",
+async (t) => {
+  let requestBody: Record<string, unknown> = {};
+  stubFetch(t, async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return okResponse(JSON.stringify({
+      catalogueEntryId: "wall.concrete_wall.05",
+      needsReview: false,
+    }));
+  });
+  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
+  await provider.classifyFinding(sampleInput(), noImages());
+  assert.ok(!("temperature" in requestBody));
+});
+
 test("the provider's reported token usage is captured for billing",
   async (t) => {
     stubFetch(t, async () =>

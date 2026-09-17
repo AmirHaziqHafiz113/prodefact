@@ -15,6 +15,8 @@ export 'billing/analyse_finding_result.dart';
 export 'billing/analysis_estimate.dart';
 export 'billing/billing_service.dart';
 export 'billing/commercial_config.dart';
+export 'billing/house_pass_status_service.dart';
+export 'billing/house_pass_summary.dart';
 export 'billing/payment_intent.dart';
 export 'billing/wallet_activity_service.dart';
 export 'billing/wallet_transaction.dart';

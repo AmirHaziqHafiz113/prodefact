@@ -119,6 +119,7 @@ test("a full sandbox House Pass purchase activates the pass without " +
     auth: {uid: "uid_1"},
     data: {inspectionId: "inspection_1", idempotencyKey: "hp_intent_1"},
     firestore,
+    env: {PAYMENTS_MODE: "sandbox"},
   });
   assert.equal(priceMyr, DEFAULT_PRICING_CONFIG.housePass.priceMyr);
 
@@ -141,6 +142,7 @@ test("purchaseHousePass rejects a duplicate purchase for an inspection " +
     auth: {uid: "uid_1"},
     data: {inspectionId: "inspection_1", idempotencyKey: "hp_intent_1"},
     firestore,
+    env: {PAYMENTS_MODE: "sandbox"},
   });
   await handleConfirmSandboxPayment({
     auth: {uid: "uid_1"},
@@ -158,6 +160,7 @@ test("purchaseHousePass rejects a duplicate purchase for an inspection " +
           idempotencyKey: "hp_intent_2",
         },
         firestore,
+        env: {PAYMENTS_MODE: "sandbox"},
       }),
     (error: unknown) => {
       assert.ok(error instanceof HttpsError);

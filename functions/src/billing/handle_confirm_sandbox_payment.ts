@@ -93,7 +93,10 @@ export async function handleConfirmSandboxPayment(params: {
         amountCredits: intent.creditsAmount ?? 0,
         idempotencyKey: intentId,
         externalPaymentRef: confirmation.providerRef,
-        description: `Sandbox top-up — RM${intent.amountMyr}`,
+        // Customer-facing wallet activity must never say "Sandbox" —
+        // this same description is what a real user sees in their
+        // activity feed even in a sandbox-mode QA/staging deployment.
+        description: `Top Up — RM${intent.amountMyr}`,
       });
     } else {
       const config = await loadPricingConfig(firestore);

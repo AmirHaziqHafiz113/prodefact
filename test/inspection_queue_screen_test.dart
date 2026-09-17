@@ -57,6 +57,15 @@ void main() {
         notifier.acceptSuggestion(suggestion.id);
       });
 
+      // A tall surface so every area card in the queue — plus the Auto
+      // Analyse toggle and any House Pass banner above them — is
+      // actually built (not just scrolled past) by the lazy
+      // `ListView`; the default test surface is too short to fit all
+      // of highRise's areas at once.
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

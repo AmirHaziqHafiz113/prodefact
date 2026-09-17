@@ -21,7 +21,8 @@ import '../ai/fake_ai_inspection_service.dart';
 /// the mutating (`BillingService`) and read-only (`WalletActivityService`)
 /// surfaces, exactly mirroring how the real backend's ledger and
 /// callables both describe the same underlying wallet.
-class FakeBillingService implements BillingService, WalletActivityService {
+class FakeBillingService
+    implements BillingService, WalletActivityService, HousePassStatusService {
   FakeBillingService({int initialBalanceCredits = 500})
     : _balanceCredits = initialBalanceCredits {
     if (initialBalanceCredits > 0) {
@@ -69,6 +70,44 @@ class FakeBillingService implements BillingService, WalletActivityService {
     String uid, {
     int limit = 30,
   }) async => _ledger.take(limit).toList();
+
+  @override
+  Future<HousePassSummary> loadHousePassStatus(
+    String uid,
+    String inspectionId,
+  ) async {
+    final pass = _housePassByInspection[inspectionId];
+    if (pass != null) {
+      return HousePassSummary(
+        status: pass.hasRemainingAllowance
+            ? HousePassLifecycleStatus.active
+            : HousePassLifecycleStatus.allowanceReached,
+        priceMyr: _housePassPriceMyr,
+        includedAiLevel: _housePassIncludedLevel,
+        allowanceUsed: pass.allowanceUsed,
+        allowanceLimit: pass.allowanceLimit,
+        isProductionReady: false,
+      );
+    }
+
+    final pendingEntry = _pendingIntents.entries.where(
+      (e) =>
+          e.value.purpose == PaymentPurpose.housePass &&
+          e.value.inspectionId == inspectionId,
+    );
+    if (pendingEntry.isNotEmpty) {
+      return HousePassSummary(
+        status: HousePassLifecycleStatus.paymentPending,
+        priceMyr: _housePassPriceMyr,
+        pendingIntentId: pendingEntry.first.key,
+      );
+    }
+
+    return const HousePassSummary(
+      status: HousePassLifecycleStatus.purchaseRequired,
+      priceMyr: _housePassPriceMyr,
+    );
+  }
 
   static const Map<AiLevel, int> _maxCreditsByLevel = {
     AiLevel.fast: 150,

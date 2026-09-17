@@ -1,6 +1,6 @@
 import {HttpsError} from "firebase-functions/v2/https";
 import type {Firestore} from "firebase-admin/firestore";
-import {loadPricingConfig} from "./pricing_config";
+import {isHousePassSafeToSell, loadPricingConfig} from "./pricing_config";
 import {createPaymentIntent} from "./payment_intent";
 import {findHousePassForInspection} from "./house_pass";
 
@@ -69,8 +69,9 @@ export async function handlePurchaseHousePass(params: {
   auth: {uid: string} | null | undefined;
   data: unknown;
   firestore: Firestore;
+  env: NodeJS.ProcessEnv;
 }): Promise<{intentId: string; priceMyr: number}> {
-  const {auth, data, firestore} = params;
+  const {auth, data, firestore, env} = params;
   if (!auth) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
@@ -90,6 +91,15 @@ export async function handlePurchaseHousePass(params: {
     throw new HttpsError(
       "failed-precondition",
       "House Pass is not currently available."
+    );
+  }
+  if (!isHousePassSafeToSell(config.housePass, env)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "House Pass is not yet configured for production. An operator " +
+        "must set pricing/config.housePass.environment to " +
+        "\"production\" with a real allowance before House Pass can " +
+        "be sold outside sandbox mode."
     );
   }
 

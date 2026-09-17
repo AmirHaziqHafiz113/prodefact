@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../providers/active_session_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
+import 'house_pass_screen.dart';
 
 /// New Inspection setup, the final step before a session is actually
 /// created: a read-only summary of everything configured so far
@@ -235,6 +237,16 @@ class _StartInspectionButtonState
       );
       return;
     }
+    final session = ref.read(activeSessionProvider);
     context.push('/home-inspection/inspection');
+    // A House Pass inspection still needs the purchase actually
+    // completed — offered immediately, pushed on top of the (already
+    // reachable) inspection queue, never required to reach it. See
+    // `HousePassScreen`'s own "Do not block physical inspection"
+    // wording and `InspectionQueueScreen`'s banner, which offers this
+    // again later if skipped here.
+    if (session?.commercialMode == CommercialMode.housePass) {
+      context.push('${HousePassScreen.routePath}/${session!.id}');
+    }
   }
 }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:prodefact/core/inspection/billing/billing_service.dart';
+import 'package:prodefact/core/inspection/billing/house_pass_status_service.dart';
 import 'package:prodefact/core/inspection/billing/wallet_activity_service.dart';
 import 'package:prodefact/core/inspection/entities/auth_user.dart';
 import 'package:prodefact/core/inspection/entities/evidence.dart';
@@ -118,6 +119,10 @@ List<Override> testOverrides({
       resolvedBillingService is WalletActivityService
       ? resolvedBillingService as WalletActivityService
       : FakeBillingService();
+  final resolvedHousePassStatusService =
+      resolvedBillingService is HousePassStatusService
+      ? resolvedBillingService as HousePassStatusService
+      : FakeBillingService();
   return [
     inspectionRepositoryProvider.overrideWithValue(
       repository ?? createInMemoryRepository(),
@@ -151,6 +156,9 @@ List<Override> testOverrides({
     billingServiceProvider.overrideWithValue(resolvedBillingService),
     walletActivityServiceProvider.overrideWithValue(
       resolvedWalletActivityService,
+    ),
+    housePassStatusServiceProvider.overrideWithValue(
+      resolvedHousePassStatusService,
     ),
   ];
 }
