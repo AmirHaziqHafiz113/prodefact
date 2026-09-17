@@ -251,50 +251,46 @@ class _SuggestionCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (finding != null && finding.evidence.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      child: SizedBox(
-                        width: 56,
-                        height: 56,
-                        child: Image.file(
-                          File(finding.evidence.first.filePath),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: _AttributedBlock(
-                    label: 'Your note',
-                    icon: Icons.person_outline,
-                    color: AppColors.textSecondary,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          finding?.description?.isNotEmpty == true
-                              ? finding!.description!
-                              : '(No note)',
-                        ),
-                        if (finding != null && finding.evidence.length > 1)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              '${finding.evidence.length} photos attached.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                      ],
-                    ),
+            // Evidence first (mission "AI REVIEW" hierarchy) — the
+            // photo the AI match and the inspector's decision are both
+            // actually about, given real visual weight rather than a
+            // small thumbnail bundled into the note row.
+            if (finding != null && finding.evidence.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: SizedBox(
+                  height: 140,
+                  width: double.infinity,
+                  child: Image.file(
+                    File(finding.evidence.first.filePath),
+                    fit: BoxFit.cover,
                   ),
                 ),
-              ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+            _AttributedBlock(
+              label: 'Your note',
+              icon: Icons.person_outline,
+              color: AppColors.textSecondary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    finding?.description?.isNotEmpty == true
+                        ? finding!.description!
+                        : '(No note)',
+                  ),
+                  if (finding != null && finding.evidence.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${finding.evidence.length} photos attached.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.sm),
             _AttributedBlock(
@@ -355,10 +351,16 @@ class _SuggestionCard extends ConsumerWidget {
                     ),
                     child: const Text('Change'),
                   ),
-                  OutlinedButton(
+                  // Tertiary — real but never the same visual weight as
+                  // Accept (positive) or Change (strong secondary), so
+                  // it doesn't compete for attention (§21).
+                  TextButton(
                     onPressed: () => ref
                         .read(activeSessionProvider.notifier)
                         .rejectSuggestion(suggestion.id),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                    ),
                     child: const Text('Reject / Unresolved'),
                   ),
                 ],

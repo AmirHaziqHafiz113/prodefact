@@ -248,6 +248,12 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
       photo: photo,
       note: result.note,
     );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✓ Finding saved'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _editAreaNote(
@@ -386,6 +392,15 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Image-first (mission "FINDING CAPTURE"): the photo gets most of
+    // the available viewport, not a small fixed thumbnail — still
+    // capped (not aspect-ratio-driven) so the note field and
+    // Save/Discard buttons stay comfortably reachable without scrolling
+    // on a small phone.
+    final imageHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
+      220.0,
+      420.0,
+    );
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -397,14 +412,10 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // A fixed (not aspect-ratio-driven) height — keeps the
-              // whole sheet, note field, and Save/Discard buttons
-              // comfortably within view without scrolling on a small
-              // phone, regardless of the photo's own aspect ratio.
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 child: SizedBox(
-                  height: 180,
+                  height: imageHeight,
                   width: double.infinity,
                   child: Image.file(
                     File(widget.photo.filePath),
@@ -451,6 +462,8 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
     );
   }
 }
+
+enum _FindingAction { editNote, remove }
 
 class _FindingCard extends ConsumerWidget {
   const _FindingCard({required this.finding});
@@ -521,17 +534,33 @@ class _FindingCard extends ConsumerWidget {
                     source: EvidenceSource.camera,
                   ),
             ),
-            IconButton(
-              tooltip: 'Edit note',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => _editNote(context, ref),
-            ),
-            IconButton(
-              tooltip: 'Remove',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => ref
-                  .read(inspectionFindingsProvider.notifier)
-                  .removeFinding(finding.id),
+            PopupMenuButton<_FindingAction>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) => switch (action) {
+                _FindingAction.editNote => _editNote(context, ref),
+                _FindingAction.remove =>
+                  ref
+                      .read(inspectionFindingsProvider.notifier)
+                      .removeFinding(finding.id),
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _FindingAction.editNote,
+                  child: ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Edit note'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _FindingAction.remove,
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('Remove'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

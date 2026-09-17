@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../data/remote/remote_providers.dart';
 import '../../config/property_type.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/house_pass_providers.dart';
@@ -48,6 +49,7 @@ class InspectionQueueScreen extends ConsumerWidget {
               .expand((f) => f.evidence)
               .where((e) => e.syncStatus != SyncStatus.synced)
               .length;
+    final isOnline = ref.watch(isOnlineForAiProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -186,6 +188,14 @@ class InspectionQueueScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (activeSession != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _StatusStrip(
+                          session: activeSession,
+                          pendingSyncCount: pendingSyncCount,
+                          isOnline: isOnline,
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.md),
                       Card(
                         child: Padding(
@@ -581,6 +591,99 @@ class _PropertyHeader extends StatelessWidget {
   }
 }
 
+/// A compact, one-or-two-line contextual strip surfacing the single
+/// highest-priority real state the inspector should know about right
+/// now — never more than two at once (see mission §7 "SYNC / AI
+/// STATE"). Prioritizes review over AI-in-flight over sync, since
+/// review is the only one that's actually blocking the inspector.
+class _StatusStrip extends StatelessWidget {
+  const _StatusStrip({
+    required this.session,
+    required this.pendingSyncCount,
+    required this.isOnline,
+  });
+
+  final InspectionSession session;
+  final int pendingSyncCount;
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = AiCardSummary.of(session, isOnline: isOnline);
+    final review = summary.review;
+    final processing = summary.processing;
+
+    final items = <(String, IconData, Color)>[];
+    if (review.pending > 0) {
+      items.add((
+        '${review.pending} finding${review.pending == 1 ? '' : 's'} '
+            '${review.pending == 1 ? 'needs' : 'need'} review',
+        Icons.help_outline,
+        AppColors.warning,
+      ));
+    } else if (processing.failed > 0) {
+      items.add((
+        '${processing.failed} finding${processing.failed == 1 ? '' : 's'} '
+            'could not be analysed',
+        Icons.error_outline,
+        AppColors.danger,
+      ));
+    } else if (processing.inFlight > 0) {
+      items.add(
+        isOnline
+            ? (
+                '${processing.inFlight} finding${processing.inFlight == 1 ? '' : 's'} '
+                    'waiting for AI',
+                Icons.smart_toy_outlined,
+                AppColors.info,
+              )
+            : (
+                '${processing.inFlight} finding${processing.inFlight == 1 ? '' : 's'} '
+                    'waiting for connection',
+                Icons.cloud_off_outlined,
+                AppColors.textSecondary,
+              ),
+      );
+    }
+    if (pendingSyncCount > 0 && items.length < 2) {
+      items.add((
+        '$pendingSyncCount item${pendingSyncCount == 1 ? '' : 's'} waiting '
+            'to sync',
+        Icons.cloud_sync_outlined,
+        AppColors.warning,
+      ));
+    }
+    if (items.isEmpty) {
+      items.add(('Synced', Icons.cloud_done_outlined, AppColors.success));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (label, icon, color) in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _StatTile extends StatelessWidget {
   const _StatTile({
     required this.icon,
@@ -745,23 +848,33 @@ class _AreaQueueCard extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      aiProcessing.totalEligible == 0
-                          ? 'AI: No findings'
-                          : 'AI: ${aiProcessing.processed}/'
-                                '${aiProcessing.totalEligible} analysed',
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: AppColors.textMuted),
-                    ),
-                    Text(
-                      aiProcessing.totalEligible == 0
-                          ? 'Review: Not required'
-                          : 'Review: ${review.resolved}/${review.total} '
-                                'reviewed',
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: AppColors.textMuted),
-                    ),
+                    if (aiProcessing.totalEligible == 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'AI: No findings · Review: Not required',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.textMuted),
+                        ),
+                      )
+                    else ...[
+                      const SizedBox(height: 4),
+                      AppMiniProgressLine(
+                        label: 'AI',
+                        value: aiProcessing.fraction,
+                        fractionLabel:
+                            '${aiProcessing.processed}/'
+                            '${aiProcessing.totalEligible}',
+                        color: AppColors.info,
+                      ),
+                      const SizedBox(height: 4),
+                      AppMiniProgressLine(
+                        label: 'Review',
+                        value: review.fraction,
+                        fractionLabel: '${review.resolved}/${review.total}',
+                        color: AppColors.plumbing,
+                      ),
+                    ],
                   ],
                 ),
               ),

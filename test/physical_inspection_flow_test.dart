@@ -167,7 +167,11 @@ void main() {
     await _takePhotoAndSave(tester, 'Original text');
     expect(_within(find.text('Original text')), findsOneWidget);
 
-    await tester.tap(_within(find.byIcon(Icons.edit_outlined)));
+    // Edit note/Remove now live behind the finding card's overflow menu
+    // — only "Add another photo" stays a direct icon button.
+    await tester.tap(_within(find.byIcon(Icons.more_vert)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit note'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Edited text');
     await tester.tap(find.text('Save'));
@@ -175,7 +179,9 @@ void main() {
     expect(_within(find.text('Edited text')), findsOneWidget);
     expect(find.text('Original text'), findsNothing);
 
-    await tester.tap(_within(find.byIcon(Icons.delete_outline)));
+    await tester.tap(_within(find.byIcon(Icons.more_vert)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
     expect(find.text('Edited text'), findsNothing);
     expect(

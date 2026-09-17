@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -172,6 +175,11 @@ class _EstimateApprovalDialogState
     final configAsync = ref.watch(commercialConfigProvider);
     final creditsPerMyr = configAsync.value?.creditsPerMyr;
     final housePassIncludedLevel = configAsync.value?.housePass.includedAiLevel;
+    final finding = ref
+        .watch(activeSessionProvider)
+        ?.findings
+        .firstWhereOrNull((f) => f.id == widget.findingId);
+    final evidencePhoto = finding?.evidence.firstOrNull;
 
     final estimate = _estimate;
     final levelLabel = _levelLabel(estimate.aiLevel);
@@ -186,6 +194,20 @@ class _EstimateApprovalDialogState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (evidencePhoto != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: Image.file(
+                  File(evidencePhoto.filePath),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
           SegmentedButton<AiLevel>(
             segments: [
               for (final level in AiLevel.values)
@@ -216,7 +238,7 @@ class _EstimateApprovalDialogState
               'AI.',
             ),
             const SizedBox(height: 4),
-            Text('Additional cost: ${estimate.surchargeCredits} Credits'),
+            Text('$levelLabel: +${estimate.surchargeCredits} Credits'),
           ] else ...[
             Text('Up to: ${estimate.maximumCredits} Credits'),
             if (creditsPerMyr != null && creditsPerMyr > 0) ...[

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prodefact/app/theme/design_system.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/inspection_queue_screen.dart';
@@ -74,11 +75,23 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('AI: 1/1 analysed'), findsOneWidget);
-      expect(find.text('Review: 1/1 reviewed'), findsOneWidget);
+      // Real, distinct AI and Review mini-progress fills — never a
+      // single fake combined percentage.
+      final miniProgress = tester
+          .widgetList<AppMiniProgressLine>(find.byType(AppMiniProgressLine))
+          .toList();
+      expect(
+        miniProgress.where((p) => p.label == 'AI' && p.fractionLabel == '1/1'),
+        hasLength(1),
+      );
+      expect(
+        miniProgress.where(
+          (p) => p.label == 'Review' && p.fractionLabel == '1/1',
+        ),
+        hasLength(1),
+      );
       // At least one other included area has no findings at all.
-      expect(find.text('AI: No findings'), findsWidgets);
-      expect(find.text('Review: Not required'), findsWidgets);
+      expect(find.text('AI: No findings · Review: Not required'), findsWidgets);
     },
   );
 }

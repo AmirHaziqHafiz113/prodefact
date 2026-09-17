@@ -88,6 +88,10 @@ void main() {
       await _pumpDialogHarness(tester, container, findingId);
 
       expect(find.text('Smart AI'), findsOneWidget);
+      // The evidence photo for this finding renders as context above
+      // the estimate — never a bare pricing dialog with no idea which
+      // finding it's about.
+      expect(find.byType(Image), findsOneWidget);
       expect(find.text('Up to: 300 Credits'), findsOneWidget);
       expect(find.text('≈ RM3.00'), findsOneWidget);
       expect(find.text('Balance: 500 Credits'), findsOneWidget);
@@ -125,7 +129,7 @@ void main() {
 
       expect(find.text('Expert AI'), findsOneWidget);
       expect(find.text('House Pass includes Smart AI.'), findsOneWidget);
-      expect(find.text('Additional cost: 600 Credits'), findsOneWidget);
+      expect(find.text('Expert: +600 Credits'), findsOneWidget);
       expect(find.text('Use Expert · +600 Credits'), findsOneWidget);
     },
   );

@@ -91,34 +91,56 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               Text(
-                'Review or edit what appears on the report cover page. '
-                'This does not change the inspection\'s original setup.',
+                'Report-only metadata for the cover page — this does not '
+                'change the inspection\'s original Property Details.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
-              _field(_title, 'Property / Inspection title', required: true),
-              _field(_projectName, 'Project / Development'),
-              _field(_address, 'Address'),
-              Row(
+              AppFormSectionCard(
+                icon: Icons.home_outlined,
+                title: 'Property',
+                subtitle: 'As it will appear on the cover page',
                 children: [
-                  Expanded(child: _field(_blockTower, 'Block / Tower')),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(child: _field(_unitNumber, 'Unit')),
+                  _field(_title, 'Property / Inspection title', required: true),
+                  _field(_projectName, 'Project / Development'),
+                  _field(_address, 'Address'),
+                  Row(
+                    children: [
+                      Expanded(child: _field(_blockTower, 'Block / Tower')),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(child: _field(_unitNumber, 'Unit')),
+                    ],
+                  ),
                 ],
               ),
-              _field(_clientName, 'Client / Owner'),
-              _field(_inspectorName, 'Inspector'),
-              const SizedBox(height: AppSpacing.sm),
-              _DatePickerField(
-                label: 'Inspection date',
-                date: _inspectionDate,
-                onPick: (date) => setState(() => _inspectionDate = date),
+              const SizedBox(height: AppSpacing.lg),
+              AppFormSectionCard(
+                icon: Icons.people_outline,
+                title: 'Client & Inspector',
+                subtitle: 'Who this report is for and by',
+                children: [
+                  _field(_clientName, 'Client / Owner'),
+                  _field(_inspectorName, 'Inspector', last: true),
+                ],
               ),
-              const SizedBox(height: AppSpacing.md),
-              _DatePickerField(
-                label: 'Report date',
-                date: _reportDate,
-                onPick: (date) => setState(() => _reportDate = date),
+              const SizedBox(height: AppSpacing.lg),
+              AppFormSectionCard(
+                icon: Icons.event_available_outlined,
+                title: 'Dates',
+                subtitle: 'Inspection and report dates',
+                children: [
+                  _DatePickerField(
+                    label: 'Inspection date',
+                    date: _inspectionDate,
+                    onPick: (date) => setState(() => _inspectionDate = date),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _DatePickerField(
+                    label: 'Report date',
+                    date: _reportDate,
+                    onPick: (date) => setState(() => _reportDate = date),
+                  ),
+                ],
               ),
             ],
           ),
@@ -140,12 +162,14 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
     TextEditingController controller,
     String label, {
     bool required = false,
+    bool last = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: TextFormField(
         controller: controller,
         textCapitalization: TextCapitalization.words,
+        textInputAction: last ? TextInputAction.done : TextInputAction.next,
         decoration: InputDecoration(labelText: required ? '$label *' : label),
         validator: required
             ? (value) =>

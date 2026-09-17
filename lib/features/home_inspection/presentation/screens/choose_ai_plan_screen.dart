@@ -7,6 +7,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
 import '../../providers/user_profile_providers.dart';
+import '../../providers/wallet_providers.dart';
 import 'property_type_selection_screen.dart';
 import 'review_setup_screen.dart';
 
@@ -44,6 +45,10 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
     // A best-effort default only — never blocks rendering on this being
     // ready, and never overrides an explicit choice already made.
     final profileDefault = ref.watch(userProfileProvider).value?.defaultAiLevel;
+    final balanceAsync = ref.watch(walletBalanceProvider);
+    final cacheAsync = ref.watch(walletCacheProvider);
+    final resolvedBalance =
+        balanceAsync.value ?? cacheAsync.value?.balanceCredits;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Choose AI Plan')),
@@ -65,7 +70,7 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
                       orElse: () => config.aiLevels.first,
                     )
                     .level;
-            return _buildContent(context, config);
+            return _buildContent(context, config, resolvedBalance);
           },
         ),
       ),
@@ -94,7 +99,11 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
     );
   }
 
-  Widget _buildContent(BuildContext context, CommercialConfig config) {
+  Widget _buildContent(
+    BuildContext context,
+    CommercialConfig config,
+    int? resolvedBalance,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
@@ -103,16 +112,46 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
           currentIndex: 3,
         ),
         const SizedBox(height: AppSpacing.lg),
-        Text(
-          'How should AI analysis be paid for?',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          "Physical inspection is always free — this only affects the "
-          'optional AI analysis step for each finding.',
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: AppColors.textMuted),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'How should AI analysis be paid for?',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    "Physical inspection is always free — this only "
+                    'affects the optional AI analysis step for each '
+                    'finding.',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            if (resolvedBalance != null) ...[
+              const SizedBox(width: AppSpacing.md),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$resolvedBalance',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'Credits',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: AppSpacing.md),
         _CommercialModeCard(
@@ -135,7 +174,9 @@ class _ChooseAiPlanScreenState extends ConsumerState<ChooseAiPlanScreen> {
               'findings on this property. A higher level still costs '
               'Credits.',
           enabled: config.housePass.enabled,
-          warning: config.housePass.isProductionReady
+          warning: !config.housePass.enabled
+              ? "House Pass isn't available for this property right now."
+              : config.housePass.isProductionReady
               ? null
               : 'Preview pricing — not yet finalized for real purchases.',
           selected: _mode == CommercialMode.housePass,
