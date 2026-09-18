@@ -40,6 +40,29 @@ function paymentIntentRef(db: Firestore, uid: string, id: string) {
 }
 
 /**
+ * Strips any key whose value is `undefined` from `obj` — Firestore
+ * rejects `undefined` outright (`Cannot use "undefined" as a Firestore
+ * value`), so an optional field that's genuinely absent (e.g. a
+ * `topup` intent's `inspectionId`, or a `housePass` intent's
+ * `creditsAmount`) must never be assigned into the object that gets
+ * `.set()`, not merely left `undefined` on it. This is the one place
+ * that guarantee is enforced, so every optional field on
+ * [PaymentIntent] — present or future — gets it for free, rather than
+ * relying on each caller to remember.
+ * @param {T} obj the candidate document.
+ * @return {T} `obj` with every `undefined`-valued key omitted.
+ */
+function omitUndefined<T extends object>(obj: T): T {
+  const result = {} as T;
+  for (const key of Object.keys(obj) as Array<keyof T>) {
+    if (obj[key] !== undefined) {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
+/**
  * Creates (or, on a retried call, returns the existing) payment intent
  * — idempotent via `idempotencyKey`, the same pattern `wallet.ts` uses,
  * so a duplicate-tapped "Top Up" button can never create two intents.
@@ -61,7 +84,7 @@ export async function createPaymentIntent(db: Firestore, params: {
     return existing.data() as PaymentIntent;
   }
   const now = Date.now();
-  const intent: PaymentIntent = {
+  const candidate: PaymentIntent = {
     id: params.idempotencyKey,
     userId: params.uid,
     purpose: params.purpose,
@@ -72,6 +95,7 @@ export async function createPaymentIntent(db: Firestore, params: {
     createdAt: now,
     updatedAt: now,
   };
+  const intent = omitUndefined(candidate);
   await ref.set(intent);
   return intent;
 }

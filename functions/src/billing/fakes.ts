@@ -13,6 +13,29 @@
 
 type DocData = Record<string, unknown>;
 
+/**
+ * Real Firestore rejects `undefined` field values outright (`Value
+ * for argument "data" is not a valid Firestore document. Cannot use
+ * "undefined" as a Firestore value`) unless a client opts into
+ * `ignoreUndefinedProperties` — this codebase deliberately does not
+ * (see `payment_intent.ts`'s `omitUndefined`). The fake mirrors that
+ * rejection so a caller that regresses to writing an omitted-instead
+ * -of-undefined optional field is caught here, in-memory, rather than
+ * only in a real deployment.
+ * @param {DocData} data the candidate document.
+ */
+function assertNoUndefinedValues(data: DocData): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      throw new Error(
+        "Value for argument \"data\" is not a valid Firestore document. " +
+          "Cannot use \"undefined\" as a Firestore value (found in field " +
+          `"${key}").`
+      );
+    }
+  }
+}
+
 interface FakeDocRef {
   id: string;
   path: string;
@@ -72,6 +95,7 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
         data: () => store.get(path),
       }),
       set: async (data: DocData) => {
+        assertNoUndefinedValues(data);
         store.set(path, data);
       },
       collection: (name: string) => collectionRef(`${path}/${name}`),
@@ -114,6 +138,7 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
       const tx: FakeTransaction = {
         get: (ref) => ref.get(),
         set: (ref, data) => {
+          assertNoUndefinedValues(data);
           store.set(ref.path, data);
         },
       };
