@@ -275,6 +275,17 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _projectDeveloperNameMeta =
+      const VerificationMeta('projectDeveloperName');
+  @override
+  late final GeneratedColumn<String> projectDeveloperName =
+      GeneratedColumn<String>(
+        'project_developer_name',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -301,6 +312,7 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
     commercialMode,
     selectedAiLevel,
     autoAnalyseEnabled,
+    projectDeveloperName,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -509,6 +521,15 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         ),
       );
     }
+    if (data.containsKey('project_developer_name')) {
+      context.handle(
+        _projectDeveloperNameMeta,
+        projectDeveloperName.isAcceptableOrUnknown(
+          data['project_developer_name']!,
+          _projectDeveloperNameMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -614,6 +635,10 @@ class $InspectionSessionRowsTable extends InspectionSessionRows
         DriftSqlType.bool,
         data['${effectivePrefix}auto_analyse_enabled'],
       )!,
+      projectDeveloperName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_developer_name'],
+      ),
     );
   }
 
@@ -642,6 +667,11 @@ class InspectionSessionRow extends DataClass
   final String aiReviewState;
   final String? propertyTitle;
   final String? propertyAddress;
+
+  /// Deprecated in schema v10 in favor of [projectDeveloperName] — kept
+  /// (read-only from new code) so an inspection saved before that merge
+  /// still loads with its data intact. See
+  /// `PropertyDetails.resolvedProjectDeveloperName`.
   final String? projectName;
   final String? blockTower;
   final String? unitNumber;
@@ -679,6 +709,13 @@ class InspectionSessionRow extends DataClass
   /// (added in schema v9). Defaults to false (Flex Credits' safe
   /// default) — never true for any pre-existing session.
   final bool autoAnalyseEnabled;
+
+  /// The single "Project / Developer Name" field (added in schema v10,
+  /// QA/QC setup-simplification pass) — replaces the previous separate
+  /// [projectName]/[developerName] fields going forward. Both legacy
+  /// columns are kept, untouched, for backward compatibility; see
+  /// `PropertyDetails.resolvedProjectDeveloperName`.
+  final String? projectDeveloperName;
   const InspectionSessionRow({
     required this.id,
     required this.industry,
@@ -704,6 +741,7 @@ class InspectionSessionRow extends DataClass
     this.commercialMode,
     this.selectedAiLevel,
     required this.autoAnalyseEnabled,
+    this.projectDeveloperName,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -762,6 +800,9 @@ class InspectionSessionRow extends DataClass
       map['selected_ai_level'] = Variable<String>(selectedAiLevel);
     }
     map['auto_analyse_enabled'] = Variable<bool>(autoAnalyseEnabled);
+    if (!nullToAbsent || projectDeveloperName != null) {
+      map['project_developer_name'] = Variable<String>(projectDeveloperName);
+    }
     return map;
   }
 
@@ -821,6 +862,9 @@ class InspectionSessionRow extends DataClass
           ? const Value.absent()
           : Value(selectedAiLevel),
       autoAnalyseEnabled: Value(autoAnalyseEnabled),
+      projectDeveloperName: projectDeveloperName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectDeveloperName),
     );
   }
 
@@ -856,6 +900,9 @@ class InspectionSessionRow extends DataClass
       commercialMode: serializer.fromJson<String?>(json['commercialMode']),
       selectedAiLevel: serializer.fromJson<String?>(json['selectedAiLevel']),
       autoAnalyseEnabled: serializer.fromJson<bool>(json['autoAnalyseEnabled']),
+      projectDeveloperName: serializer.fromJson<String?>(
+        json['projectDeveloperName'],
+      ),
     );
   }
   @override
@@ -886,6 +933,7 @@ class InspectionSessionRow extends DataClass
       'commercialMode': serializer.toJson<String?>(commercialMode),
       'selectedAiLevel': serializer.toJson<String?>(selectedAiLevel),
       'autoAnalyseEnabled': serializer.toJson<bool>(autoAnalyseEnabled),
+      'projectDeveloperName': serializer.toJson<String?>(projectDeveloperName),
     };
   }
 
@@ -914,6 +962,7 @@ class InspectionSessionRow extends DataClass
     Value<String?> commercialMode = const Value.absent(),
     Value<String?> selectedAiLevel = const Value.absent(),
     bool? autoAnalyseEnabled,
+    Value<String?> projectDeveloperName = const Value.absent(),
   }) => InspectionSessionRow(
     id: id ?? this.id,
     industry: industry ?? this.industry,
@@ -959,6 +1008,9 @@ class InspectionSessionRow extends DataClass
         ? selectedAiLevel.value
         : this.selectedAiLevel,
     autoAnalyseEnabled: autoAnalyseEnabled ?? this.autoAnalyseEnabled,
+    projectDeveloperName: projectDeveloperName.present
+        ? projectDeveloperName.value
+        : this.projectDeveloperName,
   );
   InspectionSessionRow copyWithCompanion(InspectionSessionRowsCompanion data) {
     return InspectionSessionRow(
@@ -1022,6 +1074,9 @@ class InspectionSessionRow extends DataClass
       autoAnalyseEnabled: data.autoAnalyseEnabled.present
           ? data.autoAnalyseEnabled.value
           : this.autoAnalyseEnabled,
+      projectDeveloperName: data.projectDeveloperName.present
+          ? data.projectDeveloperName.value
+          : this.projectDeveloperName,
     );
   }
 
@@ -1051,7 +1106,8 @@ class InspectionSessionRow extends DataClass
           ..write('inspectionNote: $inspectionNote, ')
           ..write('commercialMode: $commercialMode, ')
           ..write('selectedAiLevel: $selectedAiLevel, ')
-          ..write('autoAnalyseEnabled: $autoAnalyseEnabled')
+          ..write('autoAnalyseEnabled: $autoAnalyseEnabled, ')
+          ..write('projectDeveloperName: $projectDeveloperName')
           ..write(')'))
         .toString();
   }
@@ -1082,6 +1138,7 @@ class InspectionSessionRow extends DataClass
     commercialMode,
     selectedAiLevel,
     autoAnalyseEnabled,
+    projectDeveloperName,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1110,7 +1167,8 @@ class InspectionSessionRow extends DataClass
           other.inspectionNote == this.inspectionNote &&
           other.commercialMode == this.commercialMode &&
           other.selectedAiLevel == this.selectedAiLevel &&
-          other.autoAnalyseEnabled == this.autoAnalyseEnabled);
+          other.autoAnalyseEnabled == this.autoAnalyseEnabled &&
+          other.projectDeveloperName == this.projectDeveloperName);
 }
 
 class InspectionSessionRowsCompanion
@@ -1139,6 +1197,7 @@ class InspectionSessionRowsCompanion
   final Value<String?> commercialMode;
   final Value<String?> selectedAiLevel;
   final Value<bool> autoAnalyseEnabled;
+  final Value<String?> projectDeveloperName;
   final Value<int> rowid;
   const InspectionSessionRowsCompanion({
     this.id = const Value.absent(),
@@ -1165,6 +1224,7 @@ class InspectionSessionRowsCompanion
     this.commercialMode = const Value.absent(),
     this.selectedAiLevel = const Value.absent(),
     this.autoAnalyseEnabled = const Value.absent(),
+    this.projectDeveloperName = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InspectionSessionRowsCompanion.insert({
@@ -1192,6 +1252,7 @@ class InspectionSessionRowsCompanion
     this.commercialMode = const Value.absent(),
     this.selectedAiLevel = const Value.absent(),
     this.autoAnalyseEnabled = const Value.absent(),
+    this.projectDeveloperName = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        industry = Value(industry),
@@ -1224,6 +1285,7 @@ class InspectionSessionRowsCompanion
     Expression<String>? commercialMode,
     Expression<String>? selectedAiLevel,
     Expression<bool>? autoAnalyseEnabled,
+    Expression<String>? projectDeveloperName,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1253,6 +1315,8 @@ class InspectionSessionRowsCompanion
       if (selectedAiLevel != null) 'selected_ai_level': selectedAiLevel,
       if (autoAnalyseEnabled != null)
         'auto_analyse_enabled': autoAnalyseEnabled,
+      if (projectDeveloperName != null)
+        'project_developer_name': projectDeveloperName,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1282,6 +1346,7 @@ class InspectionSessionRowsCompanion
     Value<String?>? commercialMode,
     Value<String?>? selectedAiLevel,
     Value<bool>? autoAnalyseEnabled,
+    Value<String?>? projectDeveloperName,
     Value<int>? rowid,
   }) {
     return InspectionSessionRowsCompanion(
@@ -1309,6 +1374,7 @@ class InspectionSessionRowsCompanion
       commercialMode: commercialMode ?? this.commercialMode,
       selectedAiLevel: selectedAiLevel ?? this.selectedAiLevel,
       autoAnalyseEnabled: autoAnalyseEnabled ?? this.autoAnalyseEnabled,
+      projectDeveloperName: projectDeveloperName ?? this.projectDeveloperName,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1388,6 +1454,11 @@ class InspectionSessionRowsCompanion
     if (autoAnalyseEnabled.present) {
       map['auto_analyse_enabled'] = Variable<bool>(autoAnalyseEnabled.value);
     }
+    if (projectDeveloperName.present) {
+      map['project_developer_name'] = Variable<String>(
+        projectDeveloperName.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1421,6 +1492,7 @@ class InspectionSessionRowsCompanion
           ..write('commercialMode: $commercialMode, ')
           ..write('selectedAiLevel: $selectedAiLevel, ')
           ..write('autoAnalyseEnabled: $autoAnalyseEnabled, ')
+          ..write('projectDeveloperName: $projectDeveloperName, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6020,6 +6092,7 @@ typedef $$InspectionSessionRowsTableCreateCompanionBuilder =
       Value<String?> commercialMode,
       Value<String?> selectedAiLevel,
       Value<bool> autoAnalyseEnabled,
+      Value<String?> projectDeveloperName,
       Value<int> rowid,
     });
 typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
@@ -6048,6 +6121,7 @@ typedef $$InspectionSessionRowsTableUpdateCompanionBuilder =
       Value<String?> commercialMode,
       Value<String?> selectedAiLevel,
       Value<bool> autoAnalyseEnabled,
+      Value<String?> projectDeveloperName,
       Value<int> rowid,
     });
 
@@ -6265,6 +6339,11 @@ class $$InspectionSessionRowsTableFilterComposer
 
   ColumnFilters<bool> get autoAnalyseEnabled => $composableBuilder(
     column: $table.autoAnalyseEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectDeveloperName => $composableBuilder(
+    column: $table.projectDeveloperName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6497,6 +6576,11 @@ class $$InspectionSessionRowsTableOrderingComposer
     column: $table.autoAnalyseEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get projectDeveloperName => $composableBuilder(
+    column: $table.projectDeveloperName,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InspectionSessionRowsTableAnnotationComposer
@@ -6613,6 +6697,11 @@ class $$InspectionSessionRowsTableAnnotationComposer
 
   GeneratedColumn<bool> get autoAnalyseEnabled => $composableBuilder(
     column: $table.autoAnalyseEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectDeveloperName => $composableBuilder(
+    column: $table.projectDeveloperName,
     builder: (column) => column,
   );
 
@@ -6785,6 +6874,7 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String?> commercialMode = const Value.absent(),
                 Value<String?> selectedAiLevel = const Value.absent(),
                 Value<bool> autoAnalyseEnabled = const Value.absent(),
+                Value<String?> projectDeveloperName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion(
                 id: id,
@@ -6811,6 +6901,7 @@ class $$InspectionSessionRowsTableTableManager
                 commercialMode: commercialMode,
                 selectedAiLevel: selectedAiLevel,
                 autoAnalyseEnabled: autoAnalyseEnabled,
+                projectDeveloperName: projectDeveloperName,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6839,6 +6930,7 @@ class $$InspectionSessionRowsTableTableManager
                 Value<String?> commercialMode = const Value.absent(),
                 Value<String?> selectedAiLevel = const Value.absent(),
                 Value<bool> autoAnalyseEnabled = const Value.absent(),
+                Value<String?> projectDeveloperName = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InspectionSessionRowsCompanion.insert(
                 id: id,
@@ -6865,6 +6957,7 @@ class $$InspectionSessionRowsTableTableManager
                 commercialMode: commercialMode,
                 selectedAiLevel: selectedAiLevel,
                 autoAnalyseEnabled: autoAnalyseEnabled,
+                projectDeveloperName: projectDeveloperName,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

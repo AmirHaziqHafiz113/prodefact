@@ -14,6 +14,12 @@ enum ReportGenerationOutcome {
   /// review. No report was generated.
   aiReviewIncomplete,
 
+  /// The report gate: the Client / Agent Contact Number was left blank
+  /// at setup (allowed — see the QA/QC simplification pass) and still
+  /// hasn't been completed. Required before finalization, unlike every
+  /// other deferrable Basic Details field. No report was generated.
+  missingContactNumber,
+
   /// The session id doesn't exist locally.
   sessionNotFound,
 
@@ -32,6 +38,8 @@ class ReportGenerationResult {
     : this._(ReportGenerationOutcome.physicalInspectionIncomplete, null, null);
   const ReportGenerationResult.aiReviewIncomplete()
     : this._(ReportGenerationOutcome.aiReviewIncomplete, null, null);
+  const ReportGenerationResult.missingContactNumber()
+    : this._(ReportGenerationOutcome.missingContactNumber, null, null);
   const ReportGenerationResult.sessionNotFound()
     : this._(ReportGenerationOutcome.sessionNotFound, null, null);
   const ReportGenerationResult.failure(String message)

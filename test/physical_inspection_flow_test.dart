@@ -32,6 +32,8 @@ Finder _previewButton(String label) =>
 Future<void> _takePhotoAndSave(WidgetTester tester, String note) async {
   await tester.tap(_within(find.text('Take Defect Photo')));
   await tester.pumpAndSettle();
+  await tester.tap(find.text('Camera'));
+  await tester.pumpAndSettle();
   await tester.enterText(_previewNoteField(), note);
   await tester.tap(_previewButton('Save Finding'));
   await tester.pumpAndSettle();
@@ -67,9 +69,6 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
     _within(find.byType(TextFormField)).first,
     'Test Property',
   );
-  await tester.tap(_within(find.text('Continue')));
-  await tester.pumpAndSettle();
-
   await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
 
@@ -143,6 +142,8 @@ void main() {
       await _takePhotoAndSave(tester, 'Leaking tap');
 
       await tester.tap(_within(find.byIcon(Icons.add_a_photo_outlined)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
 
       expect(_within(find.text('2 photos')), findsOneWidget);

@@ -15,6 +15,40 @@ import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
 import 'top_up_screen.dart';
 
+/// Lets the inspector pick where a piece of evidence comes from —
+/// Camera or Gallery/Photos — before it enters the *exact same*
+/// capture pipeline either way (`EvidenceCaptureService.captureImage`,
+/// which already treats [EvidenceSource.camera] and
+/// [EvidenceSource.gallery] identically: same normalization, same
+/// local persistence, same evidence id, same upload/AI/report path).
+/// Returns null if the inspector dismisses the sheet without choosing
+/// either — callers must treat that exactly like the camera picker
+/// itself being cancelled, i.e. a silent no-op, never an error.
+Future<EvidenceSource?> chooseEvidenceSource(BuildContext context) {
+  return showModalBottomSheet<EvidenceSource>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Camera'),
+            onTap: () =>
+                Navigator.of(sheetContext).pop(EvidenceSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from Gallery'),
+            onTap: () =>
+                Navigator.of(sheetContext).pop(EvidenceSource.gallery),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Camera-first physical inspection of a single area: "Take Defect
 /// Photo" is the primary, most prominent action — no element/component
 /// selection is ever required before capturing evidence. See
@@ -194,11 +228,12 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
   }
 
   Future<void> _takePhoto(String sectionId) async {
+    final source = await chooseEvidenceSource(context);
+    if (source == null || !mounted) return; // cancelled the source picker
+
     setState(() => _isCapturing = true);
     final notifier = ref.read(activeSessionProvider.notifier);
-    final photo = await notifier.captureFindingPhoto(
-      source: EvidenceSource.camera,
-    );
+    final photo = await notifier.captureFindingPhoto(source: source);
     if (!mounted) return;
     setState(() => _isCapturing = false);
     if (photo == null) return; // cancelled, or a capture error already shown
@@ -498,12 +533,13 @@ class _FindingCard extends ConsumerWidget {
             IconButton(
               tooltip: 'Add another photo',
               icon: const Icon(Icons.add_a_photo_outlined),
-              onPressed: () => ref
-                  .read(activeSessionProvider.notifier)
-                  .addEvidence(
-                    findingId: finding.id,
-                    source: EvidenceSource.camera,
-                  ),
+              onPressed: () async {
+                final source = await chooseEvidenceSource(context);
+                if (source == null) return; // cancelled the source picker
+                await ref
+                    .read(activeSessionProvider.notifier)
+                    .addEvidence(findingId: finding.id, source: source);
+              },
             ),
             PopupMenuButton<_FindingAction>(
               icon: const Icon(Icons.more_vert),

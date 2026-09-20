@@ -6,7 +6,6 @@ import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/area_inspection_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
-import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import '../support/test_repository.dart';
@@ -25,16 +24,11 @@ void main() {
       overrides: testOverrides(billingService: billing),
     );
     addTearDown(container.dispose);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .begin(PropertyType.highRise);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .chooseCommercialPlan(
+    await container.read(activeSessionProvider.notifier).startNew(
+          PropertyType.highRise,
           commercialMode: CommercialMode.flexCredits,
           selectedAiLevel: AiLevel.smart,
         );
-    await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
     final queue = container.read(inspectionQueueProvider);
     final section = queue.first;
@@ -73,16 +67,11 @@ void main() {
       overrides: testOverrides(billingService: billing),
     );
     addTearDown(container.dispose);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .begin(PropertyType.highRise);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .chooseCommercialPlan(
+    await container.read(activeSessionProvider.notifier).startNew(
+          PropertyType.highRise,
           commercialMode: CommercialMode.housePass,
           selectedAiLevel: AiLevel.smart,
         );
-    await container.read(newInspectionDraftProvider.notifier).startInspection();
     final sessionId = container.read(activeSessionProvider)!.id;
     final intent = await billing.purchaseHousePass(sessionId);
     await billing.confirmSandboxPayment(intent.intentId);

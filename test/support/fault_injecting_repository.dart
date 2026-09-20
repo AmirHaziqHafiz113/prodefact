@@ -192,6 +192,12 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> setCommercialMode(String sessionId, CommercialMode mode) {
+    _maybeFail('setCommercialMode');
+    return _inner.setCommercialMode(sessionId, mode);
+  }
+
+  @override
   Future<WalletCache?> loadWalletCache() {
     _maybeFail('loadWalletCache');
     return _inner.loadWalletCache();

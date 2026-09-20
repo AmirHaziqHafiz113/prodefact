@@ -36,7 +36,7 @@ void main() {
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      navigator.pop(); // property details -> property type selection
+      navigator.pop(); // basic details -> property type selection
       navigator.pop(); // property type selection -> dashboard
       await tester.pumpAndSettle();
 
@@ -64,9 +64,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('High Rise'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, 'Test Property');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).at(0), 'A-1-1');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Test Property');
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
@@ -77,12 +76,12 @@ void main() {
     expect(find.text('Physical Inspection'), findsOneWidget);
 
     // Back out of the created inspection to the dashboard — property
-    // type -> property details -> area configuration -> choose AI plan ->
-    // review setup -> queue is 6 pushes deep from the dashboard.
+    // type -> basic details -> area configuration -> review setup ->
+    // queue is 5 pushes deep from the dashboard.
     final navigator = tester.state<NavigatorState>(
       find.byType(Navigator).first,
     );
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < 5; i++) {
       navigator.pop();
     }
     await tester.pumpAndSettle();

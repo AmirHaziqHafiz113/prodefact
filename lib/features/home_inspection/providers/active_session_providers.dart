@@ -1130,6 +1130,25 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
   }
 
+  /// Records the inspector's post-setup choice to switch this
+  /// inspection to House Pass — called once from `HousePassScreen`
+  /// when a purchase is actually initiated, never during New
+  /// Inspection setup (see the QA/QC simplification pass, which
+  /// removed the Choose AI Plan step). A session already on
+  /// `housePass` is left untouched (idempotent).
+  void setCommercialMode(CommercialMode mode) {
+    final session = state;
+    if (session == null || session.commercialMode == mode) return;
+    state = session.copyWith(commercialMode: mode, updatedAt: DateTime.now());
+    unawaited(
+      _persist(
+        () => _repository.setCommercialMode(session.id, mode),
+        previous: session,
+        action: 'update commercial mode',
+      ),
+    );
+  }
+
   /// Records the Auto Analyse preference for this inspection — never
   /// inferred from wallet/House Pass state; see
   /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.

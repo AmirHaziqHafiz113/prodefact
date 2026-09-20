@@ -4,9 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
-import '../../providers/active_session_providers.dart';
 import '../../providers/new_inspection_draft_providers.dart';
-import 'house_pass_screen.dart';
 import 'inspection_queue_screen.dart';
 import 'property_type_selection_screen.dart';
 
@@ -49,7 +47,7 @@ class ReviewSetupScreen extends ConsumerWidget {
           children: [
             const AppWizardStepper(
               stepLabels: PropertyTypeSelectionScreen.wizardSteps,
-              currentIndex: 4,
+              currentIndex: 3,
             ),
             const SizedBox(height: AppSpacing.lg),
             AppSectionHeader(
@@ -61,13 +59,17 @@ class ReviewSetupScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             _SummaryCard(
               rows: [
+                ('Unit', details.unitNumber?.isNotEmpty == true
+                    ? details.unitNumber!
+                    : 'Not set'),
                 if (details.address != null) ('Address', details.address!),
-                if (details.projectName != null)
-                  ('Project / Development', details.projectName!),
+                if (details.resolvedProjectDeveloperName != null)
+                  ('Project / Developer', details.resolvedProjectDeveloperName!),
                 if (details.blockTower != null)
                   ('Block / Tower', details.blockTower!),
-                if (details.unitNumber != null) ('Unit', details.unitNumber!),
                 if (details.clientName != null) ('Client', details.clientName!),
+                if (details.contactNumber != null)
+                  ('Contact', details.contactNumber!),
                 (
                   'Inspector',
                   details.inspectorName?.isNotEmpty == true
@@ -75,9 +77,9 @@ class ReviewSetupScreen extends ConsumerWidget {
                       : 'Not set',
                 ),
                 (
-                  'Inspection date',
+                  'Inspection date & time',
                   details.inspectionDate != null
-                      ? _formatDate(details.inspectionDate!)
+                      ? _formatDateTime(details.inspectionDate!)
                       : 'Not set',
                 ),
               ],
@@ -136,7 +138,8 @@ class ReviewSetupScreen extends ConsumerWidget {
               Expanded(
                 child: _StartInspectionButton(
                   enabled:
-                      includedAreas.isNotEmpty && draft.hasChosenCommercialPlan,
+                      includedAreas.isNotEmpty &&
+                      (details.unitNumber?.trim().isNotEmpty ?? false),
                 ),
               ),
             ],
@@ -146,9 +149,11 @@ class ReviewSetupScreen extends ConsumerWidget {
     );
   }
 
-  String _formatDate(DateTime dateTime) {
+  String _formatDateTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
     String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return '${dateTime.year}-${twoDigits(dateTime.month)}-${twoDigits(dateTime.day)}';
+    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
+        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
   }
 }
 
@@ -244,16 +249,11 @@ class _StartInspectionButtonState
       );
       return;
     }
-    final session = ref.read(activeSessionProvider);
+    // Setup no longer asks Flex Credits vs. House Pass (see the QA/QC
+    // simplification pass) — every new inspection starts straight into
+    // the queue, with that commercial decision available later, from
+    // the queue's own "House Pass" action, only if the inspector wants
+    // it.
     context.push(InspectionQueueScreen.routePath);
-    // A House Pass inspection still needs the purchase actually
-    // completed — offered immediately, pushed on top of the (already
-    // reachable) inspection queue, never required to reach it. See
-    // `HousePassScreen`'s own "Do not block physical inspection"
-    // wording and `InspectionQueueScreen`'s banner, which offers this
-    // again later if skipped here.
-    if (session?.commercialMode == CommercialMode.housePass) {
-      context.push('${HousePassScreen.routePath}/${session!.id}');
-    }
   }
 }

@@ -10,7 +10,7 @@ import '../support/test_repository.dart';
 /// Continue button — see the screen's own doc comment).
 void main() {
   testWidgets('shows exactly two property type options and the step-1 stepper, '
-      'and tapping one continues to Property Details', (tester) async {
+      'and tapping one continues to Basic Details', (tester) async {
     final container = ProviderContainer(overrides: testOverrides());
     addTearDown(container.dispose);
 
@@ -28,10 +28,16 @@ void main() {
     expect(find.text('High Rise'), findsOneWidget);
     expect(find.text('Landed'), findsOneWidget);
     expect(find.byType(AppWizardStepper), findsOneWidget);
+    // QA/QC feedback: testers found the highlighted "category" tagline
+    // (a StatusPill under each card) confusing — it must be gone from
+    // both High Rise and Landed, leaving only the plain descriptive
+    // text.
+    expect(find.text('Units, common areas & facilities'), findsNothing);
+    expect(find.text('Indoor & outdoor areas'), findsNothing);
 
     await tester.tap(find.text('Landed'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Property Details'), findsOneWidget);
+    expect(find.text('Basic Details'), findsOneWidget);
   });
 }

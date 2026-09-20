@@ -10,7 +10,6 @@ import 'package:prodefact/features/home_inspection/presentation/screens/ai_analy
 import 'package:prodefact/features/home_inspection/presentation/screens/house_pass_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/top_up_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
-import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/fake_auth_service.dart';
@@ -138,16 +137,11 @@ void main() {
 
     final container = ProviderContainer(overrides: testOverrides());
     addTearDown(container.dispose);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .begin(PropertyType.highRise);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .chooseCommercialPlan(
+    await container.read(activeSessionProvider.notifier).startNew(
+          PropertyType.highRise,
           commercialMode: CommercialMode.housePass,
           selectedAiLevel: AiLevel.smart,
         );
-    await container.read(newInspectionDraftProvider.notifier).startInspection();
     final sessionId = container.read(activeSessionProvider)!.id;
 
     await tester.pumpWidget(
@@ -172,16 +166,11 @@ void main() {
       overrides: testOverrides(billingService: billing),
     );
     addTearDown(container.dispose);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .begin(PropertyType.highRise);
-    container
-        .read(newInspectionDraftProvider.notifier)
-        .chooseCommercialPlan(
+    await container.read(activeSessionProvider.notifier).startNew(
+          PropertyType.highRise,
           commercialMode: CommercialMode.housePass,
           selectedAiLevel: AiLevel.smart,
         );
-    await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
     final queue = container.read(inspectionQueueProvider);
     final photo = await notifier.captureFindingPhoto(

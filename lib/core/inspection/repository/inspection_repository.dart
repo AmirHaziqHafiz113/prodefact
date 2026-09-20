@@ -143,6 +143,14 @@ abstract class InspectionRepository {
   /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.
   Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled);
 
+  /// Records the inspector's post-setup commercial choice for one
+  /// inspection — House Pass purchase is no longer offered during New
+  /// Inspection setup (see the QA/QC simplification pass), so this is
+  /// how an inspection that starts with `commercialMode` unset (Flex
+  /// Credits by default) can still switch to House Pass once the
+  /// inspector actually opts in via `HousePassScreen`.
+  Future<void> setCommercialMode(String sessionId, CommercialMode mode);
+
   /// The last-known Credits balance cached locally for instant/offline
   /// display — null if nothing has been cached yet. **Never
   /// authoritative** — see `WalletCache`'s doc comment.

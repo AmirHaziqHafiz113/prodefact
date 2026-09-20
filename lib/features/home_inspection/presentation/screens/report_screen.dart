@@ -124,6 +124,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
         'Physical inspection is not complete yet.',
       ReportGenerationOutcome.aiReviewIncomplete =>
         'AI review is not complete yet.',
+      ReportGenerationOutcome.missingContactNumber =>
+        'Add the client or agent contact number before generating the '
+            'final report.',
       ReportGenerationOutcome.sessionNotFound => 'Inspection not found.',
       ReportGenerationOutcome.failure => result.message ?? 'Unknown error.',
       ReportGenerationOutcome.success => '',
@@ -151,6 +154,10 @@ class _ReadinessCard extends StatelessWidget {
     final unresolved = session.aiSuggestions
         .where((s) => s.status == AiSuggestionStatus.rejected)
         .length;
+    final metadata =
+        session.reportMetadata ??
+        ReportMetadata.fromPropertyDetails(session.propertyDetails);
+    final hasContactNumber = metadata.contactNumber?.trim().isNotEmpty == true;
 
     return Card(
       child: Padding(
@@ -216,6 +223,22 @@ class _ReadinessCard extends StatelessWidget {
                 done: false,
                 warningOnly: true,
               ),
+            _ReadinessRow(
+              label: 'Contact number',
+              value: hasContactNumber ? 'Added' : 'Required',
+              done: hasContactNumber,
+            ),
+            if (!hasContactNumber) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () =>
+                      context.push(ReportDetailsScreen.routePath),
+                  child: const Text('Add contact number'),
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpacing.md),
             report == null
                 ? const StatusPill(

@@ -68,8 +68,8 @@ class PdfReportRenderer implements ReportRenderer {
           'Property',
           model.propertyTitle ?? model.propertyTypeLabel,
         ),
-        if (model.projectName != null)
-          _buildCoverRow('Project / Development', model.projectName!),
+        if (model.projectDeveloperName != null)
+          _buildCoverRow('Project / Developer', model.projectDeveloperName!),
         if (model.blockTower != null || model.unitNumber != null)
           _buildCoverRow(
             'Block / Unit',
@@ -83,10 +83,18 @@ class PdfReportRenderer implements ReportRenderer {
         _buildCoverRow('Property type', model.propertyTypeLabel),
         if (model.clientName != null)
           _buildCoverRow('Client', model.clientName!),
+        if (model.contactNumber != null)
+          _buildCoverRow(
+            'Client / Agent Contact',
+            model.contactNumber!,
+          ),
         if (model.inspectorName != null)
           _buildCoverRow('Inspector', model.inspectorName!),
         _buildCoverRow('Inspection ID', model.sessionId),
-        _buildCoverRow('Inspection date', _formatDate(model.inspectionDate)),
+        _buildCoverRow(
+          'Inspection date & time',
+          _formatDateTime(model.inspectionDate),
+        ),
         _buildCoverRow(
           'Report date',
           _formatDate(model.reportDate ?? model.generatedAt),
@@ -345,5 +353,17 @@ class PdfReportRenderer implements ReportRenderer {
     final local = dateTime.toLocal();
     String twoDigits(int value) => value.toString().padLeft(2, '0');
     return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)}';
+  }
+
+  /// Date and time together, for the one place this report renders an
+  /// actual moment in time rather than a calendar date — see QA/QC
+  /// simplification pass ("Inspection Date & Time"). A pre-upgrade
+  /// inspection that only ever captured a date still renders cleanly
+  /// here (its stored time defaults to midnight).
+  String _formatDateTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${_formatDate(dateTime)} ${twoDigits(local.hour)}:'
+        '${twoDigits(local.minute)}';
   }
 }

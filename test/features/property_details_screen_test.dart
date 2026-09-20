@@ -5,7 +5,7 @@ import 'package:prodefact/app/app.dart';
 
 import '../support/test_repository.dart';
 
-Future<void> _pumpToPropertyDetails(WidgetTester tester) async {
+Future<void> _pumpToBasicDetails(WidgetTester tester) async {
   // A tall surface so every grouped field section is actually built
   // (not just scrolled past) by the lazy list — the default test
   // surface is too short to fit the wizard stepper plus all three
@@ -24,36 +24,60 @@ Future<void> _pumpToPropertyDetails(WidgetTester tester) async {
   await tester.tap(find.text('High Rise'));
   await tester.pumpAndSettle();
 
-  expect(find.text('Property Details'), findsOneWidget);
+  expect(find.text('Basic Details'), findsOneWidget);
 }
 
-/// New Inspection setup, step 2: Property Details, between property type
+/// New Inspection setup, step 2: Basic Details, between property type
 /// selection and area configuration — see `PropertyDetailsScreen`. Only
-/// the title is required; everything captured here later shows on the
-/// Review Setup summary, the dashboard card, and the report cover page.
+/// Unit No. is required (the QA/QC setup-simplification pass);
+/// everything else captured here later shows on the Review Setup
+/// summary, the dashboard card, and the report cover page, or can be
+/// completed later via Report Details.
 void main() {
-  testWidgets('Continue is blocked until the required title is filled in', (
-    tester,
-  ) async {
-    await _pumpToPropertyDetails(tester);
+  testWidgets('Continue is blocked until the required Unit No. is filled '
+      'in', (tester) async {
+    await _pumpToBasicDetails(tester);
 
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    // Validation failed — still on Property Details, never reached
-    // area configuration.
-    expect(find.text('Property Details'), findsOneWidget);
+    // Validation failed — still on Basic Details, never reached area
+    // configuration.
+    expect(find.text('Basic Details'), findsOneWidget);
     expect(find.text('Required'), findsOneWidget);
   });
 
-  testWidgets('filling in the title (and other fields) continues to area '
-      'configuration, and the values appear on the Review Setup summary', (
-    tester,
-  ) async {
-    await _pumpToPropertyDetails(tester);
+  testWidgets(
+    'every field other than Unit No. can be left blank — "Skip optional '
+    'details / Complete later" reaches area configuration exactly like '
+    'Continue',
+    (tester) async {
+      await _pumpToBasicDetails(tester);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Unit No. *'),
+        'A-12-08',
+      );
+      await tester.tap(
+        find.text('Skip optional details / Complete later'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Configure Areas'), findsOneWidget);
+    },
+  );
+
+  testWidgets('filling in Unit No. (and other fields) continues to area '
+      'configuration, and the values appear on the Review Setup summary '
+      '— with no AI Plan/commercial step in between', (tester) async {
+    await _pumpToBasicDetails(tester);
 
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Inspection / Property title *'),
+      find.widgetWithText(TextFormField, 'Unit No. *'),
+      'A-12-08',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Inspection / Property title'),
       'Residensi Vista',
     );
     await tester.enterText(
@@ -61,11 +85,7 @@ void main() {
       '1 Jalan Test',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Unit number'),
-      'A-12-08',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Client / Owner name'),
+      find.widgetWithText(TextFormField, 'Client / Agent Name'),
       'Jane Client',
     );
     await tester.tap(find.text('Continue'));
@@ -76,10 +96,8 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Choose AI Plan'), findsOneWidget);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
+    // Straight to Review Setup — no "Choose AI Plan"/commercial step.
+    expect(find.text('Choose AI Plan'), findsNothing);
     expect(find.text('Review Setup'), findsOneWidget);
     expect(find.text('Residensi Vista'), findsOneWidget);
     expect(find.text('1 Jalan Test'), findsOneWidget);

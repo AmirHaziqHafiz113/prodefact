@@ -54,7 +54,7 @@ void main() {
       expect(find.text('Client & Inspector'), findsOneWidget);
       expect(find.text('Dates'), findsOneWidget);
       expect(
-        find.widgetWithText(TextFormField, 'Property / Inspection title *'),
+        find.widgetWithText(TextFormField, 'Property / Inspection title'),
         findsOneWidget,
       );
       expect(find.text('Residensi Vista'), findsOneWidget);

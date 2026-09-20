@@ -26,12 +26,13 @@ class ReportDetailsScreen extends ConsumerStatefulWidget {
 class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
-  final _projectName = TextEditingController();
+  final _projectDeveloperName = TextEditingController();
   final _address = TextEditingController();
   final _blockTower = TextEditingController();
   final _unitNumber = TextEditingController();
   final _clientName = TextEditingController();
   final _inspectorName = TextEditingController();
+  final _contactNumber = TextEditingController();
   DateTime _inspectionDate = DateTime.now();
   DateTime _reportDate = DateTime.now();
   bool _prefilled = false;
@@ -40,12 +41,13 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   void dispose() {
     for (final controller in [
       _title,
-      _projectName,
+      _projectDeveloperName,
       _address,
       _blockTower,
       _unitNumber,
       _clientName,
       _inspectorName,
+      _contactNumber,
     ]) {
       controller.dispose();
     }
@@ -71,12 +73,13 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
           session.reportMetadata ??
           ReportMetadata.fromPropertyDetails(session.propertyDetails);
       _title.text = metadata.title;
-      _projectName.text = metadata.projectName ?? '';
+      _projectDeveloperName.text = metadata.projectDeveloperName ?? '';
       _address.text = metadata.address ?? '';
       _blockTower.text = metadata.blockTower ?? '';
       _unitNumber.text = metadata.unitNumber ?? '';
       _clientName.text = metadata.clientName ?? '';
       _inspectorName.text = metadata.inspectorName ?? '';
+      _contactNumber.text = metadata.contactNumber ?? '';
       _inspectionDate = metadata.inspectionDate ?? DateTime.now();
       _reportDate = metadata.reportDate ?? DateTime.now();
       _prefilled = true;
@@ -101,8 +104,8 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                 title: 'Property',
                 subtitle: 'As it will appear on the cover page',
                 children: [
-                  _field(_title, 'Property / Inspection title', required: true),
-                  _field(_projectName, 'Project / Development'),
+                  _field(_title, 'Property / Inspection title'),
+                  _field(_projectDeveloperName, 'Project / Developer Name'),
                   _field(_address, 'Address'),
                   Row(
                     children: [
@@ -120,6 +123,11 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                 subtitle: 'Who this report is for and by',
                 children: [
                   _field(_clientName, 'Client / Owner'),
+                  _field(
+                    _contactNumber,
+                    'Client / Agent Contact Number',
+                    keyboardType: TextInputType.phone,
+                  ),
                   _field(_inspectorName, 'Inspector', last: true),
                 ],
               ),
@@ -129,10 +137,10 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                 title: 'Dates',
                 subtitle: 'Inspection and report dates',
                 children: [
-                  _DatePickerField(
+                  AppDateTimeField(
                     label: 'Inspection date',
-                    date: _inspectionDate,
-                    onPick: (date) => setState(() => _inspectionDate = date),
+                    value: _inspectionDate,
+                    onChanged: (date) => setState(() => _inspectionDate = date),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _DatePickerField(
@@ -161,20 +169,17 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   Widget _field(
     TextEditingController controller,
     String label, {
-    bool required = false,
     bool last = false,
+    TextInputType? keyboardType,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: TextFormField(
         controller: controller,
         textCapitalization: TextCapitalization.words,
+        keyboardType: keyboardType,
         textInputAction: last ? TextInputAction.done : TextInputAction.next,
-        decoration: InputDecoration(labelText: required ? '$label *' : label),
-        validator: required
-            ? (value) =>
-                  (value == null || value.trim().isEmpty) ? 'Required' : null
-            : null,
+        decoration: InputDecoration(labelText: label),
       ),
     );
   }
@@ -189,12 +194,13 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
         .setReportMetadata(
           ReportMetadata(
             title: _title.text.trim(),
-            projectName: orNull(_projectName),
+            projectDeveloperName: orNull(_projectDeveloperName),
             address: orNull(_address),
             blockTower: orNull(_blockTower),
             unitNumber: orNull(_unitNumber),
             clientName: orNull(_clientName),
             inspectorName: orNull(_inspectorName),
+            contactNumber: orNull(_contactNumber),
             inspectionDate: _inspectionDate,
             reportDate: _reportDate,
           ),

@@ -51,8 +51,6 @@ Future<ProviderContainer> _pumpToReportScreen(
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Continue')));
   await tester.pumpAndSettle();
-  await tester.tap(_within(find.text('Continue')));
-  await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
   // Auto Analyse on so saving a finding queues AI immediately — this
@@ -65,6 +63,8 @@ Future<ProviderContainer> _pumpToReportScreen(
   await tester.tap(_within(find.text(section.name)));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Take Defect Photo')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Camera'));
   await tester.pumpAndSettle();
   await tester.enterText(
     find.descendant(
@@ -142,6 +142,12 @@ void main() {
     final container = await _pumpToReportScreen(
       tester,
       overrides: testOverrides(reportRenderer: renderer),
+    );
+    container.read(activeSessionProvider.notifier).setReportMetadata(
+      const ReportMetadata(
+        title: 'Test Property',
+        contactNumber: '+60123456789',
+      ),
     );
 
     await tester.tap(_within(find.text('Generate Report')));

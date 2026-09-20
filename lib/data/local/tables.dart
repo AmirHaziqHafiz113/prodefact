@@ -27,6 +27,11 @@ class InspectionSessionRows extends Table {
   // `assetTypeId`'s property-type label wherever this would be shown.
   TextColumn get propertyTitle => text().nullable()();
   TextColumn get propertyAddress => text().nullable()();
+
+  /// Deprecated in schema v10 in favor of [projectDeveloperName] — kept
+  /// (read-only from new code) so an inspection saved before that merge
+  /// still loads with its data intact. See
+  /// `PropertyDetails.resolvedProjectDeveloperName`.
   TextColumn get projectName => text().nullable()();
   TextColumn get blockTower => text().nullable()();
   TextColumn get unitNumber => text().nullable()();
@@ -65,6 +70,13 @@ class InspectionSessionRows extends Table {
   /// default) — never true for any pre-existing session.
   BoolColumn get autoAnalyseEnabled =>
       boolean().withDefault(const Constant(false))();
+
+  /// The single "Project / Developer Name" field (added in schema v10,
+  /// QA/QC setup-simplification pass) — replaces the previous separate
+  /// [projectName]/[developerName] fields going forward. Both legacy
+  /// columns are kept, untouched, for backward compatibility; see
+  /// `PropertyDetails.resolvedProjectDeveloperName`.
+  TextColumn get projectDeveloperName => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

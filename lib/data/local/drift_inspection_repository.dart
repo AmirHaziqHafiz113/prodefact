@@ -62,12 +62,13 @@ class DriftInspectionRepository implements InspectionRepository {
                 propertyDetails.title.isEmpty ? null : propertyDetails.title,
               ),
               propertyAddress: Value(propertyDetails.address),
-              projectName: Value(propertyDetails.projectName),
+              projectDeveloperName: Value(
+                propertyDetails.projectDeveloperName,
+              ),
               blockTower: Value(propertyDetails.blockTower),
               unitNumber: Value(propertyDetails.unitNumber),
               clientName: Value(propertyDetails.clientName),
               inspectorName: Value(propertyDetails.inspectorName),
-              developerName: Value(propertyDetails.developerName),
               contactNumber: Value(propertyDetails.contactNumber),
               inspectionDate: Value(propertyDetails.inspectionDate),
               commercialMode: Value(commercialMode?.name),
@@ -282,12 +283,19 @@ class DriftInspectionRepository implements InspectionRepository {
         value == null ? null : DateTime.parse(value);
     return ReportMetadata(
       title: decoded['title'] as String,
-      projectName: decoded['projectName'] as String?,
+      // `projectDeveloperName` is the field written going forward; a
+      // blob saved before the QA/QC merge only has the legacy
+      // `projectName` key (`developerName` was never part of this
+      // JSON), so that's the fallback — never silently dropped.
+      projectDeveloperName:
+          decoded['projectDeveloperName'] as String? ??
+          decoded['projectName'] as String?,
       address: decoded['address'] as String?,
       blockTower: decoded['blockTower'] as String?,
       unitNumber: decoded['unitNumber'] as String?,
       clientName: decoded['clientName'] as String?,
       inspectorName: decoded['inspectorName'] as String?,
+      contactNumber: decoded['contactNumber'] as String?,
       inspectionDate: parseDate(decoded['inspectionDate'] as String?),
       reportDate: parseDate(decoded['reportDate'] as String?),
     );
@@ -296,32 +304,41 @@ class DriftInspectionRepository implements InspectionRepository {
   String _reportMetadataToJson(ReportMetadata metadata) {
     return jsonEncode({
       'title': metadata.title,
-      'projectName': metadata.projectName,
+      'projectDeveloperName': metadata.projectDeveloperName,
       'address': metadata.address,
       'blockTower': metadata.blockTower,
       'unitNumber': metadata.unitNumber,
       'clientName': metadata.clientName,
       'inspectorName': metadata.inspectorName,
+      'contactNumber': metadata.contactNumber,
       'inspectionDate': metadata.inspectionDate?.toIso8601String(),
       'reportDate': metadata.reportDate?.toIso8601String(),
     });
   }
 
   PropertyDetails _propertyDetailsFromRow(InspectionSessionRow row) {
-    final title = row.propertyTitle;
-    if (title == null || title.isEmpty) return PropertyDetails.empty;
-    return PropertyDetails(
-      title: title,
+    // Every field is optional (only `unitNumber` is required to start
+    // an inspection — see the QA/QC simplification pass), so presence
+    // is no longer decided by `propertyTitle` alone: a row with a blank
+    // title but a real unit number (or any other field) is genuine,
+    // captured data and must never be discarded as if setup never
+    // happened — see `PropertyDetails.isEmpty`.
+    final details = PropertyDetails(
+      title: row.propertyTitle ?? '',
       address: row.propertyAddress,
+      projectDeveloperName: row.projectDeveloperName,
+      // ignore: deprecated_member_use_from_same_package
       projectName: row.projectName,
       blockTower: row.blockTower,
       unitNumber: row.unitNumber,
       clientName: row.clientName,
       inspectorName: row.inspectorName,
+      // ignore: deprecated_member_use_from_same_package
       developerName: row.developerName,
       contactNumber: row.contactNumber,
       inspectionDate: row.inspectionDate,
     );
+    return details.isEmpty ? PropertyDetails.empty : details;
   }
 
   @override
@@ -729,6 +746,15 @@ class DriftInspectionRepository implements InspectionRepository {
       _db.inspectionSessionRows,
     )..where((t) => t.id.equals(sessionId))).write(
       InspectionSessionRowsCompanion(autoAnalyseEnabled: Value(enabled)),
+    );
+  }
+
+  @override
+  Future<void> setCommercialMode(String sessionId, CommercialMode mode) async {
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(commercialMode: Value(mode.name)),
     );
   }
 

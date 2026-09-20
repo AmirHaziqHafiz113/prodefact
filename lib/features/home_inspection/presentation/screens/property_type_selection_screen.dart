@@ -18,7 +18,7 @@ class PropertyTypeSelectionScreen extends ConsumerWidget {
 
   static const routePath = '/home-inspection';
 
-  static const wizardSteps = ['Property', 'Details', 'Areas', 'Plan', 'Review'];
+  static const wizardSteps = ['Property', 'Details', 'Areas', 'Review'];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -138,10 +138,6 @@ class _PropertyTypeCard extends StatelessWidget {
         'Houses, terrace, semi-detached and bungalow properties.',
       ),
     };
-    final tagline = switch (propertyType) {
-      PropertyType.highRise => 'Units, common areas & facilities',
-      PropertyType.landed => 'Indoor & outdoor areas',
-    };
 
     return Card(
       child: InkWell(
@@ -164,14 +160,6 @@ class _PropertyTypeCard extends StatelessWidget {
                     Text(
                       description,
                       style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    StatusPill(
-                      label: tagline,
-                      icon: icon,
-                      foreground: AppColors.primary,
-                      background: AppColors.primary.withValues(alpha: 0.08),
-                      dense: true,
                     ),
                   ],
                 ),

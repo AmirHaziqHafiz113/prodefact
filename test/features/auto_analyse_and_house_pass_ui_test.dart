@@ -79,18 +79,13 @@ void main() {
         overrides: testOverrides(billingService: billing),
       );
       addTearDown(container.dispose);
-      container
-          .read(newInspectionDraftProvider.notifier)
-          .begin(PropertyType.highRise);
-      container
-          .read(newInspectionDraftProvider.notifier)
-          .chooseCommercialPlan(
+      await container
+          .read(activeSessionProvider.notifier)
+          .startNew(
+            PropertyType.highRise,
             commercialMode: CommercialMode.housePass,
             selectedAiLevel: AiLevel.smart,
           );
-      await container
-          .read(newInspectionDraftProvider.notifier)
-          .startInspection();
       final sessionId = container.read(activeSessionProvider)!.id;
 
       final intent = await billing.purchaseHousePass(sessionId);

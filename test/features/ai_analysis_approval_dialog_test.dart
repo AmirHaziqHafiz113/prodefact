@@ -6,7 +6,6 @@ import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/ai_analysis_approval_dialog.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
-import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import '../support/test_repository.dart';
@@ -20,16 +19,11 @@ Future<String> _startSessionWithFinding(
   required CommercialMode commercialMode,
   required AiLevel selectedAiLevel,
 }) async {
-  container
-      .read(newInspectionDraftProvider.notifier)
-      .begin(PropertyType.highRise);
-  container
-      .read(newInspectionDraftProvider.notifier)
-      .chooseCommercialPlan(
+  await container.read(activeSessionProvider.notifier).startNew(
+        PropertyType.highRise,
         commercialMode: commercialMode,
         selectedAiLevel: selectedAiLevel,
       );
-  await container.read(newInspectionDraftProvider.notifier).startInspection();
   final notifier = container.read(activeSessionProvider.notifier);
   final queue = container.read(inspectionQueueProvider);
   final photo = await notifier.captureFindingPhoto(

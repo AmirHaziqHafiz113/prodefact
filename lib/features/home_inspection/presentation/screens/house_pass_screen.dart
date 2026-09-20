@@ -220,6 +220,13 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
       await ref
           .read(billingServiceProvider)
           .purchaseHousePass(widget.inspectionId);
+      // The inspector has now genuinely opted into House Pass for this
+      // inspection — the one place that decision is recorded, since
+      // setup itself no longer asks (see the QA/QC simplification
+      // pass). A no-op if this inspection is already on House Pass.
+      ref
+          .read(activeSessionProvider.notifier)
+          .setCommercialMode(CommercialMode.housePass);
       ref.invalidate(housePassStatusProvider(widget.inspectionId));
     } catch (error, stackTrace) {
       if (!mounted) return;

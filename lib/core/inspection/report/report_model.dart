@@ -64,11 +64,12 @@ class ReportModel {
     this.version = 1,
     this.propertyTitle,
     this.propertyAddress,
-    this.projectName,
+    this.projectDeveloperName,
     this.blockTower,
     this.unitNumber,
     this.clientName,
     this.inspectorName,
+    this.contactNumber,
     this.reportDate,
     this.inspectionNote,
   });
@@ -92,11 +93,17 @@ class ReportModel {
   // renderer falls back to [propertyTypeLabel] in that case.
   final String? propertyTitle;
   final String? propertyAddress;
-  final String? projectName;
+  final String? projectDeveloperName;
   final String? blockTower;
   final String? unitNumber;
   final String? clientName;
   final String? inspectorName;
+
+  /// The client's or their agent's contact number — required before
+  /// generation reaches this model at all (see
+  /// `ReportGenerationOutcome.missingContactNumber`), so always present
+  /// here even though it's optional at setup time.
+  final String? contactNumber;
 
   /// The confirmed report date (distinct from [generatedAt], the actual
   /// render timestamp) — see `ReportMetadata.reportDate`.

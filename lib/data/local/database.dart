@@ -75,6 +75,14 @@ part 'database.g.dart';
 ///   backend ledger is always the source of truth (see
 ///   docs/commercial_model.md). All additive; no existing column or
 ///   table is altered or dropped.
+/// - v10: (QA/QC setup-simplification pass) added
+///   `InspectionSessionRows.projectDeveloperName` (nullable) — the
+///   single combined field replacing the old separate `projectName`/
+///   `developerName` split inspectors found confusing. Both legacy
+///   columns are kept as-is (never dropped, never backfilled) so an
+///   inspection saved before this migration keeps loading exactly as
+///   it did; the application layer resolves which to show — see
+///   `PropertyDetails.resolvedProjectDeveloperName`. Additive only.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -95,7 +103,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -228,6 +236,12 @@ class AppDatabase extends _$AppDatabase {
           );
         }
         await migrator.createTable(walletCacheRows);
+      }
+      if (from < 10) {
+        await migrator.addColumn(
+          inspectionSessionRows,
+          inspectionSessionRows.projectDeveloperName,
+        );
       }
     },
   );

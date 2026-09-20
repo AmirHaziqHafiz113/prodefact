@@ -10,6 +10,7 @@ export 'widgets/app_avatar.dart';
 export 'widgets/app_bar_chart.dart';
 export 'widgets/app_brand_mark.dart';
 export 'widgets/app_brand_pattern.dart';
+export 'widgets/app_date_time_field.dart';
 export 'widgets/app_fallback_thumbnail.dart';
 export 'widgets/app_form_section_card.dart';
 export 'widgets/app_grouped_list.dart';

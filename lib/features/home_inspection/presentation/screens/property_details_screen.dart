@@ -9,12 +9,16 @@ import '../../providers/user_profile_providers.dart';
 import 'area_configuration_screen.dart';
 import 'property_type_selection_screen.dart';
 
-/// New Inspection setup, step 2 (after property type, before area
-/// configuration): the property/report metadata that later populates
-/// the dashboard card, Report Readiness header, and the generated PDF's
-/// cover page — see `docs/home_inspection_product_flow.md`.
+/// New Inspection setup, step 2 ("Basic Details" — after property type,
+/// before area configuration): the property/report metadata that later
+/// populates the dashboard card, Report Readiness header, and the
+/// generated PDF's cover page — see
+/// `docs/home_inspection_product_flow.md`.
 ///
-/// Only [title] is required; everything else is optional. Purely
+/// Only [PropertyDetails.unitNumber] is required — every other field,
+/// including the property title, is skippable and can be completed
+/// later via Report Details (see the QA/QC setup-simplification pass:
+/// "GET THE INSPECTOR TO THE CAMERA AS FAST AS POSSIBLE"). Purely
 /// in-memory (edits [NewInspectionDraft], not a persisted session) —
 /// consistent with every other New Inspection setup step.
 class PropertyDetailsScreen extends ConsumerStatefulWidget {
@@ -31,12 +35,11 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _address = TextEditingController();
-  final _projectName = TextEditingController();
+  final _projectDeveloperName = TextEditingController();
   final _blockTower = TextEditingController();
   final _unitNumber = TextEditingController();
   final _clientName = TextEditingController();
   final _inspectorName = TextEditingController();
-  final _developerName = TextEditingController();
   final _contactNumber = TextEditingController();
   DateTime _inspectionDate = DateTime.now();
   bool _prefilledInspector = false;
@@ -46,12 +49,11 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
     for (final controller in [
       _title,
       _address,
-      _projectName,
+      _projectDeveloperName,
       _blockTower,
       _unitNumber,
       _clientName,
       _inspectorName,
-      _developerName,
       _contactNumber,
     ]) {
       controller.dispose();
@@ -73,7 +75,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Property Details')),
+      appBar: AppBar(title: const Text('Basic Details')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -86,7 +88,8 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Tell us about the property and inspection details.',
+                'Only Unit No. is required — everything else can be '
+                'completed later.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -95,33 +98,33 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
                 title: 'Property',
                 subtitle: 'Basic information about the property',
                 children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _unitNumber,
+                          'Unit No.',
+                          required: true,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(child: _field(_blockTower, 'Block / Tower')),
+                    ],
+                  ),
                   _field(
                     _title,
                     'Inspection / Property title',
-                    required: true,
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  _field(
+                    _projectDeveloperName,
+                    'Project / Developer Name',
                     textCapitalization: TextCapitalization.words,
                   ),
                   _field(
                     _address,
                     'Property address',
                     textCapitalization: TextCapitalization.sentences,
-                  ),
-                  _field(
-                    _projectName,
-                    'Project / Development name',
-                    textCapitalization: TextCapitalization.words,
-                  ),
-                  Row(
-                    children: [
-                      Expanded(child: _field(_blockTower, 'Block / Tower')),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(child: _field(_unitNumber, 'Unit number')),
-                    ],
-                  ),
-                  _field(
-                    _developerName,
-                    'Developer (optional)',
-                    textCapitalization: TextCapitalization.words,
                   ),
                 ],
               ),
@@ -133,12 +136,12 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
                 children: [
                   _field(
                     _clientName,
-                    'Client / Owner name',
+                    'Client / Agent Name',
                     textCapitalization: TextCapitalization.words,
                   ),
                   _field(
                     _contactNumber,
-                    'Contact number (optional)',
+                    'Client / Agent Contact Number',
                     keyboardType: TextInputType.phone,
                   ),
                 ],
@@ -155,9 +158,11 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
                     textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.done,
                   ),
-                  _DatePickerField(
-                    date: _inspectionDate,
-                    onPick: (date) => setState(() => _inspectionDate = date),
+                  const SizedBox(height: AppSpacing.md),
+                  AppDateTimeField(
+                    label: 'Inspection date',
+                    value: _inspectionDate,
+                    onChanged: (date) => setState(() => _inspectionDate = date),
                   ),
                 ],
               ),
@@ -168,20 +173,29 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => context.pop(),
-                  child: const Text('Back'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => context.pop(),
+                      child: const Text('Back'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _continue,
+                      child: const Text('Continue'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _continue,
-                  child: const Text('Continue'),
-                ),
+              TextButton(
+                onPressed: _continue,
+                child: const Text('Skip optional details / Complete later'),
               ),
             ],
           ),
@@ -214,6 +228,10 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
     );
   }
 
+  /// Validates only [PropertyDetails.unitNumber] — every other field is
+  /// deferrable, and "Skip optional details" reaches the exact same
+  /// handler (there's nothing else to skip past once Unit No. itself is
+  /// filled in).
   void _continue() {
     if (!_formKey.currentState!.validate()) return;
     String? orNull(TextEditingController c) =>
@@ -225,50 +243,15 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
           PropertyDetails(
             title: _title.text.trim(),
             address: orNull(_address),
-            projectName: orNull(_projectName),
+            projectDeveloperName: orNull(_projectDeveloperName),
             blockTower: orNull(_blockTower),
             unitNumber: orNull(_unitNumber),
             clientName: orNull(_clientName),
             inspectorName: orNull(_inspectorName),
-            developerName: orNull(_developerName),
             contactNumber: orNull(_contactNumber),
             inspectionDate: _inspectionDate,
           ),
         );
     context.push(AreaConfigurationScreen.routePath);
-  }
-}
-
-class _DatePickerField extends StatelessWidget {
-  const _DatePickerField({required this.date, required this.onPick});
-
-  final DateTime date;
-  final ValueChanged<DateTime> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: date,
-          firstDate: DateTime.now().subtract(const Duration(days: 365)),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
-        );
-        if (picked != null) onPick(picked);
-      },
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Inspection date',
-          suffixIcon: Icon(Icons.calendar_today_outlined),
-        ),
-        child: Text(_formatDate(date)),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime dateTime) {
-    String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return '${dateTime.year}-${twoDigits(dateTime.month)}-${twoDigits(dateTime.day)}';
   }
 }

@@ -25,41 +25,35 @@ class NewInspectionDraft {
     required this.propertyType,
     required this.sections,
     this.propertyDetails,
-    this.commercialMode,
-    this.selectedAiLevel,
   });
 
   final PropertyType propertyType;
   final List<Section> sections;
 
-  /// Filled in by the Property Details step (the screen right after
+  /// Filled in by the Basic Details step (the screen right after
   /// property type selection) — null only if that step is somehow
   /// skipped, in which case `ReviewSetupScreen`/`startInspection` fall
   /// back to `PropertyDetails.empty`.
+  ///
+  /// Setup no longer asks the inspector to choose Flex Credits vs.
+  /// House Pass or an AI quality tier (see the QA/QC setup-
+  /// simplification pass) — every new inspection starts with
+  /// `commercialMode`/`selectedAiLevel` unset, which
+  /// `PricedAiClassificationCoordinator`/estimate logic already treat
+  /// as "Flex Credits" and "Smart" respectively. Both remain full,
+  /// independently choosable fields on `InspectionSession` — House
+  /// Pass purchase (`HousePassScreen`) and a per-finding AI level
+  /// override are both still available after setup.
   final PropertyDetails? propertyDetails;
-
-  /// Filled in by the Choose AI Plan step — null until the inspector
-  /// has made a choice there. `ReviewSetupScreen`'s Start Inspection
-  /// button is disabled until both are set; see
-  /// docs/commercial_model.md.
-  final CommercialMode? commercialMode;
-  final AiLevel? selectedAiLevel;
-
-  bool get hasChosenCommercialPlan =>
-      commercialMode != null && selectedAiLevel != null;
 
   NewInspectionDraft copyWith({
     List<Section>? sections,
     PropertyDetails? propertyDetails,
-    CommercialMode? commercialMode,
-    AiLevel? selectedAiLevel,
   }) {
     return NewInspectionDraft(
       propertyType: propertyType,
       sections: sections ?? this.sections,
       propertyDetails: propertyDetails ?? this.propertyDetails,
-      commercialMode: commercialMode ?? this.commercialMode,
-      selectedAiLevel: selectedAiLevel ?? this.selectedAiLevel,
     );
   }
 }
@@ -92,20 +86,6 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
     final draft = state;
     if (draft == null) return;
     state = draft.copyWith(propertyDetails: details);
-  }
-
-  /// Records the Choose AI Plan step's result — see
-  /// docs/commercial_model.md.
-  void chooseCommercialPlan({
-    required CommercialMode commercialMode,
-    required AiLevel selectedAiLevel,
-  }) {
-    final draft = state;
-    if (draft == null) return;
-    state = draft.copyWith(
-      commercialMode: commercialMode,
-      selectedAiLevel: selectedAiLevel,
-    );
   }
 
   void resetToDefaults() {
@@ -184,6 +164,14 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
   /// double-press can never create two sessions. Returns false (and
   /// leaves the draft untouched) if there is no draft, a start is
   /// already in progress, or persistence fails.
+  ///
+  /// [PropertyDetails.unitNumber] being required before an inspector
+  /// may begin inspecting (the QA/QC simplification pass) is enforced
+  /// by the UI (`PropertyDetailsScreen`'s form validator, and
+  /// `ReviewSetupScreen`'s disabled Start Inspection button) rather
+  /// than here — this notifier is also driven directly by tests/other
+  /// callers that legitimately create a session without ever touching
+  /// the Basic Details screen at all.
   Future<bool> startInspection() async {
     final draft = state;
     if (draft == null || _isStarting) return false;
@@ -196,8 +184,6 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
             draft.propertyType,
             initialSections: draft.sections,
             propertyDetails: draft.propertyDetails ?? PropertyDetails.empty,
-            commercialMode: draft.commercialMode,
-            selectedAiLevel: draft.selectedAiLevel,
           );
       if (started) {
         state = null;

@@ -78,6 +78,18 @@ class DefaultReportCoordinator implements ReportCoordinator {
     if (aiReviewIncomplete) {
       return const ReportGenerationResult.aiReviewIncomplete();
     }
+    // The one Basic Details field deferrable at setup but required
+    // before finalization (see QA/QC simplification pass) — resolved
+    // the same way the report itself resolves every other cover-page
+    // field: the inspector-confirmed `ReportMetadata` if it exists,
+    // else derived fresh from `PropertyDetails`.
+    final metadata =
+        session.reportMetadata ??
+        ReportMetadata.fromPropertyDetails(session.propertyDetails);
+    final contactNumber = metadata.contactNumber?.trim();
+    if (contactNumber == null || contactNumber.isEmpty) {
+      return const ReportGenerationResult.missingContactNumber();
+    }
 
     final now = DateTime.now();
     // A regenerated report is a new version, never a silent overwrite —

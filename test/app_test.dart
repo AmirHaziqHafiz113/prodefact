@@ -32,7 +32,7 @@ void main() {
   });
 
   testWidgets(
-    'selecting a property type leads to Property Details, then shows its '
+    'selecting a property type leads to Basic Details, then shows its '
     'default areas, plumbing first',
     (tester) async {
       await tester.pumpWidget(
@@ -46,10 +46,12 @@ void main() {
       await tester.tap(find.text('Landed'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Property Details'), findsOneWidget);
+      expect(find.text('Basic Details'), findsOneWidget);
+      // The first field is now Unit No. (the only field required to
+      // start an inspection) rather than the title.
       await tester.enterText(
         find.byType(TextFormField).first,
-        'Test Landed Property',
+        'A-1-1',
       );
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();

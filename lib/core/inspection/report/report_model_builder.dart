@@ -86,11 +86,12 @@ ReportModel buildReportModel({
     version: version,
     propertyTitle: metadata?.title,
     propertyAddress: metadata?.address,
-    projectName: metadata?.projectName,
+    projectDeveloperName: metadata?.projectDeveloperName,
     blockTower: metadata?.blockTower,
     unitNumber: metadata?.unitNumber,
     clientName: metadata?.clientName,
     inspectorName: metadata?.inspectorName,
+    contactNumber: metadata?.contactNumber,
     reportDate: metadata?.reportDate,
     inspectionNote: session.inspectionNote,
   );

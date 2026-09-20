@@ -223,6 +223,12 @@ void main() {
     } else {
       notifier.acceptSuggestion(suggestion.id);
     }
+    notifier.setReportMetadata(
+      const ReportMetadata(
+        title: 'Test Property',
+        contactNumber: '+60123456789',
+      ),
+    );
     final generated = await notifier.generateReport();
     expect(generated.isSuccess, isTrue);
     final reportPath = generated.report!.filePath;

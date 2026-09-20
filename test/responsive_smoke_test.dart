@@ -131,24 +131,20 @@ void main() {
     await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(
       tester,
-      screenLabel: 'Property Details',
+      screenLabel: 'Basic Details',
     );
     await _assertNoOverflowAcrossTextScales(
       tester,
-      screenLabel: 'Property Details',
+      screenLabel: 'Basic Details',
     );
 
     await tester.enterText(
       _within(find.byType(TextFormField)).first,
-      'Test Property',
+      'A-1-1',
     );
     await tester.tap(_within(find.text('Continue')));
     await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Configure Areas');
-
-    await tester.tap(_within(find.text('Continue')));
-    await tester.pumpAndSettle();
-    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Choose AI Plan');
 
     await tester.tap(_within(find.text('Continue')));
     await tester.pumpAndSettle();
@@ -174,6 +170,12 @@ void main() {
     await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Area Detail');
 
     await tester.tap(_within(find.text('Take Defect Photo')));
+    await tester.pumpAndSettle();
+    await _assertNoOverflowAcrossWidths(
+      tester,
+      screenLabel: 'Camera/Gallery choice sheet',
+    );
+    await tester.tap(find.text('Camera'));
     await tester.pumpAndSettle();
     // The photo-preview bottom sheet — checked at its own narrower
     // heights too, since a bottom sheet's usable height shrinks with

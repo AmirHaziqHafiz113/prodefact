@@ -96,6 +96,12 @@ void main() {
     expect(stillPending.outcome, ReportGenerationOutcome.aiReviewIncomplete);
 
     _resolvePendingSuggestion(container, notifier);
+    notifier.setReportMetadata(
+      const ReportMetadata(
+        title: 'Test Property',
+        contactNumber: '+60123456789',
+      ),
+    );
 
     final result = await notifier.generateReport();
     expect(result.isSuccess, isTrue);
@@ -135,6 +141,12 @@ void main() {
     await notifier.markPhysicalInspectionComplete();
     await Future<void>.delayed(Duration.zero);
     _resolvePendingSuggestion(container, notifier);
+    notifier.setReportMetadata(
+      const ReportMetadata(
+        title: 'Test Property',
+        contactNumber: '+60123456789',
+      ),
+    );
     await notifier.generateReport();
 
     await notifier.shareReport();
@@ -176,6 +188,12 @@ void main() {
       await notifier.markPhysicalInspectionComplete();
       await Future<void>.delayed(Duration.zero);
       _resolvePendingSuggestion(container, notifier);
+    notifier.setReportMetadata(
+      const ReportMetadata(
+        title: 'Test Property',
+        contactNumber: '+60123456789',
+      ),
+    );
 
       final result = await notifier.generateReport();
 

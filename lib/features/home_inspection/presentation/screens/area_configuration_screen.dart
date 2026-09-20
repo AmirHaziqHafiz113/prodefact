@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
-import 'choose_ai_plan_screen.dart';
 import 'property_type_selection_screen.dart';
+import 'review_setup_screen.dart';
 
 /// Lets the inspector configure which areas apply to this property
 /// before starting the inspection: include/exclude, rename, add/edit
@@ -217,7 +217,7 @@ class _AreaConfigurationScreenState
               Expanded(
                 child: FilledButton(
                   onPressed: sections.any((s) => s.isIncluded)
-                      ? () => context.push(ChooseAiPlanScreen.routePath)
+                      ? () => context.push(ReviewSetupScreen.routePath)
                       : null,
                   child: const Text('Continue'),
                 ),

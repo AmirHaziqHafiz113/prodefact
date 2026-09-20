@@ -17,20 +17,21 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
   await tester.tap(find.text('High Rise'));
   await tester.pumpAndSettle();
 
-  // Property Details step — only the title is required.
-  await tester.enterText(find.byType(TextFormField).first, 'Test Property');
+  // Basic Details step — the first field is Unit No. (the only field
+  // required to continue); also fill in the title so the created
+  // inspection can be identified by name on the dashboard/list.
+  await tester.enterText(find.byType(TextFormField).at(0), 'A-1-1');
+  await tester.enterText(find.byType(TextFormField).at(2), 'Test Property');
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
 }
 
-/// From the area configuration screen, through Choose AI Plan and
-/// Review Setup, to "Start Inspection" — the only place a draft
-/// actually becomes a persisted inspection (see `ReviewSetupScreen`).
-/// Choose AI Plan defaults to Flex Credits / Smart once its config
-/// loads, so "Continue" is reachable without any extra selection.
+/// From the area configuration screen straight to Review Setup, to
+/// "Start Inspection" — the only place a draft actually becomes a
+/// persisted inspection (see `ReviewSetupScreen`). Setup no longer asks
+/// Flex Credits vs. House Pass or an AI level (see the QA/QC
+/// simplification pass), so a single "Continue" reaches Review Setup.
 Future<void> _reviewAndStart(WidgetTester tester) async {
-  await tester.tap(find.text('Continue'));
-  await tester.pumpAndSettle();
   await tester.tap(find.text('Continue'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Start Inspection'));
@@ -234,13 +235,12 @@ void main() {
       // resuming the inspection is the realistic way to check the
       // exclusion actually persisted in the created session, rather
       // than in the ephemeral setup screen. Stack from the dashboard:
-      // property type -> property details -> area configuration ->
-      // choose AI plan -> review setup -> queue — 6 pops to unwind it
-      // all.
+      // property type -> basic details -> area configuration -> review
+      // setup -> queue — 5 pops to unwind it all.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 5; i++) {
         navigator.pop();
       }
       await tester.pumpAndSettle();
@@ -261,13 +261,13 @@ void main() {
     (tester) async {
       await _startHighRiseSetup(tester);
       // Never tap "Start Inspection" — just leave setup. Stack from the
-      // dashboard: property type -> property details -> area
+      // dashboard: property type -> basic details -> area
       // configuration — 3 pops to unwind it all.
       final navigator = tester.state<NavigatorState>(
         find.byType(Navigator).first,
       );
-      navigator.pop(); // area configuration -> property details
-      navigator.pop(); // property details -> property type selection
+      navigator.pop(); // area configuration -> basic details
+      navigator.pop(); // basic details -> property type selection
       navigator.pop(); // property type selection -> dashboard
       await tester.pumpAndSettle();
 
@@ -278,8 +278,6 @@ void main() {
   testWidgets('repeated taps on Start Inspection do not create duplicate '
       'inspections', (tester) async {
     await _startHighRiseSetup(tester);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
@@ -293,13 +291,13 @@ void main() {
     expect(find.text('Physical Inspection'), findsOneWidget);
 
     // Only one inspection was actually created — pop all the way
-    // back to the dashboard (queue -> review setup -> choose AI plan ->
-    // areas -> property details -> property type -> dashboard) and
-    // confirm there's exactly one card, not several.
+    // back to the dashboard (queue -> review setup -> areas -> basic
+    // details -> property type -> dashboard) and confirm there's
+    // exactly one card, not several.
     final navigator = tester.state<NavigatorState>(
       find.byType(Navigator).first,
     );
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < 5; i++) {
       navigator.pop();
     }
     await tester.pumpAndSettle();

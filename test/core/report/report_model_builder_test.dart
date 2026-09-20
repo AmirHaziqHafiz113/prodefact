@@ -492,7 +492,7 @@ void main() {
         propertyDetails: PropertyDetails(
           title: 'Residensi Vista',
           address: '1 Jalan Test',
-          projectName: 'Vista Development',
+          projectDeveloperName: 'Vista Development',
           blockTower: 'Block A',
           unitNumber: 'A-12-08',
           clientName: 'Jane Client',
@@ -510,7 +510,7 @@ void main() {
 
       expect(model.propertyTitle, 'Residensi Vista');
       expect(model.propertyAddress, '1 Jalan Test');
-      expect(model.projectName, 'Vista Development');
+      expect(model.projectDeveloperName, 'Vista Development');
       expect(model.blockTower, 'Block A');
       expect(model.unitNumber, 'A-12-08');
       expect(model.clientName, 'Jane Client');

@@ -602,6 +602,101 @@ void main() {
     expect(walletCaches, isEmpty);
   });
 
+  test('upgrading from v9 adds the v10 project_developer_name column '
+      '(the QA/QC setup-simplification pass) without touching the '
+      'existing project_name/developer_name data', () async {
+    final dbFile = File('${tempDir.path}/v9.sqlite');
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE inspection_session_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        industry TEXT NOT NULL,
+        asset_type_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'localOnly',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        owner_uid TEXT,
+        ai_review_state TEXT NOT NULL DEFAULT 'notStarted',
+        property_title TEXT,
+        property_address TEXT,
+        project_name TEXT,
+        block_tower TEXT,
+        unit_number TEXT,
+        client_name TEXT,
+        inspector_name TEXT,
+        developer_name TEXT,
+        contact_number TEXT,
+        inspection_date INTEGER,
+        report_metadata_json TEXT,
+        inspection_note TEXT,
+        commercial_mode TEXT,
+        selected_ai_level TEXT,
+        auto_analyse_enabled INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE section_rows (
+        id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        is_plumbing INTEGER NOT NULL DEFAULT 0,
+        is_included INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'notStarted',
+        elements_json TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        note TEXT,
+        PRIMARY KEY (session_id, id)
+      );
+      CREATE TABLE user_profile_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        company_name TEXT,
+        inspector_name TEXT,
+        updated_at INTEGER NOT NULL,
+        default_ai_level TEXT
+      );
+      CREATE TABLE wallet_cache_rows (
+        id TEXT NOT NULL PRIMARY KEY,
+        balance_credits INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    ''');
+    raw.execute('''
+      INSERT INTO inspection_session_rows
+        (id, industry, asset_type_id, status, created_at, updated_at,
+         property_title, unit_number, project_name, developer_name,
+         commercial_mode, selected_ai_level)
+      VALUES
+        ('session_9', 'homeInspection', 'highRise', 'inProgress', 9000, 9000,
+         'Residensi Vista', 'A-12-08', 'Vista Project', 'Vista Developer Sdn Bhd',
+         'housePass', 'expert');
+    ''');
+    raw.execute('PRAGMA user_version = 9');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+
+    final sessionRow = await (db.select(
+      db.inspectionSessionRows,
+    )..where((t) => t.id.equals('session_9'))).getSingle();
+
+    // Every pre-existing v9 value, including the legacy split project/
+    // developer fields and the commercial choice made via the (now-
+    // removed) Choose AI Plan step, survives untouched.
+    expect(sessionRow.propertyTitle, 'Residensi Vista');
+    expect(sessionRow.unitNumber, 'A-12-08');
+    expect(sessionRow.projectName, 'Vista Project');
+    expect(sessionRow.developerName, 'Vista Developer Sdn Bhd');
+    expect(sessionRow.commercialMode, 'housePass');
+    expect(sessionRow.selectedAiLevel, 'expert');
+    // The new v10 column is present, defaulting to null — never
+    // backfilled from the legacy columns at the schema level (that
+    // combination happens at the application layer; see
+    // `PropertyDetails.resolvedProjectDeveloperName`).
+    expect(sessionRow.projectDeveloperName, isNull);
+  });
+
   test('a fresh install (onCreate) also gets the v5 indexes and the v7/v8 '
       'tables/columns', () async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -630,5 +725,20 @@ void main() {
     // v9's new table is queryable on a fresh install too.
     final walletCaches = await db.select(db.walletCacheRows).get();
     expect(walletCaches, isEmpty);
+
+    // v10's new column is queryable on a fresh install too.
+    final freshSession = await db
+        .into(db.inspectionSessionRows)
+        .insertReturning(
+          InspectionSessionRowsCompanion.insert(
+            id: 'fresh',
+            industry: 'homeInspection',
+            assetTypeId: 'highRise',
+            status: 'inProgress',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+    expect(freshSession.projectDeveloperName, isNull);
   });
 }

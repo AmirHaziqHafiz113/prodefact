@@ -7,26 +7,38 @@ import 'property_details.dart';
 /// inspection's own setup record. Defaults to a copy of
 /// [PropertyDetails] plus today's date until the inspector explicitly
 /// confirms/edits it (see [ReportMetadata.fromPropertyDetails]).
+///
+/// This is also where a setup field deferred at Basic Details (e.g. the
+/// Client / Agent Contact Number — see QA/QC simplification pass) gets
+/// completed before finalization: see `ReportGenerationOutcome.
+/// missingContactNumber`, which reads [contactNumber] resolved exactly
+/// the way this class already resolves every other field.
 class ReportMetadata {
   const ReportMetadata({
     required this.title,
-    this.projectName,
+    this.projectDeveloperName,
     this.address,
     this.blockTower,
     this.unitNumber,
     this.clientName,
     this.inspectorName,
+    this.contactNumber,
     this.inspectionDate,
     this.reportDate,
   });
 
   final String title;
-  final String? projectName;
+  final String? projectDeveloperName;
   final String? address;
   final String? blockTower;
   final String? unitNumber;
   final String? clientName;
   final String? inspectorName;
+
+  /// The client's or their agent's contact number — required before a
+  /// report can be generated (see `ReportCoordinator`), even though
+  /// it's deferrable at Basic Details.
+  final String? contactNumber;
   final DateTime? inspectionDate;
   final DateTime? reportDate;
 
@@ -40,12 +52,13 @@ class ReportMetadata {
   }) {
     return ReportMetadata(
       title: details.title,
-      projectName: details.projectName,
+      projectDeveloperName: details.resolvedProjectDeveloperName,
       address: details.address,
       blockTower: details.blockTower,
       unitNumber: details.unitNumber,
       clientName: details.clientName,
       inspectorName: details.inspectorName,
+      contactNumber: details.contactNumber,
       inspectionDate: details.inspectionDate,
       reportDate: reportDate ?? DateTime.now(),
     );
@@ -53,23 +66,25 @@ class ReportMetadata {
 
   ReportMetadata copyWith({
     String? title,
-    String? projectName,
+    String? projectDeveloperName,
     String? address,
     String? blockTower,
     String? unitNumber,
     String? clientName,
     String? inspectorName,
+    String? contactNumber,
     DateTime? inspectionDate,
     DateTime? reportDate,
   }) {
     return ReportMetadata(
       title: title ?? this.title,
-      projectName: projectName ?? this.projectName,
+      projectDeveloperName: projectDeveloperName ?? this.projectDeveloperName,
       address: address ?? this.address,
       blockTower: blockTower ?? this.blockTower,
       unitNumber: unitNumber ?? this.unitNumber,
       clientName: clientName ?? this.clientName,
       inspectorName: inspectorName ?? this.inspectorName,
+      contactNumber: contactNumber ?? this.contactNumber,
       inspectionDate: inspectionDate ?? this.inspectionDate,
       reportDate: reportDate ?? this.reportDate,
     );

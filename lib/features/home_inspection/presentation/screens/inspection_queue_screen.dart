@@ -66,6 +66,21 @@ class InspectionQueueScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          // Setup no longer asks Flex Credits vs. House Pass (see the
+          // QA/QC simplification pass) — this is the "relevant moment"
+          // that decision is offered instead, entirely optional. Once
+          // an inspection is already on House Pass, `_HousePassBanner`
+          // below covers it, so this action steps aside to avoid a
+          // redundant second entry point.
+          if (activeSession != null &&
+              activeSession.commercialMode != CommercialMode.housePass)
+            IconButton(
+              tooltip: 'House Pass',
+              icon: const Icon(Icons.verified_outlined),
+              onPressed: () => context.push(
+                '${HousePassScreen.routePath}/${activeSession.id}',
+              ),
+            ),
           IconButton(
             tooltip: activeSession?.inspectionNote == null
                 ? 'Add inspection note'
