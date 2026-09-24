@@ -31,6 +31,26 @@ import {
  * twice — see `runIdempotentMutation`.
  */
 
+/**
+ * Thrown when a settlement and a failure-release are both attempted for
+ * the same reservation. Exactly one of them may ever apply: a settled
+ * reservation must never also be refunded in full, and a released one
+ * must never also be charged.
+ */
+export class ConflictingLedgerEntryError extends Error {
+  /**
+   * @param {string} attempted the ledger entry that was refused.
+   * @param {string} existing the entry that already applied.
+   */
+  constructor(attempted: string, existing: string) {
+    super(
+      `Ledger entry ${attempted} refused: ${existing} already applied ` +
+        "to the same reservation."
+    );
+    this.name = "ConflictingLedgerEntryError";
+  }
+}
+
 /** Thrown when a reservation/purchase would exceed the wallet's
  * current Credits balance. */
 export class InsufficientCreditsError extends Error {
@@ -262,6 +282,9 @@ export async function settleReservation(
     actualCredits: number;
     idempotencyKey: string;
     description: string;
+    /** A ledger entry id (the failure-release for this reservation)
+     * whose existence means this settlement must never apply. */
+    exclusiveOf?: string;
   }
 ): Promise<WalletTransaction> {
   const reservationSnap = await transactionRef(
@@ -289,6 +312,17 @@ export async function settleReservation(
     params.uid,
     params.idempotencyKey,
     async (tx) => {
+      if (params.exclusiveOf) {
+        const conflicting = await tx.get(
+          transactionRef(db, params.uid, params.exclusiveOf)
+        );
+        if (conflicting.exists) {
+          throw new ConflictingLedgerEntryError(
+            params.idempotencyKey,
+            params.exclusiveOf
+          );
+        }
+      }
       if (unusedCredits > 0) {
         const releaseRef = transactionRef(
           db,
@@ -346,6 +380,9 @@ export async function releaseReservation(
     reservationTransactionId: string;
     idempotencyKey: string;
     description: string;
+    /** A ledger entry id (the settlement for this reservation) whose
+     * existence means this full refund must never apply. */
+    exclusiveOf?: string;
   }
 ): Promise<WalletTransaction> {
   const reservationSnap = await transactionRef(
@@ -364,20 +401,33 @@ export async function releaseReservation(
     db,
     params.uid,
     params.idempotencyKey,
-    async () => ({
-      balanceDelta: reservation.amountCredits,
-      transaction: {
-        type: "reservationRelease",
-        direction: "credit",
-        amountCredits: reservation.amountCredits,
-        status: "completed",
-        relatedTransactionId: params.reservationTransactionId,
-        inspectionId: reservation.inspectionId,
-        findingId: reservation.findingId,
-        aiLevel: reservation.aiLevel,
-        description: params.description,
-      },
-    })
+    async (tx) => {
+      if (params.exclusiveOf) {
+        const conflicting = await tx.get(
+          transactionRef(db, params.uid, params.exclusiveOf)
+        );
+        if (conflicting.exists) {
+          throw new ConflictingLedgerEntryError(
+            params.idempotencyKey,
+            params.exclusiveOf
+          );
+        }
+      }
+      return {
+        balanceDelta: reservation.amountCredits,
+        transaction: {
+          type: "reservationRelease",
+          direction: "credit",
+          amountCredits: reservation.amountCredits,
+          status: "completed",
+          relatedTransactionId: params.reservationTransactionId,
+          inspectionId: reservation.inspectionId,
+          findingId: reservation.findingId,
+          aiLevel: reservation.aiLevel,
+          description: params.description,
+        },
+      };
+    }
   );
 }
 

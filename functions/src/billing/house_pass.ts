@@ -97,27 +97,40 @@ export function hasRemainingAllowance(pass: HousePass): boolean {
 }
 
 /**
- * Atomically increments a House Pass's usage by one included finding —
- * called only once an AI analysis charged to the pass's included tier
- * actually completes. Flips the pass to `allowanceReached` (not
- * `expired`/`cancelled`) the moment the limit is hit, so the UI can
- * offer "Continue with Flex Credits" immediately — see
- * docs/commercial_model.md ("If allowance is exhausted").
+ * Atomically consumes one unit of a House Pass's allowance for one AI
+ * analysis — called only once that analysis actually completes, so a
+ * failed analysis never consumes allowance. Flips the pass to
+ * `allowanceReached` (not `expired`/`cancelled`) the moment the limit
+ * is hit, so the UI can offer "Continue with Flex Credits" immediately
+ * — see docs/commercial_model.md ("If allowance is exhausted").
+ *
+ * Idempotent per [usageKey] (the analysis job's idempotency key): the
+ * first call records a usage document under the pass and increments
+ * the count in the same transaction; any replay finds that document and
+ * returns the pass unchanged, so one analysis can never consume
+ * allowance twice.
  * @param {Firestore} db the Admin Firestore client.
  * @param {string} uid the pass owner.
  * @param {string} passId the pass to update.
- * @return {Promise<HousePass>} the updated pass.
+ * @param {string} usageKey the consuming analysis's idempotency key.
+ * @return {Promise<HousePass>} the pass after this usage.
  */
 export async function recordHousePassUsage(
   db: Firestore,
   uid: string,
-  passId: string
+  passId: string,
+  usageKey: string
 ): Promise<HousePass> {
   const ref = housePassCollection(db, uid).doc(passId);
+  const usageRef = ref.collection("usages").doc(usageKey);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new Error(`House Pass ${passId} not found.`);
     const pass = snap.data() as HousePass;
+    const existingUsage = await tx.get(usageRef);
+    if (existingUsage.exists) return pass;
+
+    const now = Date.now();
     const allowanceUsed = pass.allowanceUsed + 1;
     const status: HousePassStatus =
       allowanceUsed >= pass.allowanceLimit ? "allowanceReached" : "active";
@@ -125,9 +138,10 @@ export async function recordHousePassUsage(
       ...pass,
       allowanceUsed,
       status,
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
     tx.set(ref, updated);
+    tx.set(usageRef, {id: usageKey, passId, userId: uid, createdAt: now});
     return updated;
   });
 }

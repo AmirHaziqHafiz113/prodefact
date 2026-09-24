@@ -6,9 +6,15 @@
  * `where(field, "==", value).limit(n)` query shape (used by
  * `findHousePassForInspection`), and `runTransaction` with
  * transactional get/set applied directly against the same in-memory
- * store (our fakes are single-threaded, so this is sufficient to test
- * the billing module's read-then-write logic without simulating real
- * optimistic-concurrency retries).
+ * store.
+ *
+ * Transactions run strictly one at a time. Real Firestore guarantees
+ * that concurrent transactions touching the same documents behave as if
+ * serialized (via optimistic retries); serializing them here models
+ * that guarantee, so concurrent callers (e.g. two invocations racing to
+ * claim the same AI job) are tested against the same isolation the
+ * production code relies on. Non-transactional reads/writes are not
+ * serialized, just as they are not in Firestore.
  */
 
 type DocData = Record<string, unknown>;
@@ -132,9 +138,11 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
     };
   }
 
+  let transactionQueue: Promise<unknown> = Promise.resolve();
+
   const db: FakeFirestore = {
     collection: (name: string) => collectionRef(name),
-    runTransaction: async (fn) => {
+    runTransaction: <T>(fn: (tx: FakeTransaction) => Promise<T>) => {
       const tx: FakeTransaction = {
         get: (ref) => ref.get(),
         set: (ref, data) => {
@@ -142,7 +150,9 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
           store.set(ref.path, data);
         },
       };
-      return fn(tx);
+      const run = transactionQueue.then(() => fn(tx));
+      transactionQueue = run.catch(() => undefined);
+      return run;
     },
   };
   return {db, store};
