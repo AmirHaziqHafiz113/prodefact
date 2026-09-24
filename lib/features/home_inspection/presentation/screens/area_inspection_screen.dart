@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../data/remote/remote_providers.dart'
+    show isOnlineForAiProvider;
 import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
@@ -620,11 +622,29 @@ class _AiStatusLine extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     switch (finding.aiStatus) {
       case AiFindingStatus.notQueued:
-      case AiFindingStatus.queued:
         return const _StatusText(
           icon: Icons.hourglass_empty,
           color: AppColors.textMuted,
-          text: 'Waiting for connection',
+          text: 'Not started',
+        );
+      case AiFindingStatus.queued:
+        // `queued` covers two very different reasons nothing is
+        // happening yet: genuinely offline/signed-out (in which case
+        // "Waiting for connection" is accurate), or simply not picked
+        // up by the classification queue for a moment while fully
+        // online (the common case right after Save, before the
+        // background enqueue's uploading/analyzing transition lands).
+        // Previously this branch showed "Waiting for connection"
+        // unconditionally, which is the reported false-connection-
+        // state bug: the device had working internet the whole time.
+        // `isOnlineForAiProvider` is the same connectivity+auth signal
+        // `AiCardSummary` already uses at the session-card level — see
+        // `lib/data/remote/remote_providers.dart`.
+        final isOnline = ref.watch(isOnlineForAiProvider);
+        return _StatusText(
+          icon: Icons.hourglass_empty,
+          color: AppColors.textMuted,
+          text: isOnline ? 'Queued for AI' : 'Waiting for connection',
         );
       case AiFindingStatus.awaitingApproval:
         // A zero-balance, Flex-only finding can never actually be

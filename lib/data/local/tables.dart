@@ -154,6 +154,15 @@ class FindingRows extends Table {
   /// column did.
   TextColumn get aiStatus => text().withDefault(const Constant('notQueued'))();
 
+  /// The outstanding AI analysis request's idempotency key, level, and
+  /// most recent submission time (added in schema v11) — see
+  /// `AiAnalysisAttempt`. All three are null when no request may still
+  /// be unresolved, which is also the correct value for every finding
+  /// that existed before these columns did.
+  TextColumn get aiAttemptKey => text().nullable()();
+  TextColumn get aiAttemptLevel => text().nullable()();
+  DateTimeColumn get aiAttemptSubmittedAt => dateTime().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 

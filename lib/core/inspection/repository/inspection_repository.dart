@@ -1,3 +1,4 @@
+import '../entities/ai_analysis_attempt.dart';
 import '../entities/ai_finding_status.dart';
 import '../entities/ai_level.dart';
 import '../entities/ai_review.dart';
@@ -76,6 +77,27 @@ abstract class InspectionRepository {
   /// Records the per-finding progressive AI processing state — see
   /// `AiFindingStatus`.
   Future<void> setFindingAiStatus(
+    String sessionId,
+    String findingId,
+    AiFindingStatus status,
+  );
+
+  /// Durably records [attempt] as this finding's outstanding AI
+  /// analysis request and moves it to `analyzing`, in one write. Must
+  /// complete *before* the analysis request is sent, so an app restart
+  /// can always replay the same idempotency key — see
+  /// `AiAnalysisAttempt`.
+  Future<void> beginFindingAiAttempt(
+    String sessionId,
+    String findingId,
+    AiAnalysisAttempt attempt,
+  );
+
+  /// Records a *definitive* AI outcome: sets [status] and clears the
+  /// outstanding attempt, so the next approved run mints a fresh key.
+  /// Use [setFindingAiStatus] instead when the outcome is unknown and
+  /// the attempt must be kept for a safe replay.
+  Future<void> finishFindingAiAttempt(
     String sessionId,
     String findingId,
     AiFindingStatus status,

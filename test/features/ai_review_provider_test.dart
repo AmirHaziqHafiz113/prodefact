@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
+import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
@@ -235,7 +236,16 @@ void main() {
 
   test('pending review count decreases as suggestions are resolved, and '
       'review cannot complete while any remain pending', () async {
-    final container = ProviderContainer(overrides: testOverrides());
+    // Two Smart analyses (up to 300 Credits each) need more than the
+    // fake's 500-Credit default. This previously passed only because both
+    // balance checks ran before either charge landed, letting the fake's
+    // balance go negative; analysis now starts after each finding's
+    // durable save, so the runs no longer overlap that way.
+    final container = ProviderContainer(
+      overrides: testOverrides(
+        billingService: FakeBillingService(initialBalanceCredits: 5000),
+      ),
+    );
     addTearDown(container.dispose);
     container
         .read(newInspectionDraftProvider.notifier)

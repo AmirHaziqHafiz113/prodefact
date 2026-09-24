@@ -83,6 +83,14 @@ part 'database.g.dart';
 ///   inspection saved before this migration keeps loading exactly as
 ///   it did; the application layer resolves which to show — see
 ///   `PropertyDetails.resolvedProjectDeveloperName`. Additive only.
+/// - v11: (stuck-AI recovery pass) added three nullable `FindingRows`
+///   columns — `aiAttemptKey`, `aiAttemptLevel`,
+///   `aiAttemptSubmittedAt` — persisting the idempotency identity of an
+///   AI analysis request *before* it is sent, so an interrupted request
+///   can be replayed safely after an app restart instead of being left
+///   spinning forever or re-sent under a new (separately charged) key.
+///   See `AiAnalysisAttempt`. Null for every pre-existing finding, which
+///   correctly means "no request outstanding". Additive only.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -103,7 +111,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -242,6 +250,14 @@ class AppDatabase extends _$AppDatabase {
           inspectionSessionRows,
           inspectionSessionRows.projectDeveloperName,
         );
+      }
+      if (from < 11) {
+        // `findingRows` has existed since v1 and is never recreated by
+        // an earlier step above, so these columns are always missing
+        // here regardless of which version the device is upgrading from.
+        await migrator.addColumn(findingRows, findingRows.aiAttemptKey);
+        await migrator.addColumn(findingRows, findingRows.aiAttemptLevel);
+        await migrator.addColumn(findingRows, findingRows.aiAttemptSubmittedAt);
       }
     },
   );

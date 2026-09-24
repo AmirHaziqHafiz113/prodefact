@@ -8,6 +8,17 @@ import '../../core/logging/app_logger.dart';
 /// `functions/src/index.ts` and `firebase.json`.
 const _kFunctionsRegion = 'asia-southeast1';
 
+const _kDefaultCallableTimeout = Duration(seconds: 30);
+
+/// `analyseFinding` runs with `timeoutSeconds: 180` on the backend
+/// (`functions/src/index.ts`) — a real Smart/Expert vision call on a
+/// cold instance can legitimately take longer than the 30s every other
+/// billing callable uses. Giving up at 30s previously reported
+/// "failed" for requests the backend then finished and charged. The
+/// wait is never visible to the inspector: analysis runs in the
+/// background. Must stay below `AiAnalysisAttempt.replaySafeAfter`.
+const kAnalyseFindingCallableTimeout = Duration(seconds: 200);
+
 /// Production [BillingService]: calls the six commercial-layer
 /// callables in `functions/src/billing/` — see
 /// docs/commercial_model.md. This is the only file that imports
@@ -24,11 +35,13 @@ class FirebaseBillingService implements BillingService {
 
   Future<Map<String, dynamic>> _call(
     String name,
-    Map<String, dynamic>? payload,
-  ) async {
+    Map<String, dynamic>? payload, {
+    Duration timeout = _kDefaultCallableTimeout,
+    bool classifyAnalysisOutcome = false,
+  }) async {
     final callable = _functions.httpsCallable(
       name,
-      options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      options: HttpsCallableOptions(timeout: timeout),
     );
     try {
       final result = await callable.call<Map<String, dynamic>>(payload);
@@ -39,17 +52,29 @@ class FirebaseBillingService implements BillingService {
         error,
         stackTrace,
       );
-      throw Exception(friendlyMessageForBillingFunctionsError(error.code));
+      final message = friendlyMessageForBillingFunctionsError(error.code);
+      if (classifyAnalysisOutcome) {
+        throw AnalyseFindingException(
+          message,
+          outcomeUnknown: analyseFindingOutcomeUnknownForCode(error.code),
+        );
+      }
+      throw Exception(message);
     } catch (error, stackTrace) {
       AppLogger.error(
         'Billing callable "$name" failed unexpectedly',
         error,
         stackTrace,
       );
-      throw Exception(
-        'Could not reach the wallet service. Check your connection and '
-        'try again.',
-      );
+      const message =
+          'Could not reach the wallet service. Check your connection and '
+          'try again.';
+      if (classifyAnalysisOutcome) {
+        // No backend response at all: the request may or may not have
+        // been processed.
+        throw const AnalyseFindingException(message, outcomeUnknown: true);
+      }
+      throw Exception(message);
     }
   }
 
@@ -86,6 +111,8 @@ class FirebaseBillingService implements BillingService {
         aiLevel: aiLevel,
         idempotencyKey: idempotencyKey,
       ),
+      timeout: kAnalyseFindingCallableTimeout,
+      classifyAnalysisOutcome: true,
     );
     return parseAnalyseFindingResult(raw, request.findingId);
   }

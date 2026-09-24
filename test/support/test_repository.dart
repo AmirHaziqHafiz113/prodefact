@@ -168,15 +168,19 @@ List<Override> testOverrides({
 /// entirely by [FakeAuthService]/[FakeCloudInspectionRepository] — no
 /// real Firebase project is ever touched.
 List<Override> testOverridesWithSync({
+  InspectionRepository? repository,
   EvidenceCaptureService? captureService,
   FakeAuthService? authService,
   FakeCloudInspectionRepository? cloudRepository,
   ConnectivityService? connectivityService,
+  BillingService? billingService,
 }) {
   return [
     ...testOverrides(
+      repository: repository,
       captureService: captureService,
       connectivityService: connectivityService,
+      billingService: billingService,
     ),
     firebaseReadyProvider.overrideWithValue(true),
     authServiceProvider.overrideWithValue(authService ?? FakeAuthService()),

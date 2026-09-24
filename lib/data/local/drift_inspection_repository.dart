@@ -204,6 +204,7 @@ class DriftInspectionRepository implements InspectionRepository {
         status: FindingStatus.values.byName(row.status),
         evidence: evidence,
         aiStatus: AiFindingStatus.values.byName(row.aiStatus),
+        aiAttempt: _aiAttemptFromRow(row),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       );
@@ -533,6 +534,67 @@ class DriftInspectionRepository implements InspectionRepository {
       );
       await _touchSession(sessionId, now);
     });
+  }
+
+  @override
+  Future<void> beginFindingAiAttempt(
+    String sessionId,
+    String findingId,
+    AiAnalysisAttempt attempt,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.findingRows,
+      )..where((t) => t.id.equals(findingId))).write(
+        FindingRowsCompanion(
+          aiStatus: Value(AiFindingStatus.analyzing.name),
+          aiAttemptKey: Value(attempt.idempotencyKey),
+          aiAttemptLevel: Value(attempt.aiLevel.name),
+          aiAttemptSubmittedAt: Value(attempt.submittedAt),
+          updatedAt: Value(now),
+        ),
+      );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> finishFindingAiAttempt(
+    String sessionId,
+    String findingId,
+    AiFindingStatus status,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.findingRows,
+      )..where((t) => t.id.equals(findingId))).write(
+        FindingRowsCompanion(
+          aiStatus: Value(status.name),
+          aiAttemptKey: const Value(null),
+          aiAttemptLevel: const Value(null),
+          aiAttemptSubmittedAt: const Value(null),
+          updatedAt: Value(now),
+        ),
+      );
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  /// Null unless a complete attempt was persisted. An unrecognised level
+  /// name (a future level read by an older build) still keeps the key,
+  /// falling back to Smart: the key is what protects billing, and the
+  /// backend returns a stored outcome for it regardless of level.
+  static AiAnalysisAttempt? _aiAttemptFromRow(FindingRow row) {
+    final key = row.aiAttemptKey;
+    final submittedAt = row.aiAttemptSubmittedAt;
+    if (key == null || key.isEmpty || submittedAt == null) return null;
+    return AiAnalysisAttempt(
+      idempotencyKey: key,
+      aiLevel: AiLevel.values.asNameMap()[row.aiAttemptLevel] ?? AiLevel.smart,
+      submittedAt: submittedAt,
+    );
   }
 
   @override

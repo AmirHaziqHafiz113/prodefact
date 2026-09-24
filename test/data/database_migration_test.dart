@@ -5,7 +5,11 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
+import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database.dart';
+import 'package:prodefact/data/local/drift_inspection_repository.dart';
+import 'package:prodefact/features/home_inspection/config/home_inspection_config.dart';
+import 'package:prodefact/features/home_inspection/config/property_type.dart';
 
 /// Exercises the real `MigrationStrategy.onUpgrade` in
 /// `lib/data/local/database.dart` against on-disk databases created at
@@ -13,6 +17,26 @@ import 'package:prodefact/data/local/database.dart';
 /// that version's Dart table definitions produced) — the app's actual
 /// upgrade path, not a re-implementation of it. See
 /// `docs/production_readiness.md` ("Database hardening").
+/// `finding_rows` exactly as schemas v6-v10 defined it (v1's columns
+/// plus v6's `ai_status`). Every real device has had this table since
+/// v1; the v6-v9 fixtures below only need it so the v11 step (which adds
+/// columns to it) runs against a realistic schema.
+const _findingRowsV6ToV10 = '''
+  CREATE TABLE finding_rows (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES inspection_session_rows(id) ON DELETE CASCADE,
+    section_id TEXT NOT NULL,
+    element_id TEXT NOT NULL,
+    component_id TEXT,
+    description TEXT,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    ai_status TEXT NOT NULL DEFAULT 'notQueued',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+''';
+
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
@@ -397,6 +421,7 @@ void main() {
       VALUES
         ('report_1', 'session_6', '/fake/report.pdf', 'report.pdf', 6000, 6000);
     ''');
+    raw.execute(_findingRowsV6ToV10);
     raw.execute('PRAGMA user_version = 6');
     raw.close();
 
@@ -489,6 +514,7 @@ void main() {
       VALUES
         ('local', 'Acme Inspections', 'Jane Doe', 7000);
     ''');
+    raw.execute(_findingRowsV6ToV10);
     raw.execute('PRAGMA user_version = 7');
     raw.close();
 
@@ -582,6 +608,7 @@ void main() {
       VALUES
         ('session_8', 'homeInspection', 'landed', 'inProgress', 8000, 8000, 'Unit occupied');
     ''');
+    raw.execute(_findingRowsV6ToV10);
     raw.execute('PRAGMA user_version = 8');
     raw.close();
 
@@ -671,6 +698,7 @@ void main() {
          'Residensi Vista', 'A-12-08', 'Vista Project', 'Vista Developer Sdn Bhd',
          'housePass', 'expert');
     ''');
+    raw.execute(_findingRowsV6ToV10);
     raw.execute('PRAGMA user_version = 9');
     raw.close();
 
@@ -696,6 +724,113 @@ void main() {
     // `PropertyDetails.resolvedProjectDeveloperName`).
     expect(sessionRow.projectDeveloperName, isNull);
   });
+
+  test(
+    'upgrading from v10 adds the v11 AI-attempt columns, and a finding '
+    "an older build left 'analyzing' still loads intact with no attempt",
+    () async {
+      final dbFile = File('${tempDir.path}/v10.sqlite');
+
+      // v11 only added three nullable finding_rows columns, so the exact
+      // v10 schema is today's schema minus those columns. Build a real
+      // session through the production repository, then strip them and
+      // mark the file as v10 — the fixture is then a genuine v10 database
+      // with real data, not a hand-copied approximation.
+      final seedDb = AppDatabase(NativeDatabase(dbFile));
+      final seedRepo = DriftInspectionRepository(seedDb);
+      final session = await seedRepo.createSession(
+        industry: Industry.homeInspection,
+        assetTypeId: PropertyType.highRise.name,
+        initialSections: HomeInspectionConfig.defaultSectionsFor(
+          PropertyType.highRise,
+        ),
+      );
+      final createdAt = DateTime(2026, 9, 1, 9);
+      final finding = Finding(
+        id: 'finding_v10',
+        sectionId: session.sections.first.id,
+        description: 'Hairline crack above door frame',
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      );
+      await seedRepo.saveFinding(session.id, finding);
+      await seedRepo.addEvidence(
+        session.id,
+        Evidence(
+          id: 'evidence_v10',
+          findingId: finding.id,
+          filePath: '/evidence/finding_v10/1.jpg',
+          createdAt: createdAt,
+          source: EvidenceSource.camera,
+        ),
+      );
+      await seedRepo.setFindingAiStatus(
+        session.id,
+        finding.id,
+        AiFindingStatus.analyzing,
+      );
+      await seedDb.close();
+
+      final raw = sqlite3.sqlite3.open(dbFile.path);
+      raw.execute('ALTER TABLE finding_rows DROP COLUMN ai_attempt_key');
+      raw.execute('ALTER TABLE finding_rows DROP COLUMN ai_attempt_level');
+      raw.execute(
+        'ALTER TABLE finding_rows DROP COLUMN ai_attempt_submitted_at',
+      );
+      raw.execute('PRAGMA user_version = 10');
+      raw.close();
+
+      final db = AppDatabase(NativeDatabase(dbFile));
+      addTearDown(db.close);
+      final repo = DriftInspectionRepository(db);
+
+      final loaded = await repo.loadSession(session.id);
+      expect(loaded, isNotNull);
+      final upgraded = loaded!.findings.single;
+      expect(upgraded.id, 'finding_v10');
+      expect(upgraded.description, 'Hairline crack above door frame');
+      expect(upgraded.aiStatus, AiFindingStatus.analyzing);
+      // No key was ever persisted by the older build — recovery treats this
+      // as un-replayable and offers Retry rather than guessing.
+      expect(upgraded.aiAttempt, isNull);
+      expect(upgraded.evidence.single.id, 'evidence_v10');
+
+      final columns = await db
+          .customSelect('PRAGMA table_info(finding_rows)')
+          .get();
+      final names = columns.map((r) => r.data['name'] as String).toSet();
+      expect(
+        names,
+        containsAll([
+          'ai_attempt_key',
+          'ai_attempt_level',
+          'ai_attempt_submitted_at',
+        ]),
+      );
+
+      // The new columns are usable immediately after the upgrade.
+      await repo.beginFindingAiAttempt(
+        session.id,
+        finding.id,
+        AiAnalysisAttempt(
+          idempotencyKey: 'k1',
+          aiLevel: AiLevel.expert,
+          submittedAt: createdAt,
+        ),
+      );
+      final withAttempt = (await repo.loadSession(session.id))!.findings.single;
+      expect(withAttempt.aiAttempt?.idempotencyKey, 'k1');
+      expect(withAttempt.aiAttempt?.aiLevel, AiLevel.expert);
+      await repo.finishFindingAiAttempt(
+        session.id,
+        finding.id,
+        AiFindingStatus.completed,
+      );
+      final finished = (await repo.loadSession(session.id))!.findings.single;
+      expect(finished.aiAttempt, isNull);
+      expect(finished.aiStatus, AiFindingStatus.completed);
+    },
+  );
 
   test('a fresh install (onCreate) also gets the v5 indexes and the v7/v8 '
       'tables/columns', () async {

@@ -1,3 +1,4 @@
+import 'ai_analysis_attempt.dart';
 import 'ai_finding_status.dart';
 import 'evidence.dart';
 import 'finding_status.dart';
@@ -40,6 +41,7 @@ class Finding {
     this.status = FindingStatus.draft,
     this.evidence = const [],
     this.aiStatus = AiFindingStatus.notQueued,
+    this.aiAttempt,
   });
 
   final String id;
@@ -69,6 +71,13 @@ class Finding {
   /// `AiFindingStatus`.
   final AiFindingStatus aiStatus;
 
+  /// The outstanding AI analysis request for this finding, if one may
+  /// still be unresolved on the backend — see [AiAnalysisAttempt].
+  /// Loaded from storage and written only through the repository's
+  /// dedicated attempt methods, never through `saveFinding`, so an
+  /// unrelated edit (e.g. the side note) can never erase it.
+  final AiAnalysisAttempt? aiAttempt;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -94,6 +103,7 @@ class Finding {
       status: status ?? this.status,
       evidence: evidence ?? this.evidence,
       aiStatus: aiStatus ?? this.aiStatus,
+      aiAttempt: aiAttempt,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

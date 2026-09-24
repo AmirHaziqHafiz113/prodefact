@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 import '../../core/inspection/inspection_domain.dart';
+import '../../core/logging/app_logger.dart';
 
 /// Orchestrates one finding's progressive AI classification through
 /// the **priced** protocol — this is what
@@ -25,11 +26,14 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
   PricedAiClassificationCoordinator({
     required InspectionRepository localRepository,
     required BillingService billingService,
+    DateTime Function()? clock,
   }) : _local = localRepository,
-       _billing = billingService;
+       _billing = billingService,
+       _clock = clock ?? DateTime.now;
 
   final InspectionRepository _local;
   final BillingService _billing;
+  final DateTime Function() _clock;
 
   /// Guards against two concurrent `classifyFinding` calls for the
   /// same finding racing each other.
@@ -85,26 +89,85 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
     );
 
-    final aiLevel = requestedLevel ?? session.selectedAiLevel ?? AiLevel.smart;
-    // A fresh key per attempt: safe to reuse across an in-flight call's
-    // own transport-level hiccups (there are none at this layer — the
-    // callable either succeeds or throws once), and a genuinely new
-    // attempt (auto-requeue after a restart, or an explicit inspector
-    // Retry) always deserves its own — never replays a stale cached
-    // failure. See docs/commercial_model.md.
-    final idempotencyKey =
-        '${findingId}_${DateTime.now().microsecondsSinceEpoch}';
+    // Billing identity. An outstanding attempt (persisted before an
+    // earlier submission whose outcome never reached this device) is
+    // always replayed with its original key and level — the backend is
+    // idempotent per key, so a replay returns the stored outcome or
+    // finishes the interrupted run without reserving or charging twice.
+    // Only a finding with no outstanding attempt mints a fresh key.
+    final now = _clock();
+    final outstanding = finding.aiAttempt;
+    final AiAnalysisAttempt attempt;
+    if (outstanding != null) {
+      if (!outstanding.isReplaySafeAt(now)) {
+        // The original invocation may still be running server-side.
+        AppLogger.info(
+          'ai_job_deferred finding=${finding.id} '
+          'retryAt=${outstanding.replaySafeAt.toIso8601String()}',
+        );
+        return AiClassificationResult.deferred(outstanding.replaySafeAt);
+      }
+      attempt = outstanding.resubmittedAt(now);
+      AppLogger.info(
+        'ai_job_retry finding=${finding.id} key=${attempt.idempotencyKey}',
+      );
+    } else {
+      attempt = AiAnalysisAttempt(
+        idempotencyKey: '${findingId}_${now.microsecondsSinceEpoch}',
+        aiLevel: requestedLevel ?? session.selectedAiLevel ?? AiLevel.smart,
+        submittedAt: now,
+      );
+      AppLogger.info(
+        'ai_job_created finding=${finding.id} key=${attempt.idempotencyKey} '
+        'level=${attempt.aiLevel.name}',
+      );
+    }
+    // Durable before the request leaves the device: if the app dies
+    // mid-call, the restart replays this exact key.
+    await _local.beginFindingAiAttempt(session.id, finding.id, attempt);
 
     final AiFindingClassification classification;
     try {
+      AppLogger.info('ai_job_started finding=${finding.id}');
       final result = await _billing.analyseFinding(
         request: request,
-        aiLevel: aiLevel,
-        idempotencyKey: idempotencyKey,
+        aiLevel: attempt.aiLevel,
+        idempotencyKey: attempt.idempotencyKey,
       );
       classification = result.classification;
+    } on AnalyseFindingException catch (error) {
+      if (error.outcomeUnknown) {
+        // The backend may have finished (and charged) this request. Keep
+        // the attempt so the next run replays the same key; `queued`
+        // lets session reload/reconnect recovery pick it up.
+        AppLogger.info(
+          'ai_job_outcome_unknown finding=${finding.id} '
+          'key=${attempt.idempotencyKey}',
+        );
+        await _local.setFindingAiStatus(
+          session.id,
+          finding.id,
+          outstanding == null ? AiFindingStatus.queued : AiFindingStatus.failed,
+        );
+      } else {
+        AppLogger.info(
+          'ai_job_failed finding=${finding.id} definitive=true error=$error',
+        );
+        await _local.finishFindingAiAttempt(
+          session.id,
+          finding.id,
+          AiFindingStatus.failed,
+        );
+      }
+      return AiClassificationResult.failure(error.toString());
     } catch (error) {
-      await _local.setFindingAiStatus(
+      // Not a classified backend error (e.g. the local-only fake
+      // billing service rejecting for insufficient Credits): nothing
+      // outstanding on any backend.
+      AppLogger.info(
+        'ai_job_failed finding=${finding.id} definitive=true error=$error',
+      );
+      await _local.finishFindingAiAttempt(
         session.id,
         finding.id,
         AiFindingStatus.failed,
@@ -125,14 +188,13 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         .toList();
     final needsReview = classification.needsReview || validEntryId == null;
 
-    final now = DateTime.now();
     await _local.saveAiSuggestion(
       AiSuggestion(
         id: _suggestionIdFor(finding.id),
         sessionId: session.id,
         findingId: finding.id,
         providerId: 'ai',
-        generatedAt: now,
+        generatedAt: _clock(),
         suggestedCatalogueEntryId: validEntryId,
         suggestedConfidence: classification.confidence,
         suggestedShortReason: classification.shortReason,
@@ -140,10 +202,13 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         finalCatalogueEntryId: validEntryId,
       ),
     );
-    await _local.setFindingAiStatus(
+    await _local.finishFindingAiAttempt(
       session.id,
       finding.id,
       needsReview ? AiFindingStatus.needsReview : AiFindingStatus.completed,
+    );
+    AppLogger.info(
+      'ai_job_completed finding=${finding.id} needsReview=$needsReview',
     );
 
     return const AiClassificationResult.success();

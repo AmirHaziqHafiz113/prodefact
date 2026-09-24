@@ -42,6 +42,11 @@ class FakeBillingService
   final List<WalletTransactionSummary> _ledger = [];
   int _ledgerSequence = 0;
 
+  /// Completed analyses by idempotency key — mirrors the backend's
+  /// `aiJobs` store, so replaying the same key in local-only/demo mode
+  /// returns the original result instead of charging again.
+  final Map<String, AnalyseFindingResult> _completedAnalyses = {};
+
   void _record({
     required WalletTransactionType type,
     required LedgerDirection direction,
@@ -220,6 +225,16 @@ class FakeBillingService
     required AiLevel aiLevel,
     required String idempotencyKey,
   }) async {
+    final replayed = _completedAnalyses[idempotencyKey];
+    if (replayed != null) {
+      return AnalyseFindingResult(
+        aiLevel: replayed.aiLevel,
+        creditsCharged: replayed.creditsCharged,
+        newBalance: _balanceCredits,
+        paymentMode: replayed.paymentMode,
+        classification: replayed.classification,
+      );
+    }
     final estimate = await estimateFindingAnalysis(
       inspectionId: request.sessionId,
       findingId: request.findingId,
@@ -259,13 +274,15 @@ class FakeBillingService
       _housePassByInspection[request.sessionId]?.recordUsage();
     }
 
-    return AnalyseFindingResult(
+    final result = AnalyseFindingResult(
       aiLevel: aiLevel,
       creditsCharged: actualCharge,
       newBalance: _balanceCredits,
       paymentMode: estimate.paymentMode,
       classification: classification,
     );
+    _completedAnalyses[idempotencyKey] = result;
+    return result;
   }
 
   @override

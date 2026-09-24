@@ -2269,6 +2269,39 @@ class $FindingRowsTable extends FindingRows
     requiredDuringInsert: false,
     defaultValue: const Constant('notQueued'),
   );
+  static const VerificationMeta _aiAttemptKeyMeta = const VerificationMeta(
+    'aiAttemptKey',
+  );
+  @override
+  late final GeneratedColumn<String> aiAttemptKey = GeneratedColumn<String>(
+    'ai_attempt_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aiAttemptLevelMeta = const VerificationMeta(
+    'aiAttemptLevel',
+  );
+  @override
+  late final GeneratedColumn<String> aiAttemptLevel = GeneratedColumn<String>(
+    'ai_attempt_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aiAttemptSubmittedAtMeta =
+      const VerificationMeta('aiAttemptSubmittedAt');
+  @override
+  late final GeneratedColumn<DateTime> aiAttemptSubmittedAt =
+      GeneratedColumn<DateTime>(
+        'ai_attempt_submitted_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2302,6 +2335,9 @@ class $FindingRowsTable extends FindingRows
     notes,
     status,
     aiStatus,
+    aiAttemptKey,
+    aiAttemptLevel,
+    aiAttemptSubmittedAt,
     createdAt,
     updatedAt,
   ];
@@ -2382,6 +2418,33 @@ class $FindingRowsTable extends FindingRows
         aiStatus.isAcceptableOrUnknown(data['ai_status']!, _aiStatusMeta),
       );
     }
+    if (data.containsKey('ai_attempt_key')) {
+      context.handle(
+        _aiAttemptKeyMeta,
+        aiAttemptKey.isAcceptableOrUnknown(
+          data['ai_attempt_key']!,
+          _aiAttemptKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ai_attempt_level')) {
+      context.handle(
+        _aiAttemptLevelMeta,
+        aiAttemptLevel.isAcceptableOrUnknown(
+          data['ai_attempt_level']!,
+          _aiAttemptLevelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ai_attempt_submitted_at')) {
+      context.handle(
+        _aiAttemptSubmittedAtMeta,
+        aiAttemptSubmittedAt.isAcceptableOrUnknown(
+          data['ai_attempt_submitted_at']!,
+          _aiAttemptSubmittedAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2443,6 +2506,18 @@ class $FindingRowsTable extends FindingRows
         DriftSqlType.string,
         data['${effectivePrefix}ai_status'],
       )!,
+      aiAttemptKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_attempt_key'],
+      ),
+      aiAttemptLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_attempt_level'],
+      ),
+      aiAttemptSubmittedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ai_attempt_submitted_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2484,6 +2559,15 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
   /// the correct value for every finding that existed before this
   /// column did.
   final String aiStatus;
+
+  /// The outstanding AI analysis request's idempotency key, level, and
+  /// most recent submission time (added in schema v11) — see
+  /// `AiAnalysisAttempt`. All three are null when no request may still
+  /// be unresolved, which is also the correct value for every finding
+  /// that existed before these columns did.
+  final String? aiAttemptKey;
+  final String? aiAttemptLevel;
+  final DateTime? aiAttemptSubmittedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   const FindingRow({
@@ -2496,6 +2580,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     this.notes,
     required this.status,
     required this.aiStatus,
+    this.aiAttemptKey,
+    this.aiAttemptLevel,
+    this.aiAttemptSubmittedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -2517,6 +2604,15 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     }
     map['status'] = Variable<String>(status);
     map['ai_status'] = Variable<String>(aiStatus);
+    if (!nullToAbsent || aiAttemptKey != null) {
+      map['ai_attempt_key'] = Variable<String>(aiAttemptKey);
+    }
+    if (!nullToAbsent || aiAttemptLevel != null) {
+      map['ai_attempt_level'] = Variable<String>(aiAttemptLevel);
+    }
+    if (!nullToAbsent || aiAttemptSubmittedAt != null) {
+      map['ai_attempt_submitted_at'] = Variable<DateTime>(aiAttemptSubmittedAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -2539,6 +2635,15 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
           : Value(notes),
       status: Value(status),
       aiStatus: Value(aiStatus),
+      aiAttemptKey: aiAttemptKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiAttemptKey),
+      aiAttemptLevel: aiAttemptLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiAttemptLevel),
+      aiAttemptSubmittedAt: aiAttemptSubmittedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiAttemptSubmittedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -2559,6 +2664,11 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       notes: serializer.fromJson<String?>(json['notes']),
       status: serializer.fromJson<String>(json['status']),
       aiStatus: serializer.fromJson<String>(json['aiStatus']),
+      aiAttemptKey: serializer.fromJson<String?>(json['aiAttemptKey']),
+      aiAttemptLevel: serializer.fromJson<String?>(json['aiAttemptLevel']),
+      aiAttemptSubmittedAt: serializer.fromJson<DateTime?>(
+        json['aiAttemptSubmittedAt'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -2576,6 +2686,11 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       'notes': serializer.toJson<String?>(notes),
       'status': serializer.toJson<String>(status),
       'aiStatus': serializer.toJson<String>(aiStatus),
+      'aiAttemptKey': serializer.toJson<String?>(aiAttemptKey),
+      'aiAttemptLevel': serializer.toJson<String?>(aiAttemptLevel),
+      'aiAttemptSubmittedAt': serializer.toJson<DateTime?>(
+        aiAttemptSubmittedAt,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -2591,6 +2706,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     Value<String?> notes = const Value.absent(),
     String? status,
     String? aiStatus,
+    Value<String?> aiAttemptKey = const Value.absent(),
+    Value<String?> aiAttemptLevel = const Value.absent(),
+    Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => FindingRow(
@@ -2603,6 +2721,13 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     notes: notes.present ? notes.value : this.notes,
     status: status ?? this.status,
     aiStatus: aiStatus ?? this.aiStatus,
+    aiAttemptKey: aiAttemptKey.present ? aiAttemptKey.value : this.aiAttemptKey,
+    aiAttemptLevel: aiAttemptLevel.present
+        ? aiAttemptLevel.value
+        : this.aiAttemptLevel,
+    aiAttemptSubmittedAt: aiAttemptSubmittedAt.present
+        ? aiAttemptSubmittedAt.value
+        : this.aiAttemptSubmittedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -2621,6 +2746,15 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       notes: data.notes.present ? data.notes.value : this.notes,
       status: data.status.present ? data.status.value : this.status,
       aiStatus: data.aiStatus.present ? data.aiStatus.value : this.aiStatus,
+      aiAttemptKey: data.aiAttemptKey.present
+          ? data.aiAttemptKey.value
+          : this.aiAttemptKey,
+      aiAttemptLevel: data.aiAttemptLevel.present
+          ? data.aiAttemptLevel.value
+          : this.aiAttemptLevel,
+      aiAttemptSubmittedAt: data.aiAttemptSubmittedAt.present
+          ? data.aiAttemptSubmittedAt.value
+          : this.aiAttemptSubmittedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2638,6 +2772,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
           ..write('notes: $notes, ')
           ..write('status: $status, ')
           ..write('aiStatus: $aiStatus, ')
+          ..write('aiAttemptKey: $aiAttemptKey, ')
+          ..write('aiAttemptLevel: $aiAttemptLevel, ')
+          ..write('aiAttemptSubmittedAt: $aiAttemptSubmittedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2655,6 +2792,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     notes,
     status,
     aiStatus,
+    aiAttemptKey,
+    aiAttemptLevel,
+    aiAttemptSubmittedAt,
     createdAt,
     updatedAt,
   );
@@ -2671,6 +2811,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
           other.notes == this.notes &&
           other.status == this.status &&
           other.aiStatus == this.aiStatus &&
+          other.aiAttemptKey == this.aiAttemptKey &&
+          other.aiAttemptLevel == this.aiAttemptLevel &&
+          other.aiAttemptSubmittedAt == this.aiAttemptSubmittedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2685,6 +2828,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
   final Value<String?> notes;
   final Value<String> status;
   final Value<String> aiStatus;
+  final Value<String?> aiAttemptKey;
+  final Value<String?> aiAttemptLevel;
+  final Value<DateTime?> aiAttemptSubmittedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -2698,6 +2844,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     this.notes = const Value.absent(),
     this.status = const Value.absent(),
     this.aiStatus = const Value.absent(),
+    this.aiAttemptKey = const Value.absent(),
+    this.aiAttemptLevel = const Value.absent(),
+    this.aiAttemptSubmittedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2712,6 +2861,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     this.notes = const Value.absent(),
     this.status = const Value.absent(),
     this.aiStatus = const Value.absent(),
+    this.aiAttemptKey = const Value.absent(),
+    this.aiAttemptLevel = const Value.absent(),
+    this.aiAttemptSubmittedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -2731,6 +2883,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     Expression<String>? notes,
     Expression<String>? status,
     Expression<String>? aiStatus,
+    Expression<String>? aiAttemptKey,
+    Expression<String>? aiAttemptLevel,
+    Expression<DateTime>? aiAttemptSubmittedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -2745,6 +2900,10 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
       if (notes != null) 'notes': notes,
       if (status != null) 'status': status,
       if (aiStatus != null) 'ai_status': aiStatus,
+      if (aiAttemptKey != null) 'ai_attempt_key': aiAttemptKey,
+      if (aiAttemptLevel != null) 'ai_attempt_level': aiAttemptLevel,
+      if (aiAttemptSubmittedAt != null)
+        'ai_attempt_submitted_at': aiAttemptSubmittedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2761,6 +2920,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     Value<String?>? notes,
     Value<String>? status,
     Value<String>? aiStatus,
+    Value<String?>? aiAttemptKey,
+    Value<String?>? aiAttemptLevel,
+    Value<DateTime?>? aiAttemptSubmittedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -2775,6 +2937,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
       notes: notes ?? this.notes,
       status: status ?? this.status,
       aiStatus: aiStatus ?? this.aiStatus,
+      aiAttemptKey: aiAttemptKey ?? this.aiAttemptKey,
+      aiAttemptLevel: aiAttemptLevel ?? this.aiAttemptLevel,
+      aiAttemptSubmittedAt: aiAttemptSubmittedAt ?? this.aiAttemptSubmittedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2811,6 +2976,17 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     if (aiStatus.present) {
       map['ai_status'] = Variable<String>(aiStatus.value);
     }
+    if (aiAttemptKey.present) {
+      map['ai_attempt_key'] = Variable<String>(aiAttemptKey.value);
+    }
+    if (aiAttemptLevel.present) {
+      map['ai_attempt_level'] = Variable<String>(aiAttemptLevel.value);
+    }
+    if (aiAttemptSubmittedAt.present) {
+      map['ai_attempt_submitted_at'] = Variable<DateTime>(
+        aiAttemptSubmittedAt.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2835,6 +3011,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
           ..write('notes: $notes, ')
           ..write('status: $status, ')
           ..write('aiStatus: $aiStatus, ')
+          ..write('aiAttemptKey: $aiAttemptKey, ')
+          ..write('aiAttemptLevel: $aiAttemptLevel, ')
+          ..write('aiAttemptSubmittedAt: $aiAttemptSubmittedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -7556,6 +7735,9 @@ typedef $$FindingRowsTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<String> status,
       Value<String> aiStatus,
+      Value<String?> aiAttemptKey,
+      Value<String?> aiAttemptLevel,
+      Value<DateTime?> aiAttemptSubmittedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -7571,6 +7753,9 @@ typedef $$FindingRowsTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<String> status,
       Value<String> aiStatus,
+      Value<String?> aiAttemptKey,
+      Value<String?> aiAttemptLevel,
+      Value<DateTime?> aiAttemptSubmittedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -7683,6 +7868,21 @@ class $$FindingRowsTableFilterComposer
 
   ColumnFilters<String> get aiStatus => $composableBuilder(
     column: $table.aiStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiAttemptKey => $composableBuilder(
+    column: $table.aiAttemptKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiAttemptLevel => $composableBuilder(
+    column: $table.aiAttemptLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get aiAttemptSubmittedAt => $composableBuilder(
+    column: $table.aiAttemptSubmittedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7820,6 +8020,21 @@ class $$FindingRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get aiAttemptKey => $composableBuilder(
+    column: $table.aiAttemptKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get aiAttemptLevel => $composableBuilder(
+    column: $table.aiAttemptLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get aiAttemptSubmittedAt => $composableBuilder(
+    column: $table.aiAttemptSubmittedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7891,6 +8106,21 @@ class $$FindingRowsTableAnnotationComposer
 
   GeneratedColumn<String> get aiStatus =>
       $composableBuilder(column: $table.aiStatus, builder: (column) => column);
+
+  GeneratedColumn<String> get aiAttemptKey => $composableBuilder(
+    column: $table.aiAttemptKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get aiAttemptLevel => $composableBuilder(
+    column: $table.aiAttemptLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get aiAttemptSubmittedAt => $composableBuilder(
+    column: $table.aiAttemptSubmittedAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -8014,6 +8244,9 @@ class $$FindingRowsTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> aiStatus = const Value.absent(),
+                Value<String?> aiAttemptKey = const Value.absent(),
+                Value<String?> aiAttemptLevel = const Value.absent(),
+                Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -8027,6 +8260,9 @@ class $$FindingRowsTableTableManager
                 notes: notes,
                 status: status,
                 aiStatus: aiStatus,
+                aiAttemptKey: aiAttemptKey,
+                aiAttemptLevel: aiAttemptLevel,
+                aiAttemptSubmittedAt: aiAttemptSubmittedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -8042,6 +8278,9 @@ class $$FindingRowsTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> aiStatus = const Value.absent(),
+                Value<String?> aiAttemptKey = const Value.absent(),
+                Value<String?> aiAttemptLevel = const Value.absent(),
+                Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -8055,6 +8294,9 @@ class $$FindingRowsTableTableManager
                 notes: notes,
                 status: status,
                 aiStatus: aiStatus,
+                aiAttemptKey: aiAttemptKey,
+                aiAttemptLevel: aiAttemptLevel,
+                aiAttemptSubmittedAt: aiAttemptSubmittedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
