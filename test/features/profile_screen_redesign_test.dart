@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/app/app.dart';
 import 'package:prodefact/app/router/app_shell_screen.dart';
@@ -34,25 +35,48 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'Profile shows Smart AI as the fixed analysis level, with no '
-    'Fast/Smart/Expert selector (QA #24)',
-    (tester) async {
-      final container = ProviderContainer(overrides: testOverrides());
-      addTearDown(container.dispose);
+  testWidgets('Profile shows Smart AI as the fixed analysis level, with no '
+      'Fast/Smart/Expert selector (QA #24)', (tester) async {
+    final container = ProviderContainer(overrides: testOverrides());
+    addTearDown(container.dispose);
 
-      await openProfile(tester, container);
-      expect(find.byType(ProfileScreen), findsOneWidget);
+    await openProfile(tester, container);
+    expect(find.byType(ProfileScreen), findsOneWidget);
 
-      expect(
-        find.textContaining('Balanced speed and thoroughness'),
-        findsOneWidget,
-      );
-      expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
-      expect(find.text('Fast'), findsNothing);
-      expect(find.text('Expert'), findsNothing);
-    },
-  );
+    expect(
+      find.textContaining('Balanced speed and thoroughness'),
+      findsOneWidget,
+    );
+    expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
+    expect(find.text('Fast'), findsNothing);
+    expect(find.text('Expert'), findsNothing);
+  });
+
+  testWidgets('a QA build identifier shows the real platform version and build '
+      'number, and the build stamp (never a hard-coded value)', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'ProDefact',
+      packageName: 'com.prodefact.app',
+      version: '0.1.0',
+      buildNumber: '42',
+      buildSignature: '',
+    );
+    final container = ProviderContainer(overrides: testOverrides());
+    addTearDown(container.dispose);
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+
+    await openProfile(tester, container);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('qa-build-identifier')), findsOneWidget);
+    expect(find.text('ProDefact QA'), findsOneWidget);
+    expect(find.text('Version: 0.1.0 (42)'), findsOneWidget);
+    // Tests run without --dart-define=GIT_SHA, so the build says so
+    // rather than showing a stale commit.
+    expect(find.text('Build: not stamped'), findsOneWidget);
+  });
 
   testWidgets('Sign Out is not shown when not signed in', (tester) async {
     final container = ProviderContainer(overrides: testOverrides());

@@ -205,15 +205,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            // Subtle metadata, not a prominent card (§21 of the mission —
-            // build info is informational only, never a destination).
-            Center(
-              child: Text(
-                'Version ${AppBuildInfo.version} · Build ${AppBuildInfo.build}',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: AppColors.textMuted),
-              ),
-            ),
+            // QA build identifier: lets testers prove exactly which APK a
+            // screenshot came from. Real version/build number from the
+            // platform, plus the commit injected at build time.
+            if (AppBuildInfo.isQaBuild)
+              ref
+                  .watch(appBuildInfoProvider)
+                  .maybeWhen(
+                    data: (info) => Center(
+                      key: const ValueKey('qa-build-identifier'),
+                      child: Column(
+                        children: [
+                          Text(
+                            'ProDefact QA',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          for (final line in [
+                            info.versionLabel,
+                            info.buildLabel,
+                          ])
+                            SelectableText(
+                              line,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.textMuted),
+                            ),
+                        ],
+                      ),
+                    ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
             if (user != null) ...[
               const SizedBox(height: AppSpacing.xl),
               const Divider(height: 1),
