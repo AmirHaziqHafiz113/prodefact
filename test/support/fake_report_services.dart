@@ -78,8 +78,22 @@ class FakeReportShareService implements ReportShareService {
 class FakeEvidenceFileStore implements EvidenceFileStore {
   final List<String> deletedPaths = [];
 
+  /// Annotated copies "saved", keyed by the returned path.
+  final Map<String, List<int>> savedAnnotations = {};
+
   @override
   Future<void> deleteEvidenceFile(String filePath) async {
     deletedPaths.add(filePath);
+  }
+
+  @override
+  Future<String> saveAnnotatedCopy({
+    required String originalFilePath,
+    required List<int> pngBytes,
+  }) async {
+    final path =
+        '$originalFilePath.annotated_${savedAnnotations.length + 1}.png';
+    savedAnnotations[path] = pngBytes;
+    return path;
   }
 }

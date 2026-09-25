@@ -188,6 +188,11 @@ class EvidenceRows extends Table {
   /// schema v2). Null until the first successful upload.
   TextColumn get storagePath => text().nullable()();
 
+  /// Local path of the inspector's marked-up copy (added in schema v12)
+  /// — see `Evidence.annotatedFilePath`. The original at [filePath] is
+  /// never overwritten. Null for every pre-existing photo.
+  TextColumn get annotatedFilePath => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../core/inspection/services/evidence_file_store.dart';
 import '../../core/logging/app_logger.dart';
 
@@ -23,5 +25,20 @@ class LocalEvidenceFileStore implements EvidenceFileStore {
         stackTrace,
       );
     }
+  }
+
+  @override
+  Future<String> saveAnnotatedCopy({
+    required String originalFilePath,
+    required List<int> pngBytes,
+  }) async {
+    final directory = p.dirname(originalFilePath);
+    final base = p.basenameWithoutExtension(originalFilePath);
+    final path = p.join(
+      directory,
+      '${base}_annotated_${DateTime.now().microsecondsSinceEpoch}.png',
+    );
+    await File(path).writeAsBytes(pngBytes, flush: true);
+    return path;
   }
 }

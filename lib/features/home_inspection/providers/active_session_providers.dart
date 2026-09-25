@@ -28,11 +28,27 @@ class CapturedFindingPhoto {
     required this.pendingFindingId,
     required this.filePath,
     required this.source,
+    this.annotatedFilePath,
   });
 
   final String pendingFindingId;
+
+  /// The original photo — never modified.
   final String filePath;
   final EvidenceSource source;
+
+  /// A marked-up copy made before saving, if any (QA #14).
+  final String? annotatedFilePath;
+
+  String get displayFilePath => annotatedFilePath ?? filePath;
+
+  CapturedFindingPhoto withAnnotation(String annotatedFilePath) =>
+      CapturedFindingPhoto(
+        pendingFindingId: pendingFindingId,
+        filePath: filePath,
+        source: source,
+        annotatedFilePath: annotatedFilePath,
+      );
 }
 
 /// Holds the most recent local-write failure message for the active
@@ -400,14 +416,24 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final finding = updatedFinding;
     if (finding == null) return;
     state = session.copyWith(findings: findings, updatedAt: now);
-    unawaited(
-      _persist(
-        () => _repository.saveFinding(session.id, finding),
-        previous: session,
-        action: 'save finding',
-      ),
+    final saved = _persist(
+      () => _repository.saveFinding(session.id, finding),
+      previous: session,
+      action: 'save finding',
     );
+    unawaited(saved);
     ref.invalidate(sessionSummariesProvider);
+    // The quick note was the missing piece (QA #16): with Auto Analyse
+    // on, adding it starts AI straight away.
+    if (session.autoAnalyseEnabled &&
+        finding.hasDefectNote &&
+        finding.isAiEligible &&
+        finding.aiStatus == AiFindingStatus.awaitingApproval) {
+      _setFindingAiStatusDurable(session.id, findingId, AiFindingStatus.queued);
+      unawaited(
+        saved.then((_) => _enqueueAiClassification(session.id, findingId)),
+      );
+    }
   }
 
   void removeFinding(String findingId) {
@@ -611,10 +637,93 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Discards a photo captured via [captureFindingPhoto] that was never
   /// saved — deletes the temp file; nothing else to roll back, since
   /// nothing was ever persisted to the database.
-  Future<void> discardCapturedFindingPhoto(CapturedFindingPhoto photo) {
-    return ref
-        .read(evidenceFileStoreProvider)
-        .deleteEvidenceFile(photo.filePath);
+  Future<void> discardCapturedFindingPhoto(CapturedFindingPhoto photo) async {
+    final store = ref.read(evidenceFileStoreProvider);
+    await store.deleteEvidenceFile(photo.filePath);
+    final annotated = photo.annotatedFilePath;
+    if (annotated != null) await store.deleteEvidenceFile(annotated);
+  }
+
+  /// Saves an annotated rendering of a captured, not-yet-saved photo as
+  /// a separate file (the original is untouched) and returns the photo
+  /// carrying it. Replacing an earlier annotation deletes that copy.
+  Future<CapturedFindingPhoto> annotateCapturedPhoto(
+    CapturedFindingPhoto photo,
+    List<int> pngBytes,
+  ) async {
+    final store = ref.read(evidenceFileStoreProvider);
+    final path = await store.saveAnnotatedCopy(
+      originalFilePath: photo.filePath,
+      pngBytes: pngBytes,
+    );
+    final previous = photo.annotatedFilePath;
+    if (previous != null) unawaited(store.deleteEvidenceFile(previous));
+    return photo.withAnnotation(path);
+  }
+
+  /// Saves an annotated rendering of an existing photo (QA #14/#20) as a
+  /// separate file next to the original, which is never modified. The
+  /// photo is queued for upload again so the copy reaches the cloud.
+  Future<void> saveEvidenceAnnotation({
+    required String findingId,
+    required String evidenceId,
+    required List<int> pngBytes,
+  }) async {
+    final session = state;
+    if (session == null) return;
+    final evidence = session.findings
+        .firstWhereOrNull((f) => f.id == findingId)
+        ?.evidence
+        .firstWhereOrNull((e) => e.id == evidenceId);
+    if (evidence == null) return;
+    final store = ref.read(evidenceFileStoreProvider);
+    final String path;
+    try {
+      path = await store.saveAnnotatedCopy(
+        originalFilePath: evidence.filePath,
+        pngBytes: pngBytes,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error('Could not save an annotated photo', error, stackTrace);
+      if (ref.mounted) {
+        ref
+            .read(activeSessionErrorProvider.notifier)
+            .set('Could not save your markup. Please try again.');
+      }
+      return;
+    }
+    if (!ref.mounted) return;
+    final current = state;
+    if (current == null || current.id != session.id) return;
+    state = current.copyWith(
+      findings: [
+        for (final finding in current.findings)
+          if (finding.id == findingId)
+            finding.copyWith(
+              evidence: [
+                for (final e in finding.evidence)
+                  if (e.id == evidenceId)
+                    e.copyWith(
+                      annotatedFilePath: path,
+                      syncStatus: SyncStatus.pendingUpdate,
+                    )
+                  else
+                    e,
+              ],
+            )
+          else
+            finding,
+      ],
+    );
+    unawaited(
+      _persist(
+        () => _repository.setEvidenceAnnotation(session.id, evidenceId, path),
+        previous: current,
+        action: 'save markup',
+      ),
+    );
+    final previous = evidence.annotatedFilePath;
+    if (previous != null) unawaited(store.deleteEvidenceFile(previous));
   }
 
   /// Commits a photo captured via [captureFindingPhoto] as a new
@@ -644,17 +753,28 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       id: 'evidence_${now.microsecondsSinceEpoch}',
       findingId: photo.pendingFindingId,
       filePath: photo.filePath,
+      annotatedFilePath: photo.annotatedFilePath,
       createdAt: now,
       source: photo.source,
     );
-    final finding = Finding(
+    final draft = Finding(
       id: photo.pendingFindingId,
       sectionId: sectionId,
       description: _orNull(note),
       createdAt: now,
       updatedAt: now,
       evidence: [evidence],
-      aiStatus: session.autoAnalyseEnabled
+    );
+    // AI waits for a quick defect note (QA #16); saving never does.
+    final startsAi = session.autoAnalyseEnabled && draft.hasDefectNote;
+    final finding = Finding(
+      id: draft.id,
+      sectionId: draft.sectionId,
+      description: draft.description,
+      createdAt: now,
+      updatedAt: now,
+      evidence: draft.evidence,
+      aiStatus: startsAi
           ? AiFindingStatus.queued
           : AiFindingStatus.awaitingApproval,
     );
@@ -689,7 +809,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     unawaited(findingPersisted);
     ref.invalidate(sessionSummariesProvider);
     _logAnalytics(AnalyticsEvent.findingSaved);
-    if (session.autoAnalyseEnabled) {
+    if (startsAi) {
       // Only once the finding is durably saved: the coordinator reads it
       // from storage, and must never race ahead of the save (it would
       // find nothing and silently skip the finding). The caller still
@@ -703,18 +823,33 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     return finding;
   }
 
-  void removeEvidence({required String findingId, required String evidenceId}) {
+  /// Removes one photo from a finding (QA #20) without touching the
+  /// finding or its other photos. A finding's last photo can't be
+  /// removed this way — remove the finding instead — so a defect ticket
+  /// never silently loses all of its evidence. Returns false when
+  /// nothing was removed.
+  bool removeEvidence({required String findingId, required String evidenceId}) {
     final session = state;
-    if (session == null) return;
+    if (session == null) return false;
+    final target = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (target == null ||
+        target.evidence.length < 2 ||
+        !target.evidence.any((e) => e.id == evidenceId)) {
+      return false;
+    }
     final now = DateTime.now();
     String? removedFilePath;
+    String? removedAnnotatedPath;
     final findings = [
       for (final finding in session.findings)
         if (finding.id == findingId)
           finding.copyWith(
             evidence: finding.evidence.where((e) {
               final keep = e.id != evidenceId;
-              if (!keep) removedFilePath = e.filePath;
+              if (!keep) {
+                removedFilePath = e.filePath;
+                removedAnnotatedPath = e.annotatedFilePath;
+              }
               return keep;
             }).toList(),
             updatedAt: now,
@@ -730,12 +865,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         action: 'remove photo',
       ),
     );
-    final filePath = removedFilePath;
-    if (filePath != null) {
-      unawaited(
-        ref.read(evidenceFileStoreProvider).deleteEvidenceFile(filePath),
-      );
+    final store = ref.read(evidenceFileStoreProvider);
+    for (final path in [removedFilePath, removedAnnotatedPath]) {
+      if (path != null) unawaited(store.deleteEvidenceFile(path));
     }
+    return true;
   }
 
   // ---- cloud sync (Phase 5) ----
@@ -987,6 +1121,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         finding.aiStatus != AiFindingStatus.failed) {
       return;
     }
+    // AI never starts without a quick defect note (QA #16).
+    if (!finding.hasDefectNote) return;
     _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
     unawaited(
       _enqueueAiClassification(session.id, findingId, aiLevel: aiLevel),
@@ -1014,6 +1150,20 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       // The notifier (and its `ref`) may already be disposed by the
       // time this actually runs — it's always kicked off un-awaited.
       if (!ref.mounted) return;
+
+      // AI needs a quick defect note (QA #16). A finding queued without
+      // one (e.g. by an older build) waits for the inspector instead.
+      final pending = state?.id == sessionId
+          ? state?.findings.firstWhereOrNull((f) => f.id == findingId)
+          : null;
+      if (pending != null && !pending.hasDefectNote) {
+        _setFindingAiStatusDurable(
+          sessionId,
+          findingId,
+          AiFindingStatus.awaitingApproval,
+        );
+        return;
+      }
 
       // An outstanding request that may still be running server-side:
       // wait until a replay can't overlap it (no upload, no status

@@ -27,6 +27,7 @@ class Evidence {
     this.caption,
     this.syncStatus = SyncStatus.localOnly,
     this.storagePath,
+    this.annotatedFilePath,
   });
 
   final String id;
@@ -46,10 +47,23 @@ class Evidence {
   /// successful upload.
   final String? storagePath;
 
+  /// A marked-up copy of this photo (QA #14), saved as a separate local
+  /// file. [filePath] — the original — is never modified or replaced:
+  /// the original stays the audit record and is what AI analyses, while
+  /// the report shows the inspector's markup. Null when not annotated.
+  final String? annotatedFilePath;
+
+  /// What to show the inspector and the report: the annotated copy when
+  /// one exists, otherwise the original.
+  String get displayFilePath => annotatedFilePath ?? filePath;
+
+  bool get isAnnotated => annotatedFilePath != null;
+
   Evidence copyWith({
     String? caption,
     SyncStatus? syncStatus,
     String? storagePath,
+    String? annotatedFilePath,
   }) {
     return Evidence(
       id: id,
@@ -61,6 +75,7 @@ class Evidence {
       caption: caption ?? this.caption,
       syncStatus: syncStatus ?? this.syncStatus,
       storagePath: storagePath ?? this.storagePath,
+      annotatedFilePath: annotatedFilePath ?? this.annotatedFilePath,
     );
   }
 

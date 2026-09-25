@@ -190,6 +190,7 @@ class DriftInspectionRepository implements InspectionRepository {
               caption: e.caption,
               syncStatus: SyncStatus.values.byName(e.syncStatus),
               storagePath: e.storagePath,
+              annotatedFilePath: e.annotatedFilePath,
             ),
           )
           .toList();
@@ -635,6 +636,7 @@ class DriftInspectionRepository implements InspectionRepository {
               syncStatus: Value(evidence.syncStatus.name),
               createdAt: evidence.createdAt,
               storagePath: Value(evidence.storagePath),
+              annotatedFilePath: Value(evidence.annotatedFilePath),
             ),
           );
       await _touchSession(sessionId, now);
@@ -648,6 +650,26 @@ class DriftInspectionRepository implements InspectionRepository {
       await (_db.delete(
         _db.evidenceRows,
       )..where((t) => t.id.equals(evidenceId))).go();
+      await _touchSession(sessionId, now);
+    });
+  }
+
+  @override
+  Future<void> setEvidenceAnnotation(
+    String sessionId,
+    String evidenceId,
+    String? annotatedFilePath,
+  ) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.evidenceRows,
+      )..where((t) => t.id.equals(evidenceId))).write(
+        EvidenceRowsCompanion(
+          annotatedFilePath: Value(annotatedFilePath),
+          syncStatus: Value(SyncStatus.pendingUpdate.name),
+        ),
+      );
       await _touchSession(sessionId, now);
     });
   }

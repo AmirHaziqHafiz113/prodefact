@@ -284,13 +284,16 @@ class PdfReportRenderer implements ReportRenderer {
       }
       final bytes = file.readAsBytesSync();
       final image = pw.MemoryImage(bytes);
+      // Whole photo in its own orientation (QA #18/#19): fitted inside
+      // the box, never cropped or stretched.
       return pw.Container(
-        width: 90,
-        height: 90,
+        width: 150,
+        height: 150,
+        alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
           border: pw.Border.all(color: _dividerColor),
         ),
-        child: pw.Image(image, fit: pw.BoxFit.cover),
+        child: pw.Image(image, fit: pw.BoxFit.contain),
       );
     } catch (_) {
       // A missing/corrupt/unreadable image must never fail the whole

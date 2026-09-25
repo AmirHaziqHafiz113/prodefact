@@ -6,10 +6,21 @@ import 'package:prodefact/data/billing/fake_billing_service.dart';
 
 /// One `analyseFinding` call as the backend received it.
 class RecordedAnalysisCall {
-  const RecordedAnalysisCall(this.idempotencyKey, this.aiLevel);
+  const RecordedAnalysisCall(
+    this.idempotencyKey,
+    this.aiLevel, {
+    this.note,
+    this.evidenceIds = const [],
+    this.evidenceFilePaths = const [],
+  });
 
   final String idempotencyKey;
   final AiLevel aiLevel;
+
+  /// What the request carried to AI.
+  final String? note;
+  final List<String> evidenceIds;
+  final List<String> evidenceFilePaths;
 }
 
 /// What the scripted backend does for the next *new* (not replayed)
@@ -81,7 +92,15 @@ class ScriptedBillingService implements BillingService {
     required AiLevel aiLevel,
     required String idempotencyKey,
   }) async {
-    calls.add(RecordedAnalysisCall(idempotencyKey, aiLevel));
+    calls.add(
+      RecordedAnalysisCall(
+        idempotencyKey,
+        aiLevel,
+        note: request.note,
+        evidenceIds: request.evidenceIds,
+        evidenceFilePaths: request.evidenceFilePaths,
+      ),
+    );
     final pending = gate;
     if (pending != null) await pending.future;
 

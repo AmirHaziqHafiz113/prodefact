@@ -176,7 +176,7 @@ ReportFinding _buildReportFinding(
     notes:
         (useLegacyFinal ? _presentOrNull(suggestion.legacyFinalNotes) : null) ??
         finding.notes,
-    evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
+    evidenceFilePaths: finding.evidence.map((e) => e.displayFilePath).toList(),
   );
 }
 
@@ -188,7 +188,9 @@ ReportFinding _buildCatalogueReportFinding(
   AiSuggestion? suggestion,
   int number,
 ) {
-  final evidencePaths = finding.evidence.map((e) => e.filePath).toList();
+  // The report shows the inspector's markup when a photo has one; the
+  // untouched original stays on the device and in cloud storage.
+  final evidencePaths = finding.evidence.map((e) => e.displayFilePath).toList();
 
   if (suggestion == null || !suggestion.isResolved) {
     // Physical inspection data is never withheld from the report just

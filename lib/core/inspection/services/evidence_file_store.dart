@@ -10,4 +10,12 @@ abstract class EvidenceFileStore {
   /// file is already missing — a stale/already-cleaned-up reference is
   /// not an error.
   Future<void> deleteEvidenceFile(String filePath);
+
+  /// Saves [pngBytes] — an annotated rendering of the photo at
+  /// [originalFilePath] — as a NEW file next to it and returns its path.
+  /// The original file is never modified (QA #14/#19).
+  Future<String> saveAnnotatedCopy({
+    required String originalFilePath,
+    required List<int> pngBytes,
+  });
 }

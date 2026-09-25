@@ -57,24 +57,46 @@ void main() {
       final finding = container
           .read(inspectionFindingsProvider.notifier)
           .addFinding(sectionId: section.id, elementId: element.id);
-      await container
-          .read(activeSessionProvider.notifier)
-          .addEvidence(findingId: finding.id, source: EvidenceSource.gallery);
-      final evidenceId = container
+      final notifier = container.read(activeSessionProvider.notifier);
+      await notifier.addEvidence(
+        findingId: finding.id,
+        source: EvidenceSource.gallery,
+      );
+      await notifier.addEvidence(
+        findingId: finding.id,
+        source: EvidenceSource.camera,
+      );
+      final photos = container
           .read(inspectionFindingsProvider)
           .firstWhere((f) => f.id == finding.id)
-          .evidence
-          .single
-          .id;
+          .evidence;
+      expect(photos, hasLength(2));
 
-      container
-          .read(activeSessionProvider.notifier)
-          .removeEvidence(findingId: finding.id, evidenceId: evidenceId);
-
-      final updated = container
+      // One photo of several: removed, finding and other photo kept.
+      expect(
+        notifier.removeEvidence(
+          findingId: finding.id,
+          evidenceId: photos.first.id,
+        ),
+        isTrue,
+      );
+      var updated = container
           .read(inspectionFindingsProvider)
           .firstWhere((f) => f.id == finding.id);
-      expect(updated.evidence, isEmpty);
+      expect(updated.evidence.single.id, photos.last.id);
+
+      // The last photo stays: remove the finding instead (QA #20).
+      expect(
+        notifier.removeEvidence(
+          findingId: finding.id,
+          evidenceId: photos.last.id,
+        ),
+        isFalse,
+      );
+      updated = container
+          .read(inspectionFindingsProvider)
+          .firstWhere((f) => f.id == finding.id);
+      expect(updated.evidence, hasLength(1));
     });
 
     test('cancelling the picker adds no evidence', () async {

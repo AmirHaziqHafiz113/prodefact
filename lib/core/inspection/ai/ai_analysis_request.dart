@@ -3,7 +3,7 @@
 /// catalogue, and nothing else. No user account data, no unrelated
 /// app state, and (per finding) exactly what a human inspector would
 /// have available: the area, whether it's a plumbing area, an
-/// optional side note, and the photos themselves.
+/// quick defect note, and the photos themselves.
 class AiFindingClassificationRequest {
   const AiFindingClassificationRequest({
     required this.sessionId,
@@ -20,7 +20,7 @@ class AiFindingClassificationRequest {
   final String sectionName;
   final bool sectionIsPlumbing;
 
-  /// The inspector's optional side note (e.g. "Water leaking when
+  /// The inspector's quick defect note, verbatim (e.g. "Water leaking when
   /// turned on").
   final String? note;
 

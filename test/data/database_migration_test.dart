@@ -37,6 +37,24 @@ const _findingRowsV6ToV10 = '''
   );
 ''';
 
+/// `evidence_rows` exactly as schemas v2-v11 defined it (v1's columns
+/// plus v2's `storage_path`). Every real device has had it since v1;
+/// the v5-v9 fixtures only need it so the v12 step (which adds a column
+/// to it) runs against a realistic schema.
+const _evidenceRowsV2ToV11 = '''
+  CREATE TABLE evidence_rows (
+    id TEXT NOT NULL PRIMARY KEY,
+    finding_id TEXT NOT NULL REFERENCES finding_rows(id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    media_type TEXT NOT NULL DEFAULT 'photo',
+    source TEXT NOT NULL DEFAULT 'gallery',
+    caption TEXT,
+    sync_status TEXT NOT NULL DEFAULT 'localOnly',
+    created_at INTEGER NOT NULL,
+    storage_path TEXT
+  );
+''';
+
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
@@ -334,6 +352,7 @@ void main() {
       VALUES
         ('suggestion_1', 'session_5', 'finding_legacy', 'accepted', 'fake-demo-v1', 5000, 'Cracked tile');
     ''');
+    raw.execute(_evidenceRowsV2ToV11);
     raw.execute('PRAGMA user_version = 5');
     raw.close();
 
@@ -422,6 +441,7 @@ void main() {
         ('report_1', 'session_6', '/fake/report.pdf', 'report.pdf', 6000, 6000);
     ''');
     raw.execute(_findingRowsV6ToV10);
+    raw.execute(_evidenceRowsV2ToV11);
     raw.execute('PRAGMA user_version = 6');
     raw.close();
 
@@ -515,6 +535,7 @@ void main() {
         ('local', 'Acme Inspections', 'Jane Doe', 7000);
     ''');
     raw.execute(_findingRowsV6ToV10);
+    raw.execute(_evidenceRowsV2ToV11);
     raw.execute('PRAGMA user_version = 7');
     raw.close();
 
@@ -609,6 +630,7 @@ void main() {
         ('session_8', 'homeInspection', 'landed', 'inProgress', 8000, 8000, 'Unit occupied');
     ''');
     raw.execute(_findingRowsV6ToV10);
+    raw.execute(_evidenceRowsV2ToV11);
     raw.execute('PRAGMA user_version = 8');
     raw.close();
 
@@ -699,6 +721,7 @@ void main() {
          'housePass', 'expert');
     ''');
     raw.execute(_findingRowsV6ToV10);
+    raw.execute(_evidenceRowsV2ToV11);
     raw.execute('PRAGMA user_version = 9');
     raw.close();
 
@@ -777,6 +800,9 @@ void main() {
       raw.execute(
         'ALTER TABLE finding_rows DROP COLUMN ai_attempt_submitted_at',
       );
+      raw.execute(
+        'ALTER TABLE evidence_rows DROP COLUMN annotated_file_path',
+      );
       raw.execute('PRAGMA user_version = 10');
       raw.close();
 
@@ -831,6 +857,79 @@ void main() {
       expect(finished.aiStatus, AiFindingStatus.completed);
     },
   );
+
+  test('upgrading from v11 adds the v12 annotated-photo column; existing '
+      'photos load unchanged with no annotation', () async {
+    final dbFile = File('${tempDir.path}/v11.sqlite');
+
+    // v12 only added evidence_rows.annotated_file_path, so the exact v11
+    // schema is today's minus that column (same approach as the v10 test).
+    final seedDb = AppDatabase(NativeDatabase(dbFile));
+    final seedRepo = DriftInspectionRepository(seedDb);
+    final session = await seedRepo.createSession(
+      industry: Industry.homeInspection,
+      assetTypeId: PropertyType.highRise.name,
+      initialSections: HomeInspectionConfig.defaultSectionsFor(
+        PropertyType.highRise,
+      ),
+    );
+    final createdAt = DateTime(2026, 9, 20, 9);
+    await seedRepo.saveFinding(
+      session.id,
+      Finding(
+        id: 'finding_v11',
+        sectionId: session.sections.first.id,
+        description: 'Window frame gap',
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+    await seedRepo.addEvidence(
+      session.id,
+      Evidence(
+        id: 'evidence_v11',
+        findingId: 'finding_v11',
+        filePath: '/evidence/finding_v11/original.jpg',
+        createdAt: createdAt,
+        source: EvidenceSource.gallery,
+        syncStatus: SyncStatus.synced,
+        storagePath: 'users/u/inspections/s/findings/f/evidence_v11.jpg',
+      ),
+    );
+    await seedDb.close();
+
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('ALTER TABLE evidence_rows DROP COLUMN annotated_file_path');
+    raw.execute('PRAGMA user_version = 11');
+    raw.close();
+
+    final db = AppDatabase(NativeDatabase(dbFile));
+    addTearDown(db.close);
+    final repo = DriftInspectionRepository(db);
+
+    final photo =
+        (await repo.loadSession(session.id))!.findings.single.evidence.single;
+    expect(photo.filePath, '/evidence/finding_v11/original.jpg');
+    expect(photo.syncStatus, SyncStatus.synced);
+    expect(photo.annotatedFilePath, isNull);
+    expect(photo.displayFilePath, photo.filePath);
+
+    // Marking up keeps the original path and re-queues the upload.
+    await repo.setEvidenceAnnotation(
+      session.id,
+      'evidence_v11',
+      '/evidence/finding_v11/original_annotated.png',
+    );
+    final marked =
+        (await repo.loadSession(session.id))!.findings.single.evidence.single;
+    expect(marked.filePath, '/evidence/finding_v11/original.jpg');
+    expect(
+      marked.annotatedFilePath,
+      '/evidence/finding_v11/original_annotated.png',
+    );
+    expect(marked.displayFilePath, marked.annotatedFilePath);
+    expect(marked.syncStatus, SyncStatus.pendingUpdate);
+  });
 
   test('a fresh install (onCreate) also gets the v5 indexes and the v7/v8 '
       'tables/columns', () async {

@@ -256,14 +256,19 @@ class _SuggestionCard extends ConsumerWidget {
             // actually about, given real visual weight rather than a
             // small thumbnail bundled into the note row.
             if (finding != null && finding.evidence.isNotEmpty) ...[
+              // Whole photo, own orientation (QA #18): letterboxed, never
+              // cropped. Shows the inspector's markup when there is one.
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                child: SizedBox(
-                  height: 140,
-                  width: double.infinity,
-                  child: Image.file(
-                    File(finding.evidence.first.filePath),
-                    fit: BoxFit.cover,
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: SizedBox(
+                    height: 180,
+                    width: double.infinity,
+                    child: Image.file(
+                      File(finding.evidence.first.displayFilePath),
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),

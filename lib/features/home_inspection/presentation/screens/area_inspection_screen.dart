@@ -17,6 +17,8 @@ import '../../providers/wallet_providers.dart';
 import '../widgets/app_bottom_sheet.dart';
 import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
+import 'photo_annotation_screen.dart';
+import 'photo_viewer_screen.dart';
 import 'top_up_screen.dart';
 
 /// Lets the inspector pick where a piece of evidence comes from —
@@ -231,13 +233,16 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     );
 
     if (!mounted) return;
+    // The sheet may have marked the photo up (a separate annotated copy;
+    // the original file is untouched).
+    final finalPhoto = result?.photo ?? photo;
     if (result == null || !result.save) {
-      await notifier.discardCapturedFindingPhoto(photo);
+      await notifier.discardCapturedFindingPhoto(finalPhoto);
       return;
     }
     notifier.saveCameraFinding(
       sectionId: sectionId,
-      photo: photo,
+      photo: finalPhoto,
       note: result.note,
     );
     ScaffoldMessenger.of(context).showSnackBar(
@@ -426,25 +431,38 @@ class _AreaHeader extends StatelessWidget {
 }
 
 class _PreviewResult {
-  const _PreviewResult({required this.save, this.note});
+  const _PreviewResult({required this.save, this.photo, this.note});
 
   final bool save;
+
+  /// The photo as it left the sheet — possibly with a markup copy.
+  final CapturedFindingPhoto? photo;
   final String? note;
 }
 
-/// "Preview Photo -> optional side note -> Save Finding" — deliberately
-/// simple: one photo, one optional text field, one primary action.
-class _PhotoPreviewSheet extends StatefulWidget {
+/// Quick defect note field wording (QA #16), shared by capture and edit.
+const _quickNoteLabel = 'Quick defect note';
+const _quickNoteHint =
+    'e.g. wall tile hollow · poor skim finish · '
+    'window frame gap';
+const _quickNoteHelper =
+    'Needed before AI analysis. Shorthand, BM or English is fine.';
+
+/// "Preview Photo -> mark up (optional) -> quick defect note -> Save
+/// Finding". Saving never needs the note; AI analysis does (QA #16), so
+/// a finding saved without one simply waits for it.
+class _PhotoPreviewSheet extends ConsumerStatefulWidget {
   const _PhotoPreviewSheet({required this.photo});
 
   final CapturedFindingPhoto photo;
 
   @override
-  State<_PhotoPreviewSheet> createState() => _PhotoPreviewSheetState();
+  ConsumerState<_PhotoPreviewSheet> createState() => _PhotoPreviewSheetState();
 }
 
-class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
+class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
   final _noteController = TextEditingController();
+  late CapturedFindingPhoto _photo = widget.photo;
 
   @override
   void dispose() {
@@ -452,35 +470,46 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
     super.dispose();
   }
 
+  Future<void> _markUp() async {
+    final bytes = await showPhotoAnnotation(context, filePath: _photo.filePath);
+    if (bytes == null || !mounted) return;
+    final annotated = await ref
+        .read(activeSessionProvider.notifier)
+        .annotateCapturedPhoto(_photo, bytes);
+    if (mounted) setState(() => _photo = annotated);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Image-first (mission "FINDING CAPTURE"): the photo gets most of
-    // the available viewport, not a small fixed thumbnail — still
-    // capped (not aspect-ratio-driven) so the note field and
-    // Save/Discard buttons stay comfortably reachable without scrolling
-    // on a small phone.
+    // Image-first: the photo gets most of the viewport, shown whole in
+    // its own orientation (QA #18) — never cropped to fit. Save/Discard
+    // are pinned (QA #15), so they stay visible with the keyboard open,
+    // on short screens, and at large text sizes.
     final imageHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
       160.0,
       420.0,
     );
-    // Save/Discard are pinned (QA #15): the photo and note scroll above
-    // them, so they stay visible with the keyboard open, on short
-    // screens, and at large text sizes.
     return AppSheetFrame(
       actions: Row(
         children: [
           Expanded(
             child: OutlinedButton(
               onPressed: () =>
-                  Navigator.of(context).pop(const _PreviewResult(save: false)),
+                  Navigator.of(context)
+                      .pop(_PreviewResult(save: false, photo: _photo)),
               child: const Text('Discard'),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: FilledButton(
-              onPressed: () => Navigator.of(context)
-                  .pop(_PreviewResult(save: true, note: _noteController.text)),
+              onPressed: () => Navigator.of(context).pop(
+                _PreviewResult(
+                  save: true,
+                  photo: _photo,
+                  note: _noteController.text,
+                ),
+              ),
               child: const Text('Save Finding'),
             ),
           ),
@@ -492,19 +521,38 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.md),
-            child: SizedBox(
-              height: imageHeight,
-              width: double.infinity,
-              child: Image.file(File(widget.photo.filePath), fit: BoxFit.cover),
+            child: ColoredBox(
+              color: Colors.black,
+              child: SizedBox(
+                height: imageHeight,
+                width: double.infinity,
+                child: Image.file(
+                  File(_photo.displayFilePath),
+                  key: ValueKey(_photo.displayFilePath),
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _markUp,
+              icon: const Icon(Icons.draw_outlined),
+              label: Text(
+                _photo.annotatedFilePath == null ? 'Mark Up' : 'Redo Markup',
+              ),
+            ),
+          ),
           TextField(
             controller: _noteController,
             maxLines: 2,
+            textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
-              labelText: 'Side note (optional)',
-              hintText: 'e.g. "Water leaking when turned on"',
+              labelText: _quickNoteLabel,
+              hintText: _quickNoteHint,
+              helperText: _quickNoteHelper,
+              helperMaxLines: 2,
               border: OutlineInputBorder(),
             ),
           ),
@@ -523,7 +571,6 @@ class _FindingCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final firstPhoto = finding.evidence.firstOrNull;
     final suggestion = ref
         .watch(activeSessionProvider)
         ?.aiSuggestions
@@ -535,56 +582,39 @@ class _FindingCard extends ConsumerWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: SizedBox(
-                width: 72,
-                height: 72,
-                child: firstPhoto == null
-                    ? const ColoredBox(
-                        color: AppColors.surfaceAlt,
-                        child: Icon(Icons.photo_outlined),
-                      )
-                    : Image.file(File(firstPhoto.filePath), fit: BoxFit.cover),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _FindingPhotoStrip(finding: finding),
+                  const SizedBox(height: AppSpacing.sm),
                   _AiStatusLine(finding: finding, suggestion: suggestion),
-                  if (finding.description?.isNotEmpty == true)
+                  if (finding.defectNote != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        finding.description!,
+                        finding.defectNote!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
-                  if (finding.evidence.length > 1)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${finding.evidence.length} photos',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final source = await chooseEvidenceSource(context);
+                        if (source == null) return; // cancelled the picker
+                        await ref
+                            .read(activeSessionProvider.notifier)
+                            .addEvidence(findingId: finding.id, source: source);
+                      },
+                      icon: const Icon(Icons.add_a_photo_outlined),
+                      label: const Text('Add angle'),
                     ),
+                  ),
                 ],
               ),
-            ),
-            IconButton(
-              tooltip: 'Add another photo',
-              icon: const Icon(Icons.add_a_photo_outlined),
-              onPressed: () async {
-                final source = await chooseEvidenceSource(context);
-                if (source == null) return; // cancelled the source picker
-                await ref
-                    .read(activeSessionProvider.notifier)
-                    .addEvidence(findingId: finding.id, source: source);
-              },
             ),
             PopupMenuButton<_FindingAction>(
               icon: const Icon(Icons.more_vert),
@@ -620,38 +650,123 @@ class _FindingCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _editNote(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController(text: finding.description ?? '');
-    final newNote = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit note'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 2,
-          decoration: const InputDecoration(labelText: 'Side note'),
+  Future<void> _editNote(BuildContext context, WidgetRef ref) =>
+      editFindingNote(context, ref, finding);
+}
+
+/// Edits a finding's quick defect note (QA #16). With Auto Analyse on,
+/// adding a note to a finding that was waiting for one starts AI.
+Future<void> editFindingNote(
+  BuildContext context,
+  WidgetRef ref,
+  Finding finding,
+) async {
+  final controller = TextEditingController(text: finding.description ?? '');
+  final newNote = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text(_quickNoteLabel),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLines: 2,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          labelText: _quickNoteLabel,
+          hintText: _quickNoteHint,
+          helperText: _quickNoteHelper,
+          helperMaxLines: 2,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
-          ),
-        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (newNote == null) return;
+  ref
+      .read(inspectionFindingsProvider.notifier)
+      .updateFinding(
+        findingId: finding.id,
+        description: newNote,
+        notes: finding.notes,
+      );
+}
+
+/// Every photo of one defect ticket as a strip of thumbnails (QA #20).
+/// Thumbnails are small square crops for scanning; tapping one opens
+/// the full, uncropped photos (QA #18/#19).
+class _FindingPhotoStrip extends StatelessWidget {
+  const _FindingPhotoStrip({required this.finding});
+
+  final Finding finding;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = finding.evidence;
+    if (photos.isEmpty) {
+      return const SizedBox(
+        width: 72,
+        height: 72,
+        child: ColoredBox(
+          color: AppColors.surfaceAlt,
+          child: Icon(Icons.photo_outlined),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 72,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        itemBuilder: (context, i) {
+          final photo = photos[i];
+          return InkWell(
+            key: ValueKey('finding-photo-${photo.id}'),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            onTap: () => showFindingPhotos(
+              context,
+              findingId: finding.id,
+              initialIndex: i,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: Stack(
+                children: [
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: Image.file(
+                      File(photo.displayFilePath),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const ColoredBox(
+                            color: AppColors.surfaceAlt,
+                            child: Icon(Icons.photo_outlined),
+                          ),
+                    ),
+                  ),
+                  if (photo.isAnnotated)
+                    const Positioned(
+                      right: 4,
+                      bottom: 4,
+                      child: Icon(Icons.draw, size: 16, color: Colors.white),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
-    if (newNote == null) return;
-    ref
-        .read(inspectionFindingsProvider.notifier)
-        .updateFinding(
-          findingId: finding.id,
-          description: newNote,
-          notes: finding.notes,
-        );
   }
 }
 
@@ -690,6 +805,23 @@ class _AiStatusLine extends ConsumerWidget {
           text: isOnline ? 'Queued for AI' : 'Waiting for connection',
         );
       case AiFindingStatus.awaitingApproval:
+        if (!finding.hasDefectNote) {
+          return Row(
+            children: [
+              const Expanded(
+                child: _StatusText(
+                  icon: Icons.edit_note,
+                  color: AppColors.textMuted,
+                  text: 'Add a quick defect note to start AI',
+                ),
+              ),
+              TextButton(
+                onPressed: () => editFindingNote(context, ref, finding),
+                child: const Text('Add Note'),
+              ),
+            ],
+          );
+        }
         // A zero-balance, Flex-only finding can never actually be
         // analysed yet — surfaced up front on the card itself, rather
         // than only after the inspector taps "Analyse" and hits the

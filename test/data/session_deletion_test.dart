@@ -110,17 +110,36 @@ void main() {
         findingId: finding.id,
         source: EvidenceSource.camera,
       );
+      await notifier.addEvidence(
+        findingId: finding.id,
+        source: EvidenceSource.camera,
+      );
       final evidence = container
           .read(activeSessionProvider)!
           .findings
           .single
           .evidence
-          .single;
+          .first;
+      // A marked-up copy is removed together with its photo.
+      await notifier.saveEvidenceAnnotation(
+        findingId: finding.id,
+        evidenceId: evidence.id,
+        pngBytes: const [1, 2, 3],
+      );
+      final annotatedPath = container
+          .read(activeSessionProvider)!
+          .findings
+          .single
+          .evidence
+          .first
+          .annotatedFilePath;
+      expect(annotatedPath, isNotNull);
 
       notifier.removeEvidence(findingId: finding.id, evidenceId: evidence.id);
       await Future<void>.delayed(Duration.zero);
 
       expect(fileStore.deletedPaths, contains(evidence.filePath));
+      expect(fileStore.deletedPaths, contains(annotatedPath));
     },
   );
 
@@ -194,6 +213,7 @@ void main() {
     final finding = notifier.addFinding(
       sectionId: section.id,
       elementId: section.elements.first.id,
+      description: 'Hollow tile', // AI needs a quick defect note (QA #16).
     );
     await notifier.addEvidence(
       findingId: finding.id,

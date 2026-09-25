@@ -22,6 +22,14 @@ Future<void> showAnalyseApprovalDialog({
   required WidgetRef ref,
   required String findingId,
 }) async {
+  // AI needs a quick defect note first (QA #16); the finding card offers
+  // "Add Note" instead of "Analyse" until one exists.
+  final finding = ref
+      .read(activeSessionProvider)
+      ?.findings
+      .firstWhereOrNull((f) => f.id == findingId);
+  if (finding == null || !finding.hasDefectNote) return;
+
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -170,7 +178,7 @@ class _EstimateApprovalDialog extends ConsumerWidget {
                   width: double.maxFinite,
                   height: 160,
                   child: Image.file(
-                    File(evidencePhoto.filePath),
+                    File(evidencePhoto.displayFilePath),
                     fit: BoxFit.contain,
                   ),
                 ),

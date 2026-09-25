@@ -3129,6 +3129,18 @@ class $EvidenceRowsTable extends EvidenceRows
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _annotatedFilePathMeta = const VerificationMeta(
+    'annotatedFilePath',
+  );
+  @override
+  late final GeneratedColumn<String> annotatedFilePath =
+      GeneratedColumn<String>(
+        'annotated_file_path',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3140,6 +3152,7 @@ class $EvidenceRowsTable extends EvidenceRows
     syncStatus,
     createdAt,
     storagePath,
+    annotatedFilePath,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3215,6 +3228,15 @@ class $EvidenceRowsTable extends EvidenceRows
         ),
       );
     }
+    if (data.containsKey('annotated_file_path')) {
+      context.handle(
+        _annotatedFilePathMeta,
+        annotatedFilePath.isAcceptableOrUnknown(
+          data['annotated_file_path']!,
+          _annotatedFilePathMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3260,6 +3282,10 @@ class $EvidenceRowsTable extends EvidenceRows
         DriftSqlType.string,
         data['${effectivePrefix}storage_path'],
       ),
+      annotatedFilePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}annotated_file_path'],
+      ),
     );
   }
 
@@ -3282,6 +3308,11 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
   /// Where this file lives in cloud storage once uploaded (added in
   /// schema v2). Null until the first successful upload.
   final String? storagePath;
+
+  /// Local path of the inspector's marked-up copy (added in schema v12)
+  /// — see `Evidence.annotatedFilePath`. The original at [filePath] is
+  /// never overwritten. Null for every pre-existing photo.
+  final String? annotatedFilePath;
   const EvidenceRow({
     required this.id,
     required this.findingId,
@@ -3292,6 +3323,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     required this.syncStatus,
     required this.createdAt,
     this.storagePath,
+    this.annotatedFilePath,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3308,6 +3340,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || storagePath != null) {
       map['storage_path'] = Variable<String>(storagePath);
+    }
+    if (!nullToAbsent || annotatedFilePath != null) {
+      map['annotated_file_path'] = Variable<String>(annotatedFilePath);
     }
     return map;
   }
@@ -3327,6 +3362,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       storagePath: storagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(storagePath),
+      annotatedFilePath: annotatedFilePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(annotatedFilePath),
     );
   }
 
@@ -3345,6 +3383,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       storagePath: serializer.fromJson<String?>(json['storagePath']),
+      annotatedFilePath: serializer.fromJson<String?>(
+        json['annotatedFilePath'],
+      ),
     );
   }
   @override
@@ -3360,6 +3401,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       'syncStatus': serializer.toJson<String>(syncStatus),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'storagePath': serializer.toJson<String?>(storagePath),
+      'annotatedFilePath': serializer.toJson<String?>(annotatedFilePath),
     };
   }
 
@@ -3373,6 +3415,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     String? syncStatus,
     DateTime? createdAt,
     Value<String?> storagePath = const Value.absent(),
+    Value<String?> annotatedFilePath = const Value.absent(),
   }) => EvidenceRow(
     id: id ?? this.id,
     findingId: findingId ?? this.findingId,
@@ -3383,6 +3426,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     syncStatus: syncStatus ?? this.syncStatus,
     createdAt: createdAt ?? this.createdAt,
     storagePath: storagePath.present ? storagePath.value : this.storagePath,
+    annotatedFilePath: annotatedFilePath.present
+        ? annotatedFilePath.value
+        : this.annotatedFilePath,
   );
   EvidenceRow copyWithCompanion(EvidenceRowsCompanion data) {
     return EvidenceRow(
@@ -3399,6 +3445,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       storagePath: data.storagePath.present
           ? data.storagePath.value
           : this.storagePath,
+      annotatedFilePath: data.annotatedFilePath.present
+          ? data.annotatedFilePath.value
+          : this.annotatedFilePath,
     );
   }
 
@@ -3413,7 +3462,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ..write('caption: $caption, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
-          ..write('storagePath: $storagePath')
+          ..write('storagePath: $storagePath, ')
+          ..write('annotatedFilePath: $annotatedFilePath')
           ..write(')'))
         .toString();
   }
@@ -3429,6 +3479,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     syncStatus,
     createdAt,
     storagePath,
+    annotatedFilePath,
   );
   @override
   bool operator ==(Object other) =>
@@ -3442,7 +3493,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           other.caption == this.caption &&
           other.syncStatus == this.syncStatus &&
           other.createdAt == this.createdAt &&
-          other.storagePath == this.storagePath);
+          other.storagePath == this.storagePath &&
+          other.annotatedFilePath == this.annotatedFilePath);
 }
 
 class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
@@ -3455,6 +3507,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
   final Value<String> syncStatus;
   final Value<DateTime> createdAt;
   final Value<String?> storagePath;
+  final Value<String?> annotatedFilePath;
   final Value<int> rowid;
   const EvidenceRowsCompanion({
     this.id = const Value.absent(),
@@ -3466,6 +3519,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     this.syncStatus = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.storagePath = const Value.absent(),
+    this.annotatedFilePath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EvidenceRowsCompanion.insert({
@@ -3478,6 +3532,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     this.syncStatus = const Value.absent(),
     required DateTime createdAt,
     this.storagePath = const Value.absent(),
+    this.annotatedFilePath = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        findingId = Value(findingId),
@@ -3493,6 +3548,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     Expression<String>? syncStatus,
     Expression<DateTime>? createdAt,
     Expression<String>? storagePath,
+    Expression<String>? annotatedFilePath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3505,6 +3561,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
       if (syncStatus != null) 'sync_status': syncStatus,
       if (createdAt != null) 'created_at': createdAt,
       if (storagePath != null) 'storage_path': storagePath,
+      if (annotatedFilePath != null) 'annotated_file_path': annotatedFilePath,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3519,6 +3576,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     Value<String>? syncStatus,
     Value<DateTime>? createdAt,
     Value<String?>? storagePath,
+    Value<String?>? annotatedFilePath,
     Value<int>? rowid,
   }) {
     return EvidenceRowsCompanion(
@@ -3531,6 +3589,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt ?? this.createdAt,
       storagePath: storagePath ?? this.storagePath,
+      annotatedFilePath: annotatedFilePath ?? this.annotatedFilePath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3565,6 +3624,9 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
     if (storagePath.present) {
       map['storage_path'] = Variable<String>(storagePath.value);
     }
+    if (annotatedFilePath.present) {
+      map['annotated_file_path'] = Variable<String>(annotatedFilePath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3583,6 +3645,7 @@ class EvidenceRowsCompanion extends UpdateCompanion<EvidenceRow> {
           ..write('syncStatus: $syncStatus, ')
           ..write('createdAt: $createdAt, ')
           ..write('storagePath: $storagePath, ')
+          ..write('annotatedFilePath: $annotatedFilePath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8432,6 +8495,7 @@ typedef $$EvidenceRowsTableCreateCompanionBuilder =
       Value<String> syncStatus,
       required DateTime createdAt,
       Value<String?> storagePath,
+      Value<String?> annotatedFilePath,
       Value<int> rowid,
     });
 typedef $$EvidenceRowsTableUpdateCompanionBuilder =
@@ -8445,6 +8509,7 @@ typedef $$EvidenceRowsTableUpdateCompanionBuilder =
       Value<String> syncStatus,
       Value<DateTime> createdAt,
       Value<String?> storagePath,
+      Value<String?> annotatedFilePath,
       Value<int> rowid,
     });
 
@@ -8516,6 +8581,11 @@ class $$EvidenceRowsTableFilterComposer
 
   ColumnFilters<String> get storagePath => $composableBuilder(
     column: $table.storagePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get annotatedFilePath => $composableBuilder(
+    column: $table.annotatedFilePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8592,6 +8662,11 @@ class $$EvidenceRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get annotatedFilePath => $composableBuilder(
+    column: $table.annotatedFilePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$FindingRowsTableOrderingComposer get findingId {
     final $$FindingRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8650,6 +8725,11 @@ class $$EvidenceRowsTableAnnotationComposer
 
   GeneratedColumn<String> get storagePath => $composableBuilder(
     column: $table.storagePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get annotatedFilePath => $composableBuilder(
+    column: $table.annotatedFilePath,
     builder: (column) => column,
   );
 
@@ -8714,6 +8794,7 @@ class $$EvidenceRowsTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> storagePath = const Value.absent(),
+                Value<String?> annotatedFilePath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EvidenceRowsCompanion(
                 id: id,
@@ -8725,6 +8806,7 @@ class $$EvidenceRowsTableTableManager
                 syncStatus: syncStatus,
                 createdAt: createdAt,
                 storagePath: storagePath,
+                annotatedFilePath: annotatedFilePath,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8738,6 +8820,7 @@ class $$EvidenceRowsTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 required DateTime createdAt,
                 Value<String?> storagePath = const Value.absent(),
+                Value<String?> annotatedFilePath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EvidenceRowsCompanion.insert(
                 id: id,
@@ -8749,6 +8832,7 @@ class $$EvidenceRowsTableTableManager
                 syncStatus: syncStatus,
                 createdAt: createdAt,
                 storagePath: storagePath,
+                annotatedFilePath: annotatedFilePath,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -150,6 +150,7 @@ void main() {
       final finding = notifier.saveCameraFinding(
         sectionId: section.id,
         photo: photo!,
+        note: 'Hollow tile', // AI needs a quick defect note (QA #16).
       );
       await _pumpAiQueue();
 

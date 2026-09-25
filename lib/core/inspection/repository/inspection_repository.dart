@@ -120,6 +120,15 @@ abstract class InspectionRepository {
 
   Future<void> removeEvidence(String sessionId, String evidenceId);
 
+  /// Records [annotatedFilePath] as [evidenceId]'s marked-up copy, or
+  /// clears it when null. Marks the photo as needing upload again so the
+  /// copy reaches cloud storage. Never touches the original file path.
+  Future<void> setEvidenceAnnotation(
+    String sessionId,
+    String evidenceId,
+    String? annotatedFilePath,
+  );
+
   /// Records the outcome of a cloud upload for one piece of evidence.
   Future<void> updateEvidenceSyncState(
     String evidenceId, {

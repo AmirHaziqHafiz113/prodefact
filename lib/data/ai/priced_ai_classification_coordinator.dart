@@ -84,7 +84,9 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       findingId: finding.id,
       sectionName: section?.name ?? finding.sectionId,
       sectionIsPlumbing: section?.isPlumbing ?? false,
-      note: finding.description ?? finding.notes,
+      // Verbatim (QA #17): shorthand is interpreted server-side, never
+      // rewritten here.
+      note: finding.defectNote,
       evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
     );

@@ -85,6 +85,20 @@ class Finding {
   /// eligible to be queued for AI classification at all.
   bool get isAiEligible => evidence.isNotEmpty;
 
+  /// The inspector's quick defect note (QA #16), verbatim — never
+  /// normalized here, so the original wording is kept for audit and
+  /// the report. Shorthand is interpreted by the AI prompt instead.
+  String? get defectNote {
+    final note = description?.trim().isNotEmpty == true ? description : notes;
+    final trimmed = note?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// AI only starts once a quick defect note exists (QA #16): the note
+  /// tells AI what the inspector is pointing at. Capturing and saving
+  /// the finding never requires one.
+  bool get hasDefectNote => defectNote != null;
+
   Finding copyWith({
     String? description,
     String? notes,

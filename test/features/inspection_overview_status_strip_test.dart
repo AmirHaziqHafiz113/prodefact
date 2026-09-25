@@ -55,7 +55,12 @@ void main() {
         final photo = await notifier.captureFindingPhoto(
           source: EvidenceSource.camera,
         );
-        notifier.saveCameraFinding(sectionId: bathroom.id, photo: photo!);
+        notifier.saveCameraFinding(
+          sectionId: bathroom.id,
+          photo: photo!,
+          // AI needs a quick defect note (QA #16).
+          note: 'Hollow tile',
+        );
         await Future<void>.delayed(Duration.zero);
       });
 

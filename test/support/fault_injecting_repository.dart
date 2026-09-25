@@ -100,6 +100,20 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> setEvidenceAnnotation(
+    String sessionId,
+    String evidenceId,
+    String? annotatedFilePath,
+  ) {
+    _maybeFail('setEvidenceAnnotation');
+    return _inner.setEvidenceAnnotation(
+      sessionId,
+      evidenceId,
+      annotatedFilePath,
+    );
+  }
+
+  @override
   Future<void> beginFindingAiAttempt(
     String sessionId,
     String findingId,

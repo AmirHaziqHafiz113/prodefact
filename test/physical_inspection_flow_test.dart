@@ -145,8 +145,8 @@ void main() {
   );
 
   testWidgets(
-    '"Add another photo" attaches a second photo to an existing finding '
-    'and re-queues it for AI',
+    '"Add angle" attaches a second photo of the same defect to the '
+    'existing finding (QA #20), shown as a second thumbnail',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
       final firstAreaName = container.read(inspectionQueueProvider).first.name;
@@ -156,18 +156,23 @@ void main() {
 
       await _takePhotoAndSave(tester, 'Leaking tap');
 
-      await tester.tap(_within(find.byIcon(Icons.add_a_photo_outlined)));
+      await tester.tap(_within(find.text('Add angle')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
-
-      expect(_within(find.text('2 photos')), findsOneWidget);
 
       final finding = container
           .read(activeSessionProvider)!
           .findings
           .singleWhere((f) => f.description == 'Leaking tap');
       expect(finding.evidence, hasLength(2));
+      for (final photo in finding.evidence) {
+        expect(
+          _within(find.byKey(ValueKey('finding-photo-${photo.id}'))),
+          findsOneWidget,
+        );
+      }
+      expect(container.read(activeSessionProvider)!.findings, hasLength(1));
     },
   );
 

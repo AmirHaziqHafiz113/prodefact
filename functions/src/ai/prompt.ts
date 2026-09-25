@@ -1,5 +1,9 @@
 import {defectCatalogue} from "./defect_catalogue";
 import {
+  INSPECTOR_NOTE_GUIDANCE,
+  normalizeInspectorNote,
+} from "./inspector_note";
+import {
   ClassificationResult,
   ClassifyFindingInput,
   FindingImages,
@@ -61,6 +65,8 @@ export function buildSystemPrompt(): string {
     "CONTROLLED DEFECT CATALOGUE:",
     buildCatalogueListing(),
     "",
+    INSPECTOR_NOTE_GUIDANCE,
+    "",
     "You are advisory only. The human inspector is the final",
     "authority and reviews every classification — never state or",
     "imply otherwise.",
@@ -103,7 +109,15 @@ export function buildFindingContent(
     `findingId: ${input.findingId}`,
     `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`,
   ];
-  if (input.note) lines.push(`inspector note: ${input.note}`);
+  if (input.note) {
+    // Verbatim first; the expanded reading is a separate helper line so
+    // the inspector's own wording is never lost (QA #17).
+    const note = normalizeInspectorNote(input.note);
+    lines.push(`inspector note (verbatim): ${note.original}`);
+    if (note.normalized.toLowerCase() !== note.original.toLowerCase()) {
+      lines.push(`likely meaning: ${note.normalized}`);
+    }
+  }
 
   const photoCount = images.images.length;
   if (photoCount > 0) {

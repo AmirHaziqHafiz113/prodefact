@@ -91,6 +91,9 @@ part 'database.g.dart';
 ///   spinning forever or re-sent under a new (separately charged) key.
 ///   See `AiAnalysisAttempt`. Null for every pre-existing finding, which
 ///   correctly means "no request outstanding". Additive only.
+/// - v12: (QA/QC evidence pass) added `EvidenceRows.annotatedFilePath`
+///   (nullable): a separate marked-up copy of a photo. The original file
+///   is never modified. Null for every pre-existing photo. Additive only.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -111,7 +114,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -258,6 +261,11 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(findingRows, findingRows.aiAttemptKey);
         await migrator.addColumn(findingRows, findingRows.aiAttemptLevel);
         await migrator.addColumn(findingRows, findingRows.aiAttemptSubmittedAt);
+      }
+      if (from < 12) {
+        // `evidenceRows` has existed since v1 and is never recreated
+        // above, so the column is always missing here.
+        await migrator.addColumn(evidenceRows, evidenceRows.annotatedFilePath);
       }
     },
   );

@@ -141,6 +141,17 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
   ) =>
       'users/$ownerUid/inspections/$sessionId/findings/$findingId/$evidenceId.jpg';
 
+  /// The marked-up copy's object path, next to the original (which is
+  /// never overwritten — see `Evidence.annotatedFilePath`).
+  String _annotatedStoragePathFor(
+    String ownerUid,
+    String sessionId,
+    String findingId,
+    String evidenceId,
+  ) =>
+      'users/$ownerUid/inspections/$sessionId/findings/$findingId/'
+      '${evidenceId}_annotated.png';
+
   @override
   Future<String> uploadEvidenceFile(
     String ownerUid,
@@ -160,6 +171,19 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
       );
     }
     await _storage.ref(path).putFile(file);
+    final annotated = evidence.annotatedFilePath;
+    if (annotated != null && File(annotated).existsSync()) {
+      await _storage
+          .ref(
+            _annotatedStoragePathFor(
+              ownerUid,
+              sessionId,
+              evidence.findingId,
+              evidence.id,
+            ),
+          )
+          .putFile(File(annotated));
+    }
     return path;
   }
 
@@ -179,6 +203,7 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
           'source': evidence.source.name,
           'caption': evidence.caption,
           'storagePath': evidence.storagePath,
+          'annotated': evidence.isAnnotated,
           'createdAt': fs.Timestamp.fromDate(evidence.createdAt),
         }, fs.SetOptions(merge: true));
   }
@@ -196,6 +221,12 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
         .collection('evidence')
         .doc(evidenceId)
         .delete();
+    await _storage
+        .ref(
+          _annotatedStoragePathFor(ownerUid, sessionId, findingId, evidenceId),
+        )
+        .delete()
+        .catchError((Object _) {});
     await _storage
         .ref(_storagePathFor(ownerUid, sessionId, findingId, evidenceId))
         .delete()
