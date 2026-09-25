@@ -88,7 +88,22 @@ void _popRoute(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('opening an area moves it from Not started to In progress', (
+  testWidgets('opening an area without recording anything leaves it Not '
+      'started: suggested areas are optional (QA #13/#21)', (tester) async {
+    final container = await _pumpToInspectionQueue(tester);
+    final firstAreaName = container.read(inspectionQueueProvider).first.name;
+
+    await tester.tap(_within(find.text(firstAreaName)));
+    await tester.pumpAndSettle();
+    _popRoute(tester);
+    await tester.pumpAndSettle();
+
+    expect(_within(find.text('In progress')), findsNothing);
+    final session = container.read(activeSessionProvider)!;
+    expect(PhysicalProgress.of(session).totalAreas, 0);
+  });
+
+  testWidgets('recording a finding moves an area to In progress', (
     tester,
   ) async {
     final container = await _pumpToInspectionQueue(tester);
@@ -96,7 +111,7 @@ void main() {
 
     await tester.tap(_within(find.text(firstAreaName)));
     await tester.pumpAndSettle();
-
+    await _takePhotoAndSave(tester, 'Cracked tile');
     _popRoute(tester);
     await tester.pumpAndSettle();
 
@@ -191,17 +206,17 @@ void main() {
     );
   });
 
-  testWidgets('marking an area completed is reflected in the queue', (
-    tester,
-  ) async {
+  testWidgets('"No Defects · Mark Area Complete" completes an area with no '
+      'findings, and it shows as Completed in the queue', (tester) async {
     final container = await _pumpToInspectionQueue(tester);
     final firstAreaName = container.read(inspectionQueueProvider).first.name;
 
     await tester.tap(_within(find.text(firstAreaName)));
     await tester.pumpAndSettle();
 
-    await tester.tap(_within(find.text('Completed')));
+    await tester.tap(_within(find.text('No Defects · Mark Area Complete')));
     await tester.pumpAndSettle();
+    expect(_within(find.text('Reopen Area')), findsOneWidget);
 
     _popRoute(tester);
     await tester.pumpAndSettle();
@@ -210,8 +225,8 @@ void main() {
   });
 
   testWidgets(
-    'Complete Physical Inspection stays disabled until every included '
-    'area is completed',
+    'Complete Physical Inspection is disabled only until one area has been '
+    'inspected; untouched suggested areas never block it (QA #13/#21)',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
 
@@ -223,10 +238,9 @@ void main() {
       expect(button.onPressed, isNull);
 
       final queue = container.read(inspectionQueueProvider);
-      final statusNotifier = container.read(sectionStatusesProvider.notifier);
-      for (final section in queue.skip(1)) {
-        statusNotifier.setStatus(section.id, SectionStatus.completed);
-      }
+      container
+          .read(sectionStatusesProvider.notifier)
+          .setStatus(queue.first.id, SectionStatus.completed);
       await tester.pumpAndSettle();
 
       button = tester.widget<FilledButton>(
@@ -234,29 +248,24 @@ void main() {
           find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
         ),
       );
-      expect(button.onPressed, isNull);
+      expect(button.onPressed, isNotNull);
+      expect(queue.length, greaterThan(1), reason: 'others stay untouched');
     },
   );
 
   testWidgets(
-    'Complete Physical Inspection is enabled once every included area is '
-    'completed, and navigates to the AI review screen',
+    'completing the physical inspection with untouched suggested areas '
+    'confirms what is left out, completes, and navigates to AI review',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
-
       final queue = container.read(inspectionQueueProvider);
-      final statusNotifier = container.read(sectionStatusesProvider.notifier);
-      for (final section in queue) {
-        statusNotifier.setStatus(section.id, SectionStatus.completed);
-      }
-      await tester.pumpAndSettle();
+      final firstAreaName = queue.first.name;
 
-      final button = tester.widget<FilledButton>(
-        _within(
-          find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
-        ),
-      );
-      expect(button.onPressed, isNotNull);
+      await tester.tap(_within(find.text(firstAreaName)));
+      await tester.pumpAndSettle();
+      await _takePhotoAndSave(tester, 'Hollow tile');
+      _popRoute(tester);
+      await tester.pumpAndSettle();
 
       await tester.tap(
         _within(
@@ -264,8 +273,26 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(
+        find.textContaining('${queue.length - 1} suggested areas not visited'),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
+      await tester.pumpAndSettle();
 
-      expect(find.text('AI Review'), findsOneWidget);
+      final session = container.read(activeSessionProvider)!;
+      expect(session.status, InspectionStatus.physicalInspectionComplete);
+      expect(
+        session.sectionStatuses[queue.first.id],
+        SectionStatus.completed,
+        reason: 'the started area is closed on completion',
+      );
+      expect(
+        session.sectionStatuses[queue.last.id] ?? SectionStatus.notStarted,
+        SectionStatus.notStarted,
+        reason: 'untouched areas stay untouched',
+      );
+      expect(find.text('AI Review'), findsWidgets);
     },
   );
 }

@@ -12,37 +12,77 @@ import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
 import '../widgets/session_status_presentation.dart';
 import 'ai_review_overview_screen.dart';
-import 'house_pass_screen.dart';
+
+/// Which areas the area list shows — real [AreaVisitState]s, so each
+/// chip filters actual data and shows a true count.
+enum AreaListFilter { all, notStarted, inProgress, completed }
+
+String areaListFilterLabel(AreaListFilter filter) => switch (filter) {
+  AreaListFilter.all => 'All',
+  AreaListFilter.notStarted => 'Not started',
+  AreaListFilter.inProgress => 'In progress',
+  AreaListFilter.completed => 'Completed',
+};
+
+bool _matchesAreaFilter(AreaListFilter filter, AreaVisitState state) =>
+    switch (filter) {
+      AreaListFilter.all => true,
+      AreaListFilter.notStarted => state == AreaVisitState.untouched,
+      AreaListFilter.inProgress => state == AreaVisitState.started,
+      AreaListFilter.completed => state == AreaVisitState.completed,
+    };
 
 /// A real field-inspection dashboard: overall progress, the ordered
-/// queue of included areas (plumbing-related areas first), each area's
-/// status/finding/evidence counts, and the final action to complete
-/// the physical inspection once every area is done.
-class InspectionQueueScreen extends ConsumerWidget {
+/// queue of suggested areas (plumbing-related areas first), each area's
+/// status/finding/evidence counts, and the action to complete the
+/// physical site visit.
+///
+/// Suggested areas are optional: the inspector inspects only the areas
+/// the unit actually has, and can complete the physical inspection as
+/// soon as one area has been inspected — untouched suggestions never
+/// block it, and neither does AI still processing (see
+/// `canCompletePhysicalInspection`).
+class InspectionQueueScreen extends ConsumerStatefulWidget {
   const InspectionQueueScreen({super.key});
 
   static const routePath = '/home-inspection/inspection';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InspectionQueueScreen> createState() =>
+      _InspectionQueueScreenState();
+}
+
+class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
+  AreaListFilter _filter = AreaListFilter.all;
+
+  @override
+  Widget build(BuildContext context) {
     final queue = ref.watch(inspectionQueueProvider);
     final statuses = ref.watch(sectionStatusesProvider);
     final findings = ref.watch(inspectionFindingsProvider);
     final suggestions =
         ref.watch(activeSessionProvider)?.aiSuggestions ?? const [];
-    final canComplete = ref.watch(isPhysicalInspectionCompleteProvider);
-
-    final completedCount = queue
-        .where(
-          (s) =>
-              (statuses[s.id] ?? SectionStatus.notStarted) ==
-              SectionStatus.completed,
-        )
-        .length;
-    final nextArea = queue.firstWhereOrNullStatus(statuses);
-    final remainingCount = queue.length - completedCount;
+    final canComplete = ref.watch(canCompletePhysicalInspectionProvider);
 
     final activeSession = ref.watch(activeSessionProvider);
+    AreaVisitState visitStateOf(Section section) => activeSession == null
+        ? AreaVisitState.untouched
+        : areaVisitStateOf(activeSession, section);
+    final physical = activeSession == null
+        ? const PhysicalProgress(totalAreas: 0, completed: 0)
+        : PhysicalProgress.of(activeSession);
+    final completedCount = physical.completed;
+    final nextArea = queue.firstWhereOrNullStatus(statuses);
+    final filterCounts = {
+      for (final filter in AreaListFilter.values)
+        filter: queue
+            .where((s) => _matchesAreaFilter(filter, visitStateOf(s)))
+            .length,
+    };
+    final visibleAreas = queue
+        .where((s) => _matchesAreaFilter(_filter, visitStateOf(s)))
+        .toList();
+
     final pendingSyncCount = activeSession == null
         ? 0
         : activeSession.findings
@@ -66,21 +106,9 @@ class InspectionQueueScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          // Setup no longer asks Flex Credits vs. House Pass (see the
-          // QA/QC simplification pass) — this is the "relevant moment"
-          // that decision is offered instead, entirely optional. Once
-          // an inspection is already on House Pass, `_HousePassBanner`
-          // below covers it, so this action steps aside to avoid a
-          // redundant second entry point.
-          if (activeSession != null &&
-              activeSession.commercialMode != CommercialMode.housePass)
-            IconButton(
-              tooltip: 'House Pass',
-              icon: const Icon(Icons.verified_outlined),
-              onPressed: () => context.push(
-                '${HousePassScreen.routePath}/${activeSession.id}',
-              ),
-            ),
+          // No billing controls here (QA #23): the backend applies an
+          // active House Pass automatically, otherwise Flex Credits.
+          // House Pass is bought from the Wallet, outside field work.
           IconButton(
             tooltip: activeSession?.inspectionNote == null
                 ? 'Add inspection note'
@@ -108,8 +136,8 @@ class InspectionQueueScreen extends ConsumerWidget {
                         'This inspection is completed. Changes may require '
                         'a new report version.',
                   ),
-                if (activeSession?.commercialMode == CommercialMode.housePass)
-                  _HousePassBanner(inspectionId: activeSession!.id),
+                if (activeSession != null)
+                  _HousePassAllowanceWatcher(inspectionId: activeSession.id),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(
@@ -148,8 +176,9 @@ class InspectionQueueScreen extends ConsumerWidget {
                                 const SizedBox(width: AppSpacing.sm),
                                 Flexible(
                                   child: Text(
-                                    '$completedCount of ${queue.length} '
-                                    'areas complete',
+                                    '${physical.totalAreas} of '
+                                    '${queue.length} suggested areas '
+                                    'inspected',
                                     textAlign: TextAlign.right,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
@@ -166,12 +195,10 @@ class InspectionQueueScreen extends ConsumerWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 AppRingProgress(
-                                  value: queue.isEmpty
-                                      ? 0
-                                      : completedCount / queue.length,
+                                  value: physical.fraction,
                                   label:
                                       'Physical\n$completedCount of '
-                                      '${queue.length}',
+                                      '${physical.totalAreas}',
                                   color: Colors.white,
                                   size: 76,
                                 ),
@@ -219,9 +246,9 @@ class InspectionQueueScreen extends ConsumerWidget {
                             children: [
                               Expanded(
                                 child: _StatTile(
-                                  icon: Icons.pending_actions_outlined,
-                                  label: '$remainingCount',
-                                  caption: 'Remaining',
+                                  icon: Icons.map_outlined,
+                                  label: '${physical.totalAreas}',
+                                  caption: 'Areas inspected',
                                 ),
                               ),
                               Expanded(
@@ -277,17 +304,54 @@ class InspectionQueueScreen extends ConsumerWidget {
                       ],
                       const SizedBox(height: AppSpacing.lg),
                       AppSectionHeader(
-                        title: 'Areas (${queue.length})',
-                        subtitle: '$completedCount complete',
+                        title: 'Suggested areas (${queue.length})',
+                        subtitle:
+                            'Inspect only the areas this unit has. '
+                            'Untouched areas are left out of the report.',
                       ),
-                      for (final section in queue)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final filter in AreaListFilter.values) ...[
+                              ChoiceChip(
+                                key: ValueKey('area-filter-${filter.name}'),
+                                label: Text(
+                                  '${areaListFilterLabel(filter)} '
+                                  '(${filterCounts[filter]})',
+                                ),
+                                selected: _filter == filter,
+                                onSelected: (_) =>
+                                    setState(() => _filter = filter),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      if (visibleAreas.isEmpty)
+                        AppEmptyView(
+                          icon: Icons.filter_alt_off_outlined,
+                          title:
+                              'No ${areaListFilterLabel(_filter).toLowerCase()} '
+                              'areas',
+                          message: switch (_filter) {
+                            AreaListFilter.completed =>
+                              'Mark an area complete once you have '
+                                  'finished inspecting it.',
+                            AreaListFilter.inProgress =>
+                              'An area moves here once you record a '
+                                  'finding in it.',
+                            _ => 'Every suggested area has been started.',
+                          },
+                        ),
+                      for (final section in visibleAreas)
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                           child: _AreaQueueCard(
                             section: section,
-                            status:
-                                statuses[section.id] ??
-                                SectionStatus.notStarted,
+                            visitState: visitStateOf(section),
                             isUpNext: section.id == nextArea?.id,
                             findingCount: findings
                                 .where((f) => f.sectionId == section.id)
@@ -327,22 +391,70 @@ class InspectionQueueScreen extends ConsumerWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: FilledButton(
-            onPressed: canComplete
-                ? () => _completeInspection(context, ref)
-                : null,
-            child: const Text('Complete Physical Inspection'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!canComplete && queue.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Text(
+                    'Inspect at least one area to complete the site visit.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              FilledButton(
+                onPressed: canComplete && activeSession != null
+                    ? () => _completeInspection(activeSession)
+                    : null,
+                child: const Text('Complete Physical Inspection'),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Future<void> _completeInspection(BuildContext context, WidgetRef ref) async {
-    await ref
+  Future<void> _completeInspection(InspectionSession session) async {
+    final physical = PhysicalProgress.of(session);
+    final inFlight = AiProcessingProgress.of(session).inFlight;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Complete physical inspection?'),
+        content: Text(
+          [
+            '${physical.totalAreas} area${physical.totalAreas == 1 ? '' : 's'} '
+                'inspected.',
+            if (physical.untouchedSuggested > 0)
+              '${physical.untouchedSuggested} suggested '
+                  'area${physical.untouchedSuggested == 1 ? '' : 's'} not '
+                  'visited will be left out of the report.',
+            if (inFlight > 0)
+              'AI keeps analysing $inFlight '
+                  'finding${inFlight == 1 ? '' : 's'} in the background. '
+                  'You can leave the property.',
+          ].join('\n\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep Inspecting'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final completed = await ref
         .read(activeSessionProvider.notifier)
         .markPhysicalInspectionComplete();
-    if (!context.mounted) return;
+    if (!completed || !mounted) return;
     context.push(AiReviewOverviewScreen.routePath);
   }
 }
@@ -359,18 +471,15 @@ extension on List<Section> {
   }
 }
 
-/// Re-offers House Pass purchase/confirmation if it was skipped (or a
-/// payment attempt failed) right after starting the inspection — never
-/// blocks physical inspection either way, so it falls through to
-/// nothing once the pass is [HousePassLifecycleStatus.active]. Also
-/// owns the "allowance reached" interrupt: the moment a House Pass
-/// flips to [HousePassLifecycleStatus.allowanceReached] while Auto
-/// Analyse is on, it turns Auto Analyse back off (so no further
-/// finding silently starts spending Flex Credits without a fresh,
-/// explicit decision) and offers "Continue with AI Credits" to
-/// knowingly re-enable it.
-class _HousePassBanner extends ConsumerWidget {
-  const _HousePassBanner({required this.inspectionId});
+/// Keeps billing invisible during field work (QA #23) while preserving
+/// the existing spend-consent rule: the backend applies this
+/// inspection's House Pass automatically while it has allowance, then
+/// Flex Credits. The moment the allowance runs out, Auto Analyse is
+/// switched off, so no further finding silently starts spending
+/// Credits; new findings then ask before analysing. The inspector is
+/// told what happened but is never asked to choose a billing mechanism.
+class _HousePassAllowanceWatcher extends ConsumerWidget {
+  const _HousePassAllowanceWatcher({required this.inspectionId});
 
   final String inspectionId;
 
@@ -387,74 +496,13 @@ class _HousePassBanner extends ConsumerWidget {
       }
     });
 
-    final statusAsync = ref.watch(housePassStatusProvider(inspectionId));
-    return statusAsync.maybeWhen(
-      data: (summary) {
-        if (summary.status == HousePassLifecycleStatus.allowanceReached) {
-          return const _AllowanceReachedBanner();
-        }
-        final (message, icon) = switch (summary.status) {
-          HousePassLifecycleStatus.purchaseRequired => (
-            'This inspection uses House Pass — purchase required to '
-                'unlock included AI analysis.',
-            Icons.verified_outlined,
-          ),
-          HousePassLifecycleStatus.paymentPending => (
-            'House Pass payment is pending confirmation.',
-            Icons.hourglass_top_outlined,
-          ),
-          HousePassLifecycleStatus.paymentFailed => (
-            'House Pass payment failed — tap to try again.',
-            Icons.error_outline,
-          ),
-          _ => (null, null),
-        };
-        if (message == null) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            onTap: () =>
-                context.push('${HousePassScreen.routePath}/$inspectionId'),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.warningBg,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(icon, size: 18, color: AppColors.warning),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, size: 18),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// "House Pass AI allowance reached." — shown once Auto Analyse has
-/// already been switched back off by [_HousePassBanner]'s listener;
-/// tapping the action is the fresh, explicit consent to keep going on
-/// Flex Credits, so it re-enables Auto Analyse rather than just
-/// dismissing the banner.
-class _AllowanceReachedBanner extends ConsumerWidget {
-  const _AllowanceReachedBanner();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref
+        .watch(housePassStatusProvider(inspectionId))
+        .value
+        ?.status;
+    if (status != HousePassLifecycleStatus.allowanceReached) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Container(
@@ -464,25 +512,16 @@ class _AllowanceReachedBanner extends ConsumerWidget {
           color: AppColors.warningBg,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
-        child: Row(
+        child: const Row(
           children: [
-            const Icon(
-              Icons.data_usage_outlined,
-              size: 18,
-              color: AppColors.warning,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            const Expanded(
+            Icon(Icons.data_usage_outlined, size: 18, color: AppColors.warning),
+            SizedBox(width: AppSpacing.sm),
+            Expanded(
               child: Text(
-                'House Pass AI allowance reached.',
+                'House Pass AI allowance used up. New findings will ask '
+                'before using AI Credits.',
                 style: TextStyle(fontSize: 13),
               ),
-            ),
-            TextButton(
-              onPressed: () => ref
-                  .read(activeSessionProvider.notifier)
-                  .setAutoAnalyseEnabled(true),
-              child: const Text('Continue with AI Credits'),
             ),
           ],
         ),
@@ -506,15 +545,12 @@ class _AutoAnalyseToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isHousePass = session.commercialMode == CommercialMode.housePass;
     return Card(
       child: SwitchListTile(
         title: const Text('Auto Analyse'),
-        subtitle: Text(
-          isHousePass
-              ? 'Saved findings will automatically use your House Pass '
-                    "allowance, then your AI Credits once it's used up."
-              : 'Saved findings will automatically use your AI Credits.',
+        subtitle: const Text(
+          'Saved findings are analysed with Smart AI automatically, '
+          'without asking each time.',
         ),
         value: session.autoAnalyseEnabled,
         onChanged: (enabled) => ref
@@ -732,7 +768,7 @@ class _StatTile extends StatelessWidget {
 class _AreaQueueCard extends StatelessWidget {
   const _AreaQueueCard({
     required this.section,
-    required this.status,
+    required this.visitState,
     required this.isUpNext,
     required this.findingCount,
     required this.evidenceCount,
@@ -742,7 +778,7 @@ class _AreaQueueCard extends StatelessWidget {
   });
 
   final Section section;
-  final SectionStatus status;
+  final AreaVisitState visitState;
   final bool isUpNext;
   final int findingCount;
   final int evidenceCount;
@@ -894,7 +930,7 @@ class _AreaQueueCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Flexible(child: _StatusChip(status: status)),
+              Flexible(child: _StatusChip(state: visitState)),
             ],
           ),
         ),
@@ -904,26 +940,26 @@ class _AreaQueueCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+  const _StatusChip({required this.state});
 
-  final SectionStatus status;
+  final AreaVisitState state;
 
   @override
   Widget build(BuildContext context) {
-    final (label, icon, fg, bg) = switch (status) {
-      SectionStatus.notStarted => (
+    final (label, icon, fg, bg) = switch (state) {
+      AreaVisitState.untouched => (
         'Not started',
         Icons.circle_outlined,
         AppColors.textSecondary,
         AppColors.neutralBg,
       ),
-      SectionStatus.inProgress => (
+      AreaVisitState.started => (
         'In progress',
         Icons.timelapse,
         AppColors.warning,
         AppColors.warningBg,
       ),
-      SectionStatus.completed => (
+      AreaVisitState.completed => (
         'Completed',
         Icons.check_circle_outline,
         AppColors.success,

@@ -10,6 +10,7 @@ import '../../providers/session_list_providers.dart';
 import '../../providers/user_profile_providers.dart';
 import '../../providers/wallet_providers.dart';
 import '../widgets/attention_sheet.dart';
+import 'house_pass_screen.dart';
 import 'profile_screen.dart';
 import 'top_up_screen.dart';
 
@@ -118,11 +119,67 @@ class WalletScreen extends ConsumerWidget {
                 orElse: () => const SizedBox.shrink(),
               ),
               const SizedBox(height: AppSpacing.xl),
+              const _HousePassPurchaseSection(),
+              const SizedBox(height: AppSpacing.xl),
               KeyedSubtree(key: _pricingKey, child: const _PricingExplainer()),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Where a House Pass is bought for an inspection — outside field work
+/// (QA #23). Once a pass is active the backend applies it to that
+/// inspection's AI analysis automatically; inspectors never pick a
+/// billing mechanism while recording findings.
+class _HousePassPurchaseSection extends ConsumerWidget {
+  const _HousePassPurchaseSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessions = ref.watch(sessionSummariesProvider).value ?? const [];
+    final open = sessions
+        .where((s) => s.status != InspectionStatus.reported)
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppSectionHeader(
+          title: 'House Pass',
+          subtitle:
+              'Covers AI for one inspection. Applied automatically once '
+              'active.',
+        ),
+        if (open.isEmpty)
+          Text(
+            'Start an inspection to buy a House Pass for it.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          AppGroupedList(
+            children: [
+              for (final session in open)
+                ListTile(
+                  key: ValueKey('house-pass-${session.id}'),
+                  leading: const Icon(Icons.verified_outlined),
+                  title: Text(
+                    session.propertyTitle ?? session.unitNumber ?? 'Inspection',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: session.unitNumber == null
+                      ? null
+                      : Text('Unit ${session.unitNumber}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(
+                    '${HousePassScreen.routePath}/${session.id}',
+                  ),
+                ),
+            ],
+          ),
+      ],
     );
   }
 }

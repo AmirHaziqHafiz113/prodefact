@@ -2,6 +2,7 @@ import '../entities/ai_finding_status.dart';
 import '../entities/ai_review.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
+import '../entities/section.dart';
 import '../entities/section_status.dart';
 
 /// Real, count-based AI processing progress for a session — never a
@@ -85,26 +86,108 @@ class AiReviewProgress {
   }
 }
 
-/// Physical inspection area-completion progress — independent of both
-/// AI progress values above. See `docs/ai_provider_architecture.md`
-/// ("Three separate progress axes").
-class PhysicalProgress {
-  const PhysicalProgress({required this.totalAreas, required this.completed});
+/// Where one suggested area stands in the physical inspection.
+///
+/// Suggested areas are only a guide: a unit often lacks some of them
+/// (no balcony, two bedrooms instead of three). An area therefore only
+/// counts toward the inspection once the inspector has actually
+/// worked in it — see `docs/ai_provider_architecture.md` ("Three
+/// separate progress axes").
+enum AreaVisitState {
+  /// Suggested but never touched: no findings, never marked in progress
+  /// or complete. Never blocks completion and never appears in the
+  /// report as "No defects recorded".
+  untouched,
 
+  /// The inspector has worked here (a finding exists, an area note was
+  /// written, or the area was marked in progress) but has not marked it
+  /// complete yet.
+  started,
+
+  /// Explicitly marked complete — including an area inspected and
+  /// found to have no defects.
+  completed,
+}
+
+/// The [AreaVisitState] of [section] within [session].
+AreaVisitState areaVisitStateOf(InspectionSession session, Section section) {
+  final status = session.sectionStatuses[section.id] ?? SectionStatus.notStarted;
+  if (status == SectionStatus.completed) return AreaVisitState.completed;
+  if (status == SectionStatus.inProgress) return AreaVisitState.started;
+  final hasFinding = session.findings.any((f) => f.sectionId == section.id);
+  final hasNote = section.note?.trim().isNotEmpty ?? false;
+  return hasFinding || hasNote
+      ? AreaVisitState.started
+      : AreaVisitState.untouched;
+}
+
+/// Included areas the inspector actually worked in (started or
+/// completed), in their configured order — the areas a report covers.
+List<Section> inspectedAreasOf(InspectionSession session) => [
+  for (final section in session.sections)
+    if (section.isIncluded &&
+        areaVisitStateOf(session, section) != AreaVisitState.untouched)
+      section,
+];
+
+/// Physical inspection progress over the areas the inspector actually
+/// chose to inspect — independent of both AI progress values above.
+/// Untouched suggested areas are reported separately and never count
+/// against completion.
+class PhysicalProgress {
+  const PhysicalProgress({
+    required this.totalAreas,
+    required this.completed,
+    this.untouchedSuggested = 0,
+  });
+
+  /// Areas started or completed.
   final int totalAreas;
+
+  /// Areas marked complete.
   final int completed;
 
+  /// Suggested areas never visited (optional; ignored for completion).
+  final int untouchedSuggested;
+
+  int get started => totalAreas - completed;
   double get fraction => totalAreas == 0 ? 0 : completed / totalAreas;
   int get percent => (fraction * 100).round();
 
+  /// The physical site visit can be completed once at least one area has
+  /// been inspected. Nothing else is required: not every suggested area,
+  /// not AI, not review — see [canCompletePhysicalInspection].
+  bool get canComplete => totalAreas > 0;
+
   static PhysicalProgress of(InspectionSession session) {
-    final included = session.sections.where((s) => s.isIncluded).toList();
-    final completed = included
-        .where((s) => session.sectionStatuses[s.id] == SectionStatus.completed)
-        .length;
-    return PhysicalProgress(totalAreas: included.length, completed: completed);
+    var inspected = 0;
+    var completed = 0;
+    var untouched = 0;
+    for (final section in session.sections.where((s) => s.isIncluded)) {
+      switch (areaVisitStateOf(session, section)) {
+        case AreaVisitState.untouched:
+          untouched++;
+        case AreaVisitState.started:
+          inspected++;
+        case AreaVisitState.completed:
+          inspected++;
+          completed++;
+      }
+    }
+    return PhysicalProgress(
+      totalAreas: inspected,
+      completed: completed,
+      untouchedSuggested: untouched,
+    );
   }
 }
+
+/// Whether the physical site inspection can be completed: at least one
+/// area inspected. AI processing, inspector review, untouched suggested
+/// areas, and report fields never block it — those gate the report
+/// instead (see `DefaultReportCoordinator`).
+bool canCompletePhysicalInspection(InspectionSession session) =>
+    PhysicalProgress.of(session).canComplete;
 
 /// The single, user-friendly AI state a dashboard/inspection card
 /// should show — reconciles processing progress, connectivity, and

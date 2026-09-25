@@ -50,19 +50,13 @@ final sectionStatusesProvider =
       SectionStatuses.new,
     );
 
-/// Whether every area in [inspectionQueueProvider] has been marked
-/// [SectionStatus.completed]. The full physical inspection can only be
-/// completed once this is true.
-final isPhysicalInspectionCompleteProvider = Provider<bool>((ref) {
-  final queue = ref.watch(inspectionQueueProvider);
-  if (queue.isEmpty) return false;
-
-  final statuses = ref.watch(sectionStatusesProvider);
-  return queue.every(
-    (section) =>
-        (statuses[section.id] ?? SectionStatus.notStarted) ==
-        SectionStatus.completed,
-  );
+/// Whether the physical site inspection can be completed now: at least
+/// one area has been inspected. Suggested areas the inspector never
+/// touched, AI still processing, and unreviewed findings never block it
+/// — see `canCompletePhysicalInspection`.
+final canCompletePhysicalInspectionProvider = Provider<bool>((ref) {
+  final session = ref.watch(activeSessionProvider);
+  return session != null && canCompletePhysicalInspection(session);
 });
 
 /// Findings recorded during physical inspection.

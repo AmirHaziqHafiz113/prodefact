@@ -114,7 +114,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     } else {
       attempt = AiAnalysisAttempt(
         idempotencyKey: '${findingId}_${now.microsecondsSinceEpoch}',
-        aiLevel: requestedLevel ?? session.selectedAiLevel ?? AiLevel.smart,
+        aiLevel: requestedLevel ?? kFieldAnalysisAiLevel,
         submittedAt: now,
       );
       AppLogger.info(

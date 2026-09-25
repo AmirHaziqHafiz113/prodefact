@@ -149,42 +149,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
+            // Read-only (QA #24): every field analysis uses Smart AI.
+            // The old Fast/Smart/Expert preference here was never read
+            // when an inspection started, so it was a dead control.
             _SectionCard(
               icon: Icons.psychology_outlined,
-              title: 'AI Preferences',
-              subtitle: 'Default AI level for new inspections',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SegmentedButton<AiLevel>(
-                    style: SegmentedButton.styleFrom(
-                      backgroundColor: AppColors.surfaceMuted,
-                      selectedBackgroundColor: AppColors.primary,
-                      selectedForegroundColor: Colors.white,
-                      side: BorderSide.none,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                    ),
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: AiLevel.fast, label: Text('Fast')),
-                      ButtonSegment(value: AiLevel.smart, label: Text('Smart')),
-                      ButtonSegment(
-                        value: AiLevel.expert,
-                        label: Text('Expert'),
-                      ),
-                    ],
-                    selected: {_defaultAiLevel ?? AiLevel.smart},
-                    onSelectionChanged: (selection) =>
-                        setState(() => _defaultAiLevel = selection.first),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    _aiLevelDescription(_defaultAiLevel ?? AiLevel.smart),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+              title: 'AI Analysis',
+              subtitle: 'Used for every finding',
+              child: Text(
+                'Smart AI: ${_aiLevelDescription(kFieldAnalysisAiLevel)}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),

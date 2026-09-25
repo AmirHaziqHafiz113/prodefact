@@ -68,18 +68,16 @@ Future<void> showAnalyseApprovalDialog({
     return;
   }
 
-  final approvedLevel = await showDialog<AiLevel>(
+  final approved = await showDialog<bool>(
     context: context,
-    builder: (context) => _EstimateApprovalDialog(
-      findingId: findingId,
-      initialEstimate: estimate!,
-    ),
+    builder: (context) =>
+        _EstimateApprovalDialog(findingId: findingId, estimate: estimate!),
   );
-  if (approvedLevel == null || !context.mounted) return;
+  if (approved != true || !context.mounted) return;
 
   ref
       .read(activeSessionProvider.notifier)
-      .approveAndRunAnalysis(findingId, aiLevel: approvedLevel);
+      .approveAndRunAnalysis(findingId, aiLevel: kFieldAnalysisAiLevel);
 }
 
 Future<void> _showIneligibleDialog(
@@ -128,135 +126,78 @@ String _reasonMessage(AnalysisEstimate estimate) {
   };
 }
 
-String _levelLabel(AiLevel level) => switch (level) {
-  AiLevel.fast => 'Fast',
-  AiLevel.smart => 'Smart',
-  AiLevel.expert => 'Expert',
-};
-
-/// The approval dialog itself — lets the inspector switch AI level for
-/// just this one finding (re-checking the real price on every change;
-/// never computed client-side) before approving. Returns the approved
-/// [AiLevel] via `Navigator.pop`, or null if cancelled/dismissed.
-class _EstimateApprovalDialog extends ConsumerStatefulWidget {
+/// The approval dialog — Smart AI only (QA #24): no Fast/Smart/Expert
+/// choice and no billing-mechanism choice (QA #23). It shows the real,
+/// server-computed cost for this finding and asks once. Pops `true` to
+/// approve, or null if dismissed. Inspectors who don't want to be asked
+/// per finding turn on Auto Analyse for the inspection instead.
+class _EstimateApprovalDialog extends ConsumerWidget {
   const _EstimateApprovalDialog({
     required this.findingId,
-    required this.initialEstimate,
+    required this.estimate,
   });
 
   final String findingId;
-  final AnalysisEstimate initialEstimate;
+  final AnalysisEstimate estimate;
 
   @override
-  ConsumerState<_EstimateApprovalDialog> createState() =>
-      _EstimateApprovalDialogState();
-}
-
-class _EstimateApprovalDialogState
-    extends ConsumerState<_EstimateApprovalDialog> {
-  late AnalysisEstimate _estimate = widget.initialEstimate;
-  bool _reestimating = false;
-
-  Future<void> _selectLevel(AiLevel level) async {
-    if (level == _estimate.aiLevel) return;
-    setState(() => _reestimating = true);
-    final next = await ref
-        .read(activeSessionProvider.notifier)
-        .estimateFindingAnalysis(widget.findingId, aiLevel: level);
-    if (!mounted) return;
-    setState(() {
-      if (next != null) _estimate = next;
-      _reestimating = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final configAsync = ref.watch(commercialConfigProvider);
     final creditsPerMyr = configAsync.value?.creditsPerMyr;
-    final housePassIncludedLevel = configAsync.value?.housePass.includedAiLevel;
     final finding = ref
         .watch(activeSessionProvider)
         ?.findings
-        .firstWhereOrNull((f) => f.id == widget.findingId);
+        .firstWhereOrNull((f) => f.id == findingId);
     final evidencePhoto = finding?.evidence.firstOrNull;
-
-    final estimate = _estimate;
-    final levelLabel = _levelLabel(estimate.aiLevel);
-    final isSurcharge =
-        estimate.paymentMode == CommercialMode.housePass &&
-        !estimate.includedInHousePass &&
-        estimate.surchargeCredits > 0;
+    final chargedCredits = estimate.paymentMode == CommercialMode.housePass
+        ? estimate.surchargeCredits
+        : estimate.maximumCredits;
 
     return AlertDialog(
-      title: Text('$levelLabel AI'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (evidencePhoto != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: SizedBox(
-                height: 100,
-                width: double.infinity,
-                child: Image.file(
-                  File(evidencePhoto.filePath),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          SegmentedButton<AiLevel>(
-            segments: [
-              for (final level in AiLevel.values)
-                ButtonSegment(value: level, label: Text(_levelLabel(level))),
-            ],
-            selected: {estimate.aiLevel},
-            onSelectionChanged: _reestimating
-                ? null
-                : (selection) => _selectLevel(selection.first),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          if (_reestimating)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              child: Center(
+      title: const Text('Smart AI'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (evidencePhoto != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                // `maxFinite`, not `infinity`: AlertDialog measures its
+                // content's intrinsic width, which an infinite width
+                // can't answer.
                 child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  width: double.maxFinite,
+                  height: 160,
+                  child: Image.file(
+                    File(evidencePhoto.filePath),
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
-            )
-          else if (estimate.includedInHousePass)
-            const Text('Included in your House Pass — no Credits charged.')
-          else if (isSurcharge) ...[
-            Text(
-              'House Pass includes ${_levelLabel(housePassIncludedLevel ?? AiLevel.smart)} '
-              'AI.',
-            ),
-            const SizedBox(height: 4),
-            Text('$levelLabel: +${estimate.surchargeCredits} Credits'),
-          ] else ...[
-            Text('Up to: ${estimate.maximumCredits} Credits'),
-            if (creditsPerMyr != null && creditsPerMyr > 0) ...[
-              const SizedBox(height: 4),
-              Text(
-                '≈ RM${(estimate.maximumCredits / creditsPerMyr).toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: AppColors.textMuted),
-              ),
+              const SizedBox(height: AppSpacing.md),
             ],
+            if (estimate.includedInHousePass || chargedCredits == 0)
+              const Text('Included with this inspection. No Credits charged.')
+            else ...[
+              Text('Up to $chargedCredits Credits'),
+              if (creditsPerMyr != null && creditsPerMyr > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '≈ RM${(chargedCredits / creditsPerMyr).toStringAsFixed(2)}',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: AppColors.textMuted),
+                ),
+              ],
+            ],
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Balance: ${estimate.currentBalance} Credits',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.textMuted),
+            ),
           ],
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Balance: ${estimate.currentBalance} Credits',
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: AppColors.textMuted),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -264,14 +205,8 @@ class _EstimateApprovalDialogState
           child: const Text('Not Now'),
         ),
         FilledButton(
-          onPressed: _reestimating
-              ? null
-              : () => Navigator.of(context).pop(estimate.aiLevel),
-          child: Text(
-            isSurcharge
-                ? 'Use $levelLabel · +${estimate.surchargeCredits} Credits'
-                : 'Analyse with AI',
-          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Analyse'),
         ),
       ],
     );

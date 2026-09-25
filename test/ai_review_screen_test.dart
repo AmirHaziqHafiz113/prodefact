@@ -90,6 +90,9 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
 
   await tester.tap(_within(find.text('Complete Physical Inspection')));
   await tester.pumpAndSettle();
+  // Confirm the completion summary dialog.
+  await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
+  await tester.pumpAndSettle();
 
   expect(find.text('AI Review'), findsOneWidget);
   return container;
@@ -121,6 +124,9 @@ void main() {
       expect(find.text('Physical Inspection'), findsOneWidget);
 
       await tester.tap(_within(find.text('Complete Physical Inspection')));
+      await tester.pumpAndSettle();
+      // Confirm the completion summary dialog.
+      await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
       await tester.pumpAndSettle();
 
       final reloadedSession = container.read(activeSessionProvider)!;

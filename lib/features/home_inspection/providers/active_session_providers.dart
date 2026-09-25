@@ -438,23 +438,54 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     ref.invalidate(sessionSummariesProvider);
   }
 
-  Future<void> markPhysicalInspectionComplete() async {
+  /// Completes the physical site visit. Requires only that at least one
+  /// area was inspected — never every suggested area, never AI or
+  /// review (those gate the report, not the site visit; see
+  /// [canCompletePhysicalInspection]). Every area the inspector worked
+  /// in but didn't explicitly close is marked complete, since the
+  /// inspector is leaving the property; untouched suggested areas stay
+  /// untouched and are left out of the report. AI work already queued
+  /// carries on in the background. Returns false if nothing has been
+  /// inspected yet.
+  Future<bool> markPhysicalInspectionComplete() async {
     final session = state;
-    if (session == null) return;
+    if (session == null || !canCompletePhysicalInspection(session)) {
+      return false;
+    }
     final now = DateTime.now();
+    final startedAreaIds = [
+      for (final section in session.sections)
+        if (section.isIncluded &&
+            areaVisitStateOf(session, section) == AreaVisitState.started)
+          section.id,
+    ];
     state = session.copyWith(
       status: InspectionStatus.physicalInspectionComplete,
+      sectionStatuses: {
+        ...session.sectionStatuses,
+        for (final id in startedAreaIds) id: SectionStatus.completed,
+      },
       updatedAt: now,
     );
     await _persist(
-      () => _repository.setSessionStatus(
-        session.id,
-        InspectionStatus.physicalInspectionComplete,
-      ),
+      () async {
+        for (final id in startedAreaIds) {
+          await _repository.saveSectionStatus(
+            session.id,
+            id,
+            SectionStatus.completed,
+          );
+        }
+        await _repository.setSessionStatus(
+          session.id,
+          InspectionStatus.physicalInspectionComplete,
+        );
+      },
       previous: session,
       action: 'complete physical inspection',
     );
     ref.invalidate(sessionSummariesProvider);
+    return true;
   }
 
   // ---- evidence (Phase 4) ----
@@ -628,12 +659,26 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           : AiFindingStatus.awaitingApproval,
     );
 
+    // Recording a defect is what makes a suggested area "started".
+    final areaWasUntouched =
+        (session.sectionStatuses[sectionId] ?? SectionStatus.notStarted) ==
+        SectionStatus.notStarted;
     state = session.copyWith(
       findings: [...session.findings, finding],
+      sectionStatuses: areaWasUntouched
+          ? {...session.sectionStatuses, sectionId: SectionStatus.inProgress}
+          : null,
       updatedAt: now,
     );
     final findingPersisted = _persist(
       () async {
+        if (areaWasUntouched) {
+          await _repository.saveSectionStatus(
+            session.id,
+            sectionId,
+            SectionStatus.inProgress,
+          );
+        }
         await _repository.saveFinding(session.id, finding);
         await _repository.addEvidence(session.id, evidence);
         AppLogger.info('finding_saved_local finding=${finding.id}');
@@ -921,7 +966,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         .estimateFindingAnalysis(
           inspectionId: session.id,
           findingId: findingId,
-          aiLevel: aiLevel ?? session.selectedAiLevel ?? AiLevel.smart,
+          aiLevel: aiLevel ?? kFieldAnalysisAiLevel,
         );
   }
 
@@ -1331,6 +1376,37 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         action: 'update Auto Analyse preference',
       ),
     );
+  }
+
+  /// Records that [sessionId] now has a House Pass — used by the House
+  /// Pass screen, which can be opened from the Wallet for any open
+  /// inspection, not only the active one. Enables Auto Analyse once the
+  /// pass is confirmed active, since its allowance makes analysing
+  /// without asking safe by default. Updates the in-memory session too
+  /// when it is the active one.
+  Future<void> applyHousePassToSession(
+    String sessionId, {
+    required bool passActive,
+  }) async {
+    final session = state;
+    if (session?.id == sessionId) {
+      setCommercialMode(CommercialMode.housePass);
+      if (passActive) setAutoAnalyseEnabled(true);
+      return;
+    }
+    try {
+      await _repository.setCommercialMode(sessionId, CommercialMode.housePass);
+      if (passActive) {
+        await _repository.setAutoAnalyseEnabled(sessionId, true);
+      }
+      if (ref.mounted) ref.invalidate(sessionSummariesProvider);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to record House Pass on $sessionId',
+        error,
+        stackTrace,
+      );
+    }
   }
 
   /// Confirms/edits the report's cover-page metadata (the Report

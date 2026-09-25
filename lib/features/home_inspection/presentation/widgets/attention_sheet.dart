@@ -6,6 +6,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../config/property_type.dart';
 import '../../providers/session_list_providers.dart';
+import 'app_bottom_sheet.dart';
 import 'session_navigation.dart';
 
 /// The bell icon's destination on Home/Wallet — real, currently-open
@@ -13,9 +14,8 @@ import 'session_navigation.dart';
 /// `attentionSessionsProvider`), never a fabricated notifications feed.
 /// Tapping a row resumes that inspection directly.
 Future<void> showAttentionSheet(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
+  return showAppBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
     builder: (sheetContext) => const _AttentionSheet(),
   );
 }
@@ -26,14 +26,9 @@ class _AttentionSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(attentionSessionsProvider);
-    return SafeArea(
+    return AppSheetFrame(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.lg,
-          AppSpacing.xl,
-        ),
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

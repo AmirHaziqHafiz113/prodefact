@@ -224,9 +224,9 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
       // inspection — the one place that decision is recorded, since
       // setup itself no longer asks (see the QA/QC simplification
       // pass). A no-op if this inspection is already on House Pass.
-      ref
+      await ref
           .read(activeSessionProvider.notifier)
-          .setCommercialMode(CommercialMode.housePass);
+          .applyHousePassToSession(widget.inspectionId, passActive: false);
       ref.invalidate(housePassStatusProvider(widget.inspectionId));
     } catch (error, stackTrace) {
       if (!mounted) return;
@@ -253,7 +253,9 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
       // A House Pass's allowance makes auto-analysing safe by default —
       // see `_AutoAnalyseToggle`'s doc comment. The inspector can still
       // switch it back off from the queue screen at any time.
-      ref.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
+      await ref
+          .read(activeSessionProvider.notifier)
+          .applyHousePassToSession(widget.inspectionId, passActive: true);
     } catch (error, stackTrace) {
       if (!mounted) return;
       setState(() {

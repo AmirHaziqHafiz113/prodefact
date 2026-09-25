@@ -150,7 +150,10 @@ void main() {
 
       await tester.enterText(find.byType(TextField), '');
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Active'));
+      // Each chip shows its real count (QA #25).
+      expect(find.widgetWithText(ChoiceChip, 'All (2)'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Completed (1)'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Active (1)'));
       await tester.pumpAndSettle();
 
       expect(find.text('Residensi Vista'), findsOneWidget);

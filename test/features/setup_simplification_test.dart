@@ -238,7 +238,11 @@ void main() {
             propertyDetails: const PropertyDetails(unitNumber: 'A-1-1'),
           );
       final notifier = container.read(activeSessionProvider.notifier);
-      await notifier.markPhysicalInspectionComplete();
+      // One area inspected and found clean: the least a physical
+      // inspection needs before it can be completed.
+      final firstArea = container.read(activeSessionProvider)!.sections.first;
+      notifier.setSectionStatus(firstArea.id, SectionStatus.completed);
+      expect(await notifier.markPhysicalInspectionComplete(), isTrue);
 
       final result = await notifier.generateReport();
 
@@ -256,7 +260,11 @@ void main() {
             propertyDetails: const PropertyDetails(unitNumber: 'A-1-1'),
           );
       final notifier = container.read(activeSessionProvider.notifier);
-      await notifier.markPhysicalInspectionComplete();
+      // One area inspected and found clean: the least a physical
+      // inspection needs before it can be completed.
+      final firstArea = container.read(activeSessionProvider)!.sections.first;
+      notifier.setSectionStatus(firstArea.id, SectionStatus.completed);
+      expect(await notifier.markPhysicalInspectionComplete(), isTrue);
       notifier.setReportMetadata(
         const ReportMetadata(
           title: 'Test Property',

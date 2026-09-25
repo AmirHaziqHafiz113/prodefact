@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
+import '../widgets/app_bottom_sheet.dart';
 
 /// The "Change" action: a searchable/filterable picker over the
 /// **controlled defect catalogue** — the inspector selects an entry,
@@ -16,9 +17,8 @@ Future<void> showAiSuggestionReviewDialog({
   required WidgetRef ref,
   required AiSuggestion suggestion,
 }) async {
-  final chosenId = await showModalBottomSheet<String>(
+  final chosenId = await showAppBottomSheet<String>(
     context: context,
-    isScrollControlled: true,
     builder: (context) => const _CataloguePickerSheet(),
   );
   if (chosenId == null) return;
@@ -37,9 +37,8 @@ Future<void> showManualClassificationDialog({
   required WidgetRef ref,
   required String findingId,
 }) async {
-  final chosenId = await showModalBottomSheet<String>(
+  final chosenId = await showAppBottomSheet<String>(
     context: context,
-    isScrollControlled: true,
     builder: (context) => const _CataloguePickerSheet(),
   );
   if (chosenId == null) return;
@@ -75,10 +74,9 @@ class _CataloguePickerSheetState extends State<_CataloguePickerSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
+        return AppSheetFrame(
+          scrollable: false,
+          padding: EdgeInsets.zero,
           child: Column(
             children: [
               Padding(

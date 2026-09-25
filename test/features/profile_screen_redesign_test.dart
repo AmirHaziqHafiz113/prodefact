@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/app/app.dart';
 import 'package:prodefact/app/router/app_shell_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/profile_screen.dart';
@@ -34,8 +35,8 @@ void main() {
   }
 
   testWidgets(
-    'selecting a different AI level updates the supporting sentence, and '
-    'no option is rendered as a giant standalone card',
+    'Profile shows Smart AI as the fixed analysis level, with no '
+    'Fast/Smart/Expert selector (QA #24)',
     (tester) async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -43,21 +44,13 @@ void main() {
       await openProfile(tester, container);
       expect(find.byType(ProfileScreen), findsOneWidget);
 
-      // Smart is the default — its explanation is visible, Fast's isn't.
       expect(
         find.textContaining('Balanced speed and thoroughness'),
         findsOneWidget,
       );
-      expect(find.textContaining('Fastest results'), findsNothing);
-
-      await tester.tap(find.text('Fast'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('Fastest results'), findsOneWidget);
-      expect(
-        find.textContaining('Balanced speed and thoroughness'),
-        findsNothing,
-      );
+      expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
+      expect(find.text('Fast'), findsNothing);
+      expect(find.text('Expert'), findsNothing);
     },
   );
 

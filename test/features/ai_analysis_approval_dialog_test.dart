@@ -8,6 +8,7 @@ import 'package:prodefact/features/home_inspection/presentation/screens/ai_analy
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
+import '../support/scripted_billing_service.dart';
 import '../support/test_repository.dart';
 
 /// Starts a highRise inspection under the given commercial plan and
@@ -67,9 +68,9 @@ Future<void> _pumpDialogHarness(
 
 void main() {
   testWidgets(
-    'a Flex Credits estimate dialog shows the level, "Up to: N Credits", '
-    'its RM equivalent, the current balance, and "Not Now"/"Analyse with '
-    'AI" actions',
+    'a Flex Credits estimate dialog shows "Smart AI", "Up to N Credits", '
+    'its RM equivalent, the balance, and "Not Now"/"Analyse", with no '
+    'Fast/Smart/Expert choice (QA #24) and no billing choice (QA #23)',
     (tester) async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -86,17 +87,23 @@ void main() {
       // the estimate — never a bare pricing dialog with no idea which
       // finding it's about.
       expect(find.byType(Image), findsOneWidget);
-      expect(find.text('Up to: 300 Credits'), findsOneWidget);
+      expect(find.text('Up to 300 Credits'), findsOneWidget);
       expect(find.text('≈ RM3.00'), findsOneWidget);
       expect(find.text('Balance: 500 Credits'), findsOneWidget);
       expect(find.text('Not Now'), findsOneWidget);
-      expect(find.text('Analyse with AI'), findsOneWidget);
+      expect(find.text('Analyse'), findsOneWidget);
+
+      expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
+      expect(find.text('Fast'), findsNothing);
+      expect(find.text('Expert'), findsNothing);
+      expect(find.textContaining('Flex Credits'), findsNothing);
+      expect(find.textContaining('House Pass'), findsNothing);
     },
   );
 
   testWidgets(
-    'switching to Expert on a House Pass finding (Smart included) shows '
-    'the surcharge wording and a "Use Expert · +N Credits" action',
+    'with an active House Pass the dialog says the analysis is included, '
+    'without ever asking the inspector to choose House Pass',
     (tester) async {
       final billing = FakeBillingService(initialBalanceCredits: 10000);
       final container = ProviderContainer(
@@ -113,18 +120,39 @@ void main() {
       await billing.confirmSandboxPayment(intent.intentId);
 
       await _pumpDialogHarness(tester, container, findingId);
+
+      expect(find.text('Smart AI'), findsOneWidget);
       expect(
-        find.text('Included in your House Pass — no Credits charged.'),
+        find.text('Included with this inspection. No Credits charged.'),
         findsOneWidget,
       );
+      expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
+    },
+  );
 
-      await tester.tap(find.text('Expert'));
+  testWidgets(
+    'approving always runs Smart, even for an inspection created with '
+    'Expert selected',
+    (tester) async {
+      final billing = ScriptedBillingService();
+      final container = ProviderContainer(
+        overrides: testOverrides(billingService: billing),
+      );
+      addTearDown(container.dispose);
+      final findingId = await _startSessionWithFinding(
+        container,
+        commercialMode: CommercialMode.flexCredits,
+        selectedAiLevel: AiLevel.expert,
+      );
+
+      await _pumpDialogHarness(tester, container, findingId);
+      await tester.tap(find.widgetWithText(FilledButton, 'Analyse'));
       await tester.pumpAndSettle();
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+      }
 
-      expect(find.text('Expert AI'), findsOneWidget);
-      expect(find.text('House Pass includes Smart AI.'), findsOneWidget);
-      expect(find.text('Expert: +600 Credits'), findsOneWidget);
-      expect(find.text('Use Expert · +600 Credits'), findsOneWidget);
+      expect(billing.calls.single.aiLevel, AiLevel.smart);
     },
   );
 

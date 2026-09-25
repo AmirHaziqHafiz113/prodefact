@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 
+import '../ai/ai_progress.dart';
 import '../entities/ai_review.dart';
 import '../entities/component.dart';
 import '../entities/defect_catalogue.dart';
@@ -23,19 +24,20 @@ import 'report_model.dart';
 /// `elementId` set) falls back to its own recorded element/component/
 /// description text, unaffected by any of this. See `docs/report.md`.
 ///
-/// Excluded areas never appear. Included areas with no findings are
-/// still represented, with an empty `findings` list — the renderer is
-/// responsible for printing something like "No defects recorded" for
-/// those, rather than the model silently omitting them.
+/// Only areas the inspector actually inspected appear (see
+/// `inspectedAreasOf`): excluded areas and untouched suggested areas
+/// are omitted, so an area the unit doesn't have (e.g. no balcony) is
+/// never printed as "No defects recorded". An inspected area with no
+/// findings — one the inspector marked complete with nothing wrong —
+/// is still represented, with an empty `findings` list, and the
+/// renderer prints "No defects recorded" for it.
 ReportModel buildReportModel({
   required InspectionSession session,
   required String propertyTypeLabel,
   required DateTime generatedAt,
   int version = 1,
 }) {
-  final includedSections = session.sections
-      .where((section) => section.isIncluded)
-      .toList();
+  final includedSections = inspectedAreasOf(session);
 
   var nextNumber = 1;
   final areas = includedSections.map((section) {

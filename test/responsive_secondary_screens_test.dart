@@ -155,8 +155,8 @@ void main() {
     await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'House Pass');
   });
 
-  testWidgets('the House Pass Expert-surcharge estimate dialog never overflows '
-      'at narrow, standard, or large phone widths', (tester) async {
+  testWidgets('the Smart AI estimate dialog on a House Pass inspection never '
+      'overflows at narrow, standard, or large phone widths', (tester) async {
     addTearDown(tester.view.reset);
     tester.view.physicalSize = const Size(390, 2600);
     tester.view.devicePixelRatio = 1.0;
@@ -207,16 +207,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Expert'));
-    await tester.pumpAndSettle();
+    expect(find.text('Smart AI'), findsOneWidget);
 
     await _assertNoOverflowAcrossWidths(
       tester,
-      screenLabel: 'House Pass surcharge dialog',
+      screenLabel: 'Smart AI estimate dialog',
     );
     await _assertNoOverflowAcrossTextScales(
       tester,
-      screenLabel: 'House Pass surcharge dialog',
+      screenLabel: 'Smart AI estimate dialog',
     );
   });
 }

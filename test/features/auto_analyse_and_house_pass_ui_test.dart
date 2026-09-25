@@ -70,9 +70,9 @@ void main() {
 
   testWidgets(
     'once a House Pass allowance is reached while Auto Analyse is on, '
-    'the queue screen turns Auto Analyse back off and shows "House Pass '
-    'AI allowance reached." with a "Continue with AI Credits" action '
-    'that re-enables it',
+    'the queue screen turns Auto Analyse back off and explains it, '
+    'without offering a billing choice (QA #23); the Auto Analyse switch '
+    'can still turn it back on',
     (tester) async {
       final billing = FakeBillingService(initialBalanceCredits: 10000);
       final container = ProviderContainer(
@@ -123,11 +123,16 @@ void main() {
         container.read(activeSessionProvider)!.autoAnalyseEnabled,
         isFalse,
       );
-      expect(find.text('House Pass AI allowance reached.'), findsOneWidget);
-      final resumeButton = find.text('Continue with AI Credits');
-      expect(resumeButton, findsOneWidget);
+      expect(
+        find.text(
+          'House Pass AI allowance used up. New findings will ask before '
+          'using AI Credits.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Continue with AI Credits'), findsNothing);
 
-      await tester.tap(resumeButton);
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Auto Analyse'));
       await tester.pump();
 
       expect(container.read(activeSessionProvider)!.autoAnalyseEnabled, isTrue);

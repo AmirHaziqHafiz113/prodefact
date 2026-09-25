@@ -219,6 +219,9 @@ void main() {
 
     await tester.tap(_within(find.text('Complete Physical Inspection')));
     await tester.pumpAndSettle();
+    // Confirm the completion summary dialog.
+    await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
+    await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(tester, screenLabel: 'AI Review');
     await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'AI Review');
 

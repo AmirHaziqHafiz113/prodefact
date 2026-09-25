@@ -432,6 +432,8 @@ void main() {
           _kitchenSection().copyWith(isIncluded: false),
         ],
         findings: const [],
+        // Inspected and found clean; the kitchen is excluded outright.
+        sectionStatuses: const {'master_bathroom': SectionStatus.completed},
       );
 
       final model = buildReportModel(

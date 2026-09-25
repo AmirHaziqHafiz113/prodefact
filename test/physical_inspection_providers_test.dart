@@ -111,54 +111,38 @@ void main() {
     });
   });
 
-  group('isPhysicalInspectionCompleteProvider', () {
-    test('cannot complete while an included area remains unfinished', () async {
+  group('canCompletePhysicalInspectionProvider (QA #13/#21/#22)', () {
+    test('cannot complete before any area has been inspected', () async {
       final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
-      final queue = container.read(inspectionQueueProvider);
-      final statusNotifier = container.read(sectionStatusesProvider.notifier);
-      for (final section in queue.skip(1)) {
-        statusNotifier.setStatus(section.id, SectionStatus.completed);
-      }
-      // The first section is deliberately left not-completed.
-
-      expect(container.read(isPhysicalInspectionCompleteProvider), isFalse);
+      expect(container.read(canCompletePhysicalInspectionProvider), isFalse);
     });
 
-    test('can complete once every included area is completed', () async {
+    test('can complete once one area is inspected, with every other '
+        'suggested area untouched', () async {
       final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
       final queue = container.read(inspectionQueueProvider);
-      final statusNotifier = container.read(sectionStatusesProvider.notifier);
-      for (final section in queue) {
-        statusNotifier.setStatus(section.id, SectionStatus.completed);
-      }
+      container
+          .read(sectionStatusesProvider.notifier)
+          .setStatus(queue.first.id, SectionStatus.completed);
 
-      expect(container.read(isPhysicalInspectionCompleteProvider), isTrue);
+      expect(queue.length, greaterThan(1));
+      expect(container.read(canCompletePhysicalInspectionProvider), isTrue);
     });
 
-    test('excluded areas do not block completion', () async {
+    test('an area still in progress does not block completion', () async {
       final container = await _highRiseContainer();
       addTearDown(container.dispose);
 
-      final configuredNotifier = container.read(
-        configuredAreasProvider.notifier,
-      );
-      final kitchenId = container
-          .read(configuredAreasProvider)
-          .firstWhere((s) => s.name == 'Kitchen')
-          .id;
-      configuredNotifier.toggleIncluded(kitchenId);
-
       final queue = container.read(inspectionQueueProvider);
-      final statusNotifier = container.read(sectionStatusesProvider.notifier);
-      for (final section in queue) {
-        statusNotifier.setStatus(section.id, SectionStatus.completed);
-      }
+      container
+          .read(sectionStatusesProvider.notifier)
+          .setStatus(queue.first.id, SectionStatus.inProgress);
 
-      expect(container.read(isPhysicalInspectionCompleteProvider), isTrue);
+      expect(container.read(canCompletePhysicalInspectionProvider), isTrue);
     });
   });
 

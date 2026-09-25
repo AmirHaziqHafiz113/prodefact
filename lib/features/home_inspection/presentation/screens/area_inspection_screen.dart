@@ -11,8 +11,10 @@ import '../../../../data/remote/remote_providers.dart'
     show isOnlineForAiProvider;
 import '../../providers/active_session_providers.dart';
 import '../../providers/home_inspection_providers.dart';
+import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
 import '../../providers/wallet_providers.dart';
+import '../widgets/app_bottom_sheet.dart';
 import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
 import 'top_up_screen.dart';
@@ -27,23 +29,22 @@ import 'top_up_screen.dart';
 /// either — callers must treat that exactly like the camera picker
 /// itself being cancelled, i.e. a silent no-op, never an error.
 Future<EvidenceSource?> chooseEvidenceSource(BuildContext context) {
-  return showModalBottomSheet<EvidenceSource>(
+  return showAppBottomSheet<EvidenceSource>(
     context: context,
-    builder: (sheetContext) => SafeArea(
+    builder: (sheetContext) => AppSheetFrame(
+      padding: EdgeInsets.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
             leading: const Icon(Icons.photo_camera_outlined),
             title: const Text('Camera'),
-            onTap: () =>
-                Navigator.of(sheetContext).pop(EvidenceSource.camera),
+            onTap: () => Navigator.of(sheetContext).pop(EvidenceSource.camera),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
             title: const Text('Choose from Gallery'),
-            onTap: () =>
-                Navigator.of(sheetContext).pop(EvidenceSource.gallery),
+            onTap: () => Navigator.of(sheetContext).pop(EvidenceSource.gallery),
           ),
         ],
       ),
@@ -73,16 +74,11 @@ class AreaInspectionScreen extends ConsumerStatefulWidget {
 class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
   bool _isCapturing = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final statuses = ref.read(sectionStatusesProvider.notifier);
-      if (statuses.statusOf(widget.sectionId) == SectionStatus.notStarted) {
-        statuses.setStatus(widget.sectionId, SectionStatus.inProgress);
-      }
-    });
-  }
+  // Opening an area deliberately does NOT mark it started (QA #13/#21):
+  // a stray tap into a suggested area the unit doesn't have must not
+  // make it count, or appear in the report as "No defects recorded". An
+  // area becomes started when a finding or area note is recorded, and
+  // completed only through "Mark Area Complete".
 
   @override
   Widget build(BuildContext context) {
@@ -161,32 +157,21 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 ),
               ),
             ),
-          Text(
-            'Inspection progress',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          SegmentedButton<SectionStatus>(
-            segments: const [
-              ButtonSegment(
-                value: SectionStatus.notStarted,
-                label: Text('Not started'),
-              ),
-              ButtonSegment(
-                value: SectionStatus.inProgress,
-                label: Text('In progress'),
-              ),
-              ButtonSegment(
-                value: SectionStatus.completed,
-                label: Text('Completed'),
-              ),
-            ],
-            selected: {status},
-            onSelectionChanged: (selection) {
-              ref
-                  .read(sectionStatusesProvider.notifier)
-                  .setStatus(section.id, selection.first);
-            },
+          // One clear action instead of the old Not started / In
+          // progress / Completed selector, which looked like a filter
+          // but only relabelled the area (QA #25). "In progress" now
+          // follows from recording a finding; "Completed" is this
+          // explicit action, which also covers an area inspected and
+          // found to have no defects.
+          _AreaCompletionControl(
+            status: status,
+            hasFindings: areaFindings.isNotEmpty,
+            onMarkComplete: () => ref
+                .read(sectionStatusesProvider.notifier)
+                .setStatus(section.id, SectionStatus.completed),
+            onReopen: () => ref
+                .read(sectionStatusesProvider.notifier)
+                .setStatus(section.id, SectionStatus.inProgress),
           ),
           const SizedBox(height: AppSpacing.xl),
           AppSectionHeader(title: 'Saved findings (${areaFindings.length})'),
@@ -240,9 +225,8 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     setState(() => _isCapturing = false);
     if (photo == null) return; // cancelled, or a capture error already shown
 
-    final result = await showModalBottomSheet<_PreviewResult>(
+    final result = await showAppBottomSheet<_PreviewResult>(
       context: context,
-      isScrollControlled: true,
       builder: (context) => _PhotoPreviewSheet(photo: photo),
     );
 
@@ -297,6 +281,76 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     );
     if (newNote == null) return;
     ref.read(activeSessionProvider.notifier).setAreaNote(section.id, newNote);
+  }
+}
+
+/// This area's physical status plus the one action that changes it.
+class _AreaCompletionControl extends StatelessWidget {
+  const _AreaCompletionControl({
+    required this.status,
+    required this.hasFindings,
+    required this.onMarkComplete,
+    required this.onReopen,
+  });
+
+  final SectionStatus status;
+  final bool hasFindings;
+  final VoidCallback onMarkComplete;
+  final VoidCallback onReopen;
+
+  @override
+  Widget build(BuildContext context) {
+    final isComplete = status == SectionStatus.completed;
+    final isStarted = hasFindings || status == SectionStatus.inProgress;
+    final (label, icon, color) = isComplete
+        ? ('Area completed', Icons.check_circle, AppColors.success)
+        : isStarted
+        ? ('Area in progress', Icons.timelapse, AppColors.warning)
+        : (
+            'Not started · optional if this unit has no such area',
+            Icons.circle_outlined,
+            AppColors.textSecondary,
+          );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (isComplete)
+              OutlinedButton.icon(
+                onPressed: onReopen,
+                icon: const Icon(Icons.undo),
+                label: const Text('Reopen Area'),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: onMarkComplete,
+                icon: const Icon(Icons.check),
+                label: Text(
+                  hasFindings
+                      ? 'Mark Area Complete'
+                      : 'No Defects · Mark Area Complete',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -406,66 +460,55 @@ class _PhotoPreviewSheetState extends State<_PhotoPreviewSheet> {
     // Save/Discard buttons stay comfortably reachable without scrolling
     // on a small phone.
     final imageHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
-      220.0,
+      160.0,
       420.0,
     );
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                child: SizedBox(
-                  height: imageHeight,
-                  width: double.infinity,
-                  child: Image.file(
-                    File(widget.photo.filePath),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              TextField(
-                controller: _noteController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Side note (optional)',
-                  hintText: 'e.g. "Water leaking when turned on"',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () =>
-                          Navigator.of(context)
-                              .pop(const _PreviewResult(save: false)),
-                      child: const Text('Discard'),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(
-                        _PreviewResult(save: true, note: _noteController.text),
-                      ),
-                      child: const Text('Save Finding'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    // Save/Discard are pinned (QA #15): the photo and note scroll above
+    // them, so they stay visible with the keyboard open, on short
+    // screens, and at large text sizes.
+    return AppSheetFrame(
+      actions: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(const _PreviewResult(save: false)),
+              child: const Text('Discard'),
+            ),
           ),
-        ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: FilledButton(
+              onPressed: () => Navigator.of(context)
+                  .pop(_PreviewResult(save: true, note: _noteController.text)),
+              child: const Text('Save Finding'),
+            ),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: SizedBox(
+              height: imageHeight,
+              width: double.infinity,
+              child: Image.file(File(widget.photo.filePath), fit: BoxFit.cover),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          TextField(
+            controller: _noteController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Side note (optional)',
+              hintText: 'e.g. "Water leaking when turned on"',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -658,9 +701,16 @@ class _AiStatusLine extends ConsumerWidget {
         final resolvedBalance =
             ref.watch(walletBalanceProvider).value ??
             ref.watch(walletCacheProvider).value?.balanceCredits;
+        // The backend decides House Pass vs Flex from the pass itself
+        // (QA #23); mirror that here rather than a local setting. While
+        // the pass status is still loading, don't claim Credits are
+        // missing.
+        final sessionId = ref.watch(activeSessionProvider)?.id;
+        final passStatus = sessionId == null
+            ? null
+            : ref.watch(housePassStatusProvider(sessionId)).value?.status;
         final isFlexOnly =
-            ref.watch(activeSessionProvider)?.commercialMode !=
-            CommercialMode.housePass;
+            passStatus != null && passStatus != HousePassLifecycleStatus.active;
         if (isFlexOnly && resolvedBalance == 0) {
           return Row(
             children: [

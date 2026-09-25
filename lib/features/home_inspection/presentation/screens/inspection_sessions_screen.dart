@@ -156,7 +156,6 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   Widget build(BuildContext context) {
     final sessions = widget.sessions;
 
-    final attention = sessions.where((s) => s.needsAttention).toList();
     final activeCount = sessions.where((s) => !s.isComplete).length;
     final needsReviewCount = sessions
         .where((s) => s.aiPendingReviewCount > 0)
@@ -192,8 +191,30 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     }
 
     final filtered = sessions.where(matchesQuery).where(matchesFilter).toList();
+    // Every section below is drawn from `filtered`, so a selected chip
+    // always narrows everything on screen (QA #25) — "Needs attention"
+    // previously ignored the filter.
+    final filteredAttention = filtered.where((s) => s.needsAttention).toList();
     final active = filtered.where((s) => !s.isComplete).toList();
     final recent = filtered.where((s) => s.isComplete).toList();
+    final filterCounts = {
+      for (final option in _DashboardFilter.values)
+        option: sessions
+            .where(matchesQuery)
+            .where(
+              (s) => switch (option) {
+                _DashboardFilter.all => true,
+                _DashboardFilter.inProgress =>
+                  s.status == InspectionStatus.inProgress,
+                _DashboardFilter.needsReview => s.aiPendingReviewCount > 0,
+                _DashboardFilter.reportReady =>
+                  s.status == InspectionStatus.aiReviewComplete,
+                _DashboardFilter.completed =>
+                  s.status == InspectionStatus.reported,
+              },
+            )
+            .length,
+    };
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 96),
@@ -228,7 +249,10 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             children: [
               for (final option in _DashboardFilter.values) ...[
                 ChoiceChip(
-                  label: Text(_filterLabel(option)),
+                  key: ValueKey('session-filter-${option.name}'),
+                  label: Text(
+                    '${_filterLabel(option)} (${filterCounts[option]})',
+                  ),
                   selected: _filter == option,
                   onSelected: (_) => setState(() => _filter = option),
                 ),
@@ -299,12 +323,13 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             message: 'Start your first inspection with the + button below.',
           )
         else ...[
-          if (attention.isNotEmpty) ...[
+          if (filteredAttention.isNotEmpty) ...[
             AppSectionHeader(
               title: 'Needs attention',
-              subtitle: '${attention.length} inspection(s)',
+              subtitle: '${filteredAttention.length} inspection(s)',
             ),
-            for (final summary in attention) _SessionCard(summary: summary),
+            for (final summary in filteredAttention)
+              _SessionCard(summary: summary),
             const SizedBox(height: AppSpacing.lg),
           ],
           if (active.isNotEmpty) ...[
@@ -319,7 +344,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             const AppSectionHeader(title: 'Recent'),
             for (final summary in recent) _SessionCard(summary: summary),
           ],
-          if (active.isEmpty && recent.isEmpty && attention.isEmpty)
+          if (active.isEmpty && recent.isEmpty && filteredAttention.isEmpty)
             const AppEmptyView(
               icon: Icons.search_off_outlined,
               title: 'No matching inspections',

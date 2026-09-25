@@ -4,7 +4,7 @@ import {loadPricingConfig} from "./pricing_config";
 import {estimateMaxCredits, housePassSurchargeCredits} from "./pricing";
 import {getWalletBalance} from "./wallet";
 import {findHousePassForInspection, hasRemainingAllowance} from "./house_pass";
-import {AiLevel, CommercialMode, EstimateResult, isAiLevel} from "./types";
+import {AiLevel, EstimateResult, isAiLevel} from "./types";
 
 export interface EstimateRequest {
   inspectionId: string;
@@ -68,33 +68,6 @@ export async function isOwnedFinding(
 }
 
 /**
- * Reads the inspection's own commercial mode, as last synced from the
- * device — the backend is authoritative on *price*, but the choice of
- * Flex/House Pass is inspector-driven and persisted with the
- * inspection itself (see `InspectionSession.commercialMode` on the
- * Flutter side). Defaults to `flexCredits` for an inspection that
- * predates this feature or hasn't synced this field yet.
- * @param {Firestore} firestore the Admin Firestore client.
- * @param {string} uid the caller.
- * @param {string} inspectionId the inspection.
- * @return {Promise<CommercialMode>} the resolved mode.
- */
-async function resolveCommercialMode(
-  firestore: Firestore,
-  uid: string,
-  inspectionId: string
-): Promise<CommercialMode> {
-  const snap = await firestore
-    .collection("users")
-    .doc(uid)
-    .collection("inspections")
-    .doc(inspectionId)
-    .get();
-  const mode = snap.data()?.commercialMode;
-  return mode === "housePass" ? "housePass" : "flexCredits";
-}
-
-/**
  * The full estimate computation, shared by the `estimateFindingAnalysis`
  * callable and `analyseFinding` (which re-derives the same eligibility
  * decision immediately before reserving/spending real Credits — see
@@ -111,38 +84,22 @@ export async function computeEstimate(
   req: EstimateRequest
 ): Promise<EstimateResult> {
   const config = await loadPricingConfig(firestore);
-  const paymentMode = await resolveCommercialMode(
-    firestore,
-    uid,
-    req.inspectionId
-  );
   const balance = await getWalletBalance(firestore, uid);
   const maximumCredits = estimateMaxCredits(req.aiLevel, config);
 
-  if (paymentMode === "flexCredits") {
-    const eligible = balance >= maximumCredits;
-    return {
-      aiLevel: req.aiLevel,
-      estimatedCredits: maximumCredits,
-      maximumCredits,
-      currentBalance: balance,
-      paymentMode,
-      includedInHousePass: false,
-      surchargeCredits: 0,
-      eligible,
-      reason: eligible ? undefined : "insufficientCredits",
-    };
-  }
-
-  // housePass
+  // Billing mode is decided here, never by the client (QA #23): the
+  // inspection's House Pass record exists only once the backend has
+  // confirmed payment, so an active pass means House Pass; anything
+  // else means Flex Credits. The inspection document's client-written
+  // `commercialMode` field is deliberately ignored — it was never
+  // synced reliably, which left paid House Pass inspections billed as
+  // Flex Credits.
   const pass = await findHousePassForInspection(
     firestore,
     uid,
     req.inspectionId
   );
   if (!pass || pass.status !== "active") {
-    // Allowance-exhausted/no-pass — offer Flex as a fallback (see
-    // docs/commercial_model.md, "If allowance is exhausted").
     const eligible = balance >= maximumCredits;
     return {
       aiLevel: req.aiLevel,
@@ -153,9 +110,11 @@ export async function computeEstimate(
       includedInHousePass: false,
       surchargeCredits: 0,
       eligible,
-      reason: pass ?
-        "housePassAllowanceReached" :
-        "housePassNotActive",
+      // A used-up pass is worth telling the inspector about even when
+      // Flex Credits cover this analysis; a missing pass is not.
+      reason: !eligible ?
+        "insufficientCredits" :
+        (pass ? "housePassAllowanceReached" : undefined),
     };
   }
 
