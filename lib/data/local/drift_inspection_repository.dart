@@ -655,6 +655,49 @@ class DriftInspectionRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> saveAreaCandidate(AreaCandidate candidate) async {
+    await _db
+        .into(_db.areaCandidateRows)
+        .insertOnConflictUpdate(
+          AreaCandidateRowsCompanion.insert(
+            id: candidate.id,
+            rawName: candidate.rawName,
+            normalizedName: candidate.normalizedName,
+            propertyType: candidate.propertyType,
+            createdAt: candidate.createdAt,
+            submitted: Value(candidate.submitted),
+          ),
+        );
+  }
+
+  @override
+  Future<List<AreaCandidate>> pendingAreaCandidates() async {
+    final rows =
+        await (_db.select(_db.areaCandidateRows)
+              ..where((t) => t.submitted.equals(false))
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    return [
+      for (final row in rows)
+        AreaCandidate(
+          id: row.id,
+          rawName: row.rawName,
+          normalizedName: row.normalizedName,
+          propertyType: row.propertyType,
+          createdAt: row.createdAt,
+          submitted: row.submitted,
+        ),
+    ];
+  }
+
+  @override
+  Future<void> markAreaCandidateSubmitted(String candidateId) async {
+    await (_db.update(_db.areaCandidateRows)
+          ..where((t) => t.id.equals(candidateId)))
+        .write(const AreaCandidateRowsCompanion(submitted: Value(true)));
+  }
+
+  @override
   Future<void> setEvidenceAnnotation(
     String sessionId,
     String evidenceId,

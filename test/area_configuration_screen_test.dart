@@ -141,9 +141,9 @@ void main() {
   testWidgets('adding a custom area appends it to the list', (tester) async {
     await _startHighRiseSetup(tester);
 
-    await _revealAndTap(tester, find.text('Add Custom Area'));
+    await _revealAndTap(tester, find.text('Add Newly Discovered Area'));
     await tester.pumpAndSettle();
-    expect(find.text('Add area'), findsOneWidget);
+    expect(find.text('Add newly discovered area'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Home Office');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -160,7 +160,7 @@ void main() {
       'plumbing-first ordering once the inspection starts', (tester) async {
     await _startHighRiseSetup(tester);
 
-    await _revealAndTap(tester, find.text('Add Custom Area'));
+    await _revealAndTap(tester, find.text('Add Newly Discovered Area'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Wet Kitchen');
     await tester.tap(find.byType(SwitchListTile));

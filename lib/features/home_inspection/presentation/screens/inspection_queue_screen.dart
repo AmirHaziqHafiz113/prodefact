@@ -10,6 +10,7 @@ import '../../config/property_type.dart';
 import '../../providers/active_session_providers.dart';
 import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
+import '../widgets/discovered_area_dialog.dart';
 import '../widgets/session_status_presentation.dart';
 import 'ai_review_overview_screen.dart';
 
@@ -329,6 +330,16 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      if (activeSession != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _addDiscoveredArea(activeSession),
+                            icon: const Icon(Icons.add_location_alt_outlined),
+                            label: const Text('Add Newly Discovered Area'),
+                          ),
+                        ),
                       const SizedBox(height: AppSpacing.md),
                       if (visibleAreas.isEmpty)
                         AppEmptyView(
@@ -414,6 +425,25 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// QA #12: an area found on site joins this inspection immediately;
+  /// it is queued separately as a candidate for future suggestions.
+  Future<void> _addDiscoveredArea(InspectionSession session) async {
+    final result = await showDiscoveredAreaDialog(
+      context,
+      propertyType: session.assetTypeId,
+      existingNames: {for (final s in session.sections) s.name},
+    );
+    if (result == null || !mounted) return;
+    final section = ref
+        .read(activeSessionProvider.notifier)
+        .addDiscoveredArea(result.name, isPlumbing: result.isPlumbing);
+    if (section == null) return;
+    setState(() => _filter = AreaListFilter.all);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${section.name} added to this inspection')),
     );
   }
 

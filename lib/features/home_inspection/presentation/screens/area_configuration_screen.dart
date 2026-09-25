@@ -188,7 +188,7 @@ class _AreaConfigurationScreenState
                       OutlinedButton.icon(
                         onPressed: () => _showEditAreaDialog(context, notifier),
                         icon: const Icon(Icons.add),
-                        label: const Text('Add Custom Area'),
+                        label: const Text('Add Newly Discovered Area'),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(
                             color: AppColors.primary,
@@ -281,7 +281,7 @@ class _AreaEditDialogState extends State<_AreaEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.isNew ? 'Add area' : 'Edit area'),
+      title: Text(widget.isNew ? 'Add newly discovered area' : 'Edit area'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

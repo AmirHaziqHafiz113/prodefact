@@ -325,3 +325,18 @@ class WalletCacheRows extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// Newly discovered areas queued for submission as candidates (added in
+/// schema v13) — see `AreaCandidate`. Holds only the typed name and
+/// property type; never inspection or client details.
+class AreaCandidateRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get rawName => text()();
+  TextColumn get normalizedName => text()();
+  TextColumn get propertyType => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get submitted => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

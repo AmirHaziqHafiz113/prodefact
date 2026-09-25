@@ -11,6 +11,10 @@ import {
 } from "./billing/handle_estimate_finding_analysis";
 import {handleAnalyseFinding} from "./billing/handle_analyse_finding";
 import {
+  handleGetAreaSuggestions,
+  handleSubmitAreaCandidate,
+} from "./areas/area_candidates";
+import {
   handleGetCommercialConfig,
 } from "./billing/handle_get_commercial_config";
 import {handleCreateTopUpIntent} from "./billing/handle_create_topup_intent";
@@ -190,5 +194,35 @@ export const confirmSandboxPayment = onCall(
       data: request.data,
       firestore: getFirestore(),
       env: process.env,
+    })
+);
+
+/**
+ * `submitAreaCandidate` — records an area an inspector discovered on
+ * site as a candidate for future suggestions (QA #12). Never changes
+ * the suggested-area catalogue by itself; see
+ * `areas/area_candidates.ts`.
+ */
+export const submitAreaCandidate = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30},
+  async (request) =>
+    handleSubmitAreaCandidate({
+      auth: request.auth,
+      data: request.data,
+      firestore: getFirestore(),
+    })
+);
+
+/**
+ * `getAreaSuggestions` — reviewed, approved area names for a property
+ * type (QA #12). See `areas/area_candidates.ts`.
+ */
+export const getAreaSuggestions = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30},
+  async (request) =>
+    handleGetAreaSuggestions({
+      auth: request.auth,
+      data: request.data,
+      firestore: getFirestore(),
     })
 );

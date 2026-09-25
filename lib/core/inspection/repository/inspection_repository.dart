@@ -1,3 +1,4 @@
+import '../areas/area_candidate.dart';
 import '../entities/ai_analysis_attempt.dart';
 import '../entities/ai_finding_status.dart';
 import '../entities/ai_level.dart';
@@ -119,6 +120,15 @@ abstract class InspectionRepository {
   Future<void> addEvidence(String sessionId, Evidence evidence);
 
   Future<void> removeEvidence(String sessionId, String evidenceId);
+
+  /// Queues a newly discovered area for submission as a candidate
+  /// (QA #12).
+  Future<void> saveAreaCandidate(AreaCandidate candidate);
+
+  /// Candidates not yet delivered to the backend, oldest first.
+  Future<List<AreaCandidate>> pendingAreaCandidates();
+
+  Future<void> markAreaCandidateSubmitted(String candidateId);
 
   /// Records [annotatedFilePath] as [evidenceId]'s marked-up copy, or
   /// clears it when null. Marks the photo as needing upload again so the

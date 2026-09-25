@@ -6229,6 +6229,434 @@ class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
   }
 }
 
+class $AreaCandidateRowsTable extends AreaCandidateRows
+    with TableInfo<$AreaCandidateRowsTable, AreaCandidateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AreaCandidateRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rawNameMeta = const VerificationMeta(
+    'rawName',
+  );
+  @override
+  late final GeneratedColumn<String> rawName = GeneratedColumn<String>(
+    'raw_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _normalizedNameMeta = const VerificationMeta(
+    'normalizedName',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedName = GeneratedColumn<String>(
+    'normalized_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _propertyTypeMeta = const VerificationMeta(
+    'propertyType',
+  );
+  @override
+  late final GeneratedColumn<String> propertyType = GeneratedColumn<String>(
+    'property_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _submittedMeta = const VerificationMeta(
+    'submitted',
+  );
+  @override
+  late final GeneratedColumn<bool> submitted = GeneratedColumn<bool>(
+    'submitted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("submitted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    rawName,
+    normalizedName,
+    propertyType,
+    createdAt,
+    submitted,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'area_candidate_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AreaCandidateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('raw_name')) {
+      context.handle(
+        _rawNameMeta,
+        rawName.isAcceptableOrUnknown(data['raw_name']!, _rawNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rawNameMeta);
+    }
+    if (data.containsKey('normalized_name')) {
+      context.handle(
+        _normalizedNameMeta,
+        normalizedName.isAcceptableOrUnknown(
+          data['normalized_name']!,
+          _normalizedNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedNameMeta);
+    }
+    if (data.containsKey('property_type')) {
+      context.handle(
+        _propertyTypeMeta,
+        propertyType.isAcceptableOrUnknown(
+          data['property_type']!,
+          _propertyTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_propertyTypeMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('submitted')) {
+      context.handle(
+        _submittedMeta,
+        submitted.isAcceptableOrUnknown(data['submitted']!, _submittedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AreaCandidateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AreaCandidateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      rawName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw_name'],
+      )!,
+      normalizedName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_name'],
+      )!,
+      propertyType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}property_type'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      submitted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}submitted'],
+      )!,
+    );
+  }
+
+  @override
+  $AreaCandidateRowsTable createAlias(String alias) {
+    return $AreaCandidateRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AreaCandidateRow extends DataClass
+    implements Insertable<AreaCandidateRow> {
+  final String id;
+  final String rawName;
+  final String normalizedName;
+  final String propertyType;
+  final DateTime createdAt;
+  final bool submitted;
+  const AreaCandidateRow({
+    required this.id,
+    required this.rawName,
+    required this.normalizedName,
+    required this.propertyType,
+    required this.createdAt,
+    required this.submitted,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['raw_name'] = Variable<String>(rawName);
+    map['normalized_name'] = Variable<String>(normalizedName);
+    map['property_type'] = Variable<String>(propertyType);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['submitted'] = Variable<bool>(submitted);
+    return map;
+  }
+
+  AreaCandidateRowsCompanion toCompanion(bool nullToAbsent) {
+    return AreaCandidateRowsCompanion(
+      id: Value(id),
+      rawName: Value(rawName),
+      normalizedName: Value(normalizedName),
+      propertyType: Value(propertyType),
+      createdAt: Value(createdAt),
+      submitted: Value(submitted),
+    );
+  }
+
+  factory AreaCandidateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AreaCandidateRow(
+      id: serializer.fromJson<String>(json['id']),
+      rawName: serializer.fromJson<String>(json['rawName']),
+      normalizedName: serializer.fromJson<String>(json['normalizedName']),
+      propertyType: serializer.fromJson<String>(json['propertyType']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      submitted: serializer.fromJson<bool>(json['submitted']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'rawName': serializer.toJson<String>(rawName),
+      'normalizedName': serializer.toJson<String>(normalizedName),
+      'propertyType': serializer.toJson<String>(propertyType),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'submitted': serializer.toJson<bool>(submitted),
+    };
+  }
+
+  AreaCandidateRow copyWith({
+    String? id,
+    String? rawName,
+    String? normalizedName,
+    String? propertyType,
+    DateTime? createdAt,
+    bool? submitted,
+  }) => AreaCandidateRow(
+    id: id ?? this.id,
+    rawName: rawName ?? this.rawName,
+    normalizedName: normalizedName ?? this.normalizedName,
+    propertyType: propertyType ?? this.propertyType,
+    createdAt: createdAt ?? this.createdAt,
+    submitted: submitted ?? this.submitted,
+  );
+  AreaCandidateRow copyWithCompanion(AreaCandidateRowsCompanion data) {
+    return AreaCandidateRow(
+      id: data.id.present ? data.id.value : this.id,
+      rawName: data.rawName.present ? data.rawName.value : this.rawName,
+      normalizedName: data.normalizedName.present
+          ? data.normalizedName.value
+          : this.normalizedName,
+      propertyType: data.propertyType.present
+          ? data.propertyType.value
+          : this.propertyType,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      submitted: data.submitted.present ? data.submitted.value : this.submitted,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AreaCandidateRow(')
+          ..write('id: $id, ')
+          ..write('rawName: $rawName, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('propertyType: $propertyType, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('submitted: $submitted')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    rawName,
+    normalizedName,
+    propertyType,
+    createdAt,
+    submitted,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AreaCandidateRow &&
+          other.id == this.id &&
+          other.rawName == this.rawName &&
+          other.normalizedName == this.normalizedName &&
+          other.propertyType == this.propertyType &&
+          other.createdAt == this.createdAt &&
+          other.submitted == this.submitted);
+}
+
+class AreaCandidateRowsCompanion extends UpdateCompanion<AreaCandidateRow> {
+  final Value<String> id;
+  final Value<String> rawName;
+  final Value<String> normalizedName;
+  final Value<String> propertyType;
+  final Value<DateTime> createdAt;
+  final Value<bool> submitted;
+  final Value<int> rowid;
+  const AreaCandidateRowsCompanion({
+    this.id = const Value.absent(),
+    this.rawName = const Value.absent(),
+    this.normalizedName = const Value.absent(),
+    this.propertyType = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.submitted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AreaCandidateRowsCompanion.insert({
+    required String id,
+    required String rawName,
+    required String normalizedName,
+    required String propertyType,
+    required DateTime createdAt,
+    this.submitted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       rawName = Value(rawName),
+       normalizedName = Value(normalizedName),
+       propertyType = Value(propertyType),
+       createdAt = Value(createdAt);
+  static Insertable<AreaCandidateRow> custom({
+    Expression<String>? id,
+    Expression<String>? rawName,
+    Expression<String>? normalizedName,
+    Expression<String>? propertyType,
+    Expression<DateTime>? createdAt,
+    Expression<bool>? submitted,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (rawName != null) 'raw_name': rawName,
+      if (normalizedName != null) 'normalized_name': normalizedName,
+      if (propertyType != null) 'property_type': propertyType,
+      if (createdAt != null) 'created_at': createdAt,
+      if (submitted != null) 'submitted': submitted,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AreaCandidateRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? rawName,
+    Value<String>? normalizedName,
+    Value<String>? propertyType,
+    Value<DateTime>? createdAt,
+    Value<bool>? submitted,
+    Value<int>? rowid,
+  }) {
+    return AreaCandidateRowsCompanion(
+      id: id ?? this.id,
+      rawName: rawName ?? this.rawName,
+      normalizedName: normalizedName ?? this.normalizedName,
+      propertyType: propertyType ?? this.propertyType,
+      createdAt: createdAt ?? this.createdAt,
+      submitted: submitted ?? this.submitted,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (rawName.present) {
+      map['raw_name'] = Variable<String>(rawName.value);
+    }
+    if (normalizedName.present) {
+      map['normalized_name'] = Variable<String>(normalizedName.value);
+    }
+    if (propertyType.present) {
+      map['property_type'] = Variable<String>(propertyType.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (submitted.present) {
+      map['submitted'] = Variable<bool>(submitted.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AreaCandidateRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('rawName: $rawName, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('propertyType: $propertyType, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('submitted: $submitted, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6247,6 +6675,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WalletCacheRowsTable walletCacheRows = $WalletCacheRowsTable(
     this,
   );
+  late final $AreaCandidateRowsTable areaCandidateRows =
+      $AreaCandidateRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6260,6 +6690,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     reportRows,
     userProfileRows,
     walletCacheRows,
+    areaCandidateRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -10452,6 +10883,251 @@ typedef $$WalletCacheRowsTableProcessedTableManager =
       WalletCacheRow,
       PrefetchHooks Function()
     >;
+typedef $$AreaCandidateRowsTableCreateCompanionBuilder =
+    AreaCandidateRowsCompanion Function({
+      required String id,
+      required String rawName,
+      required String normalizedName,
+      required String propertyType,
+      required DateTime createdAt,
+      Value<bool> submitted,
+      Value<int> rowid,
+    });
+typedef $$AreaCandidateRowsTableUpdateCompanionBuilder =
+    AreaCandidateRowsCompanion Function({
+      Value<String> id,
+      Value<String> rawName,
+      Value<String> normalizedName,
+      Value<String> propertyType,
+      Value<DateTime> createdAt,
+      Value<bool> submitted,
+      Value<int> rowid,
+    });
+
+class $$AreaCandidateRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AreaCandidateRowsTable> {
+  $$AreaCandidateRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rawName => $composableBuilder(
+    column: $table.rawName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get propertyType => $composableBuilder(
+    column: $table.propertyType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get submitted => $composableBuilder(
+    column: $table.submitted,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AreaCandidateRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AreaCandidateRowsTable> {
+  $$AreaCandidateRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rawName => $composableBuilder(
+    column: $table.rawName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get propertyType => $composableBuilder(
+    column: $table.propertyType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get submitted => $composableBuilder(
+    column: $table.submitted,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AreaCandidateRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AreaCandidateRowsTable> {
+  $$AreaCandidateRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get rawName =>
+      $composableBuilder(column: $table.rawName, builder: (column) => column);
+
+  GeneratedColumn<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get propertyType => $composableBuilder(
+    column: $table.propertyType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get submitted =>
+      $composableBuilder(column: $table.submitted, builder: (column) => column);
+}
+
+class $$AreaCandidateRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AreaCandidateRowsTable,
+          AreaCandidateRow,
+          $$AreaCandidateRowsTableFilterComposer,
+          $$AreaCandidateRowsTableOrderingComposer,
+          $$AreaCandidateRowsTableAnnotationComposer,
+          $$AreaCandidateRowsTableCreateCompanionBuilder,
+          $$AreaCandidateRowsTableUpdateCompanionBuilder,
+          (
+            AreaCandidateRow,
+            BaseReferences<
+              _$AppDatabase,
+              $AreaCandidateRowsTable,
+              AreaCandidateRow
+            >,
+          ),
+          AreaCandidateRow,
+          PrefetchHooks Function()
+        > {
+  $$AreaCandidateRowsTableTableManager(
+    _$AppDatabase db,
+    $AreaCandidateRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AreaCandidateRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AreaCandidateRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AreaCandidateRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> rawName = const Value.absent(),
+                Value<String> normalizedName = const Value.absent(),
+                Value<String> propertyType = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> submitted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AreaCandidateRowsCompanion(
+                id: id,
+                rawName: rawName,
+                normalizedName: normalizedName,
+                propertyType: propertyType,
+                createdAt: createdAt,
+                submitted: submitted,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String rawName,
+                required String normalizedName,
+                required String propertyType,
+                required DateTime createdAt,
+                Value<bool> submitted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AreaCandidateRowsCompanion.insert(
+                id: id,
+                rawName: rawName,
+                normalizedName: normalizedName,
+                propertyType: propertyType,
+                createdAt: createdAt,
+                submitted: submitted,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AreaCandidateRowsTable, AreaCandidateRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AreaCandidateRowsTable,
+                    AreaCandidateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AreaCandidateRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AreaCandidateRowsTable,
+      AreaCandidateRow,
+      $$AreaCandidateRowsTableFilterComposer,
+      $$AreaCandidateRowsTableOrderingComposer,
+      $$AreaCandidateRowsTableAnnotationComposer,
+      $$AreaCandidateRowsTableCreateCompanionBuilder,
+      $$AreaCandidateRowsTableUpdateCompanionBuilder,
+      (
+        AreaCandidateRow,
+        BaseReferences<
+          _$AppDatabase,
+          $AreaCandidateRowsTable,
+          AreaCandidateRow
+        >,
+      ),
+      AreaCandidateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10472,4 +11148,6 @@ class $AppDatabaseManager {
       $$UserProfileRowsTableTableManager(_db, _db.userProfileRows);
   $$WalletCacheRowsTableTableManager get walletCacheRows =>
       $$WalletCacheRowsTableTableManager(_db, _db.walletCacheRows);
+  $$AreaCandidateRowsTableTableManager get areaCandidateRows =>
+      $$AreaCandidateRowsTableTableManager(_db, _db.areaCandidateRows);
 }

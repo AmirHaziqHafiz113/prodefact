@@ -11,6 +11,8 @@ export 'ai/ai_analysis_result.dart';
 export 'ai/ai_inspection_service.dart';
 export 'ai/ai_progress.dart';
 export 'ai/ai_review_coordinator.dart';
+export 'areas/area_candidate.dart';
+export 'areas/area_candidate_service.dart';
 export 'billing/analyse_finding_exception.dart';
 export 'billing/analyse_finding_result.dart';
 export 'billing/analysis_estimate.dart';

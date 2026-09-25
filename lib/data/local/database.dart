@@ -91,6 +91,9 @@ part 'database.g.dart';
 ///   spinning forever or re-sent under a new (separately charged) key.
 ///   See `AiAnalysisAttempt`. Null for every pre-existing finding, which
 ///   correctly means "no request outstanding". Additive only.
+/// - v13: (QA/QC newly discovered areas) added the `AreaCandidateRows`
+///   table: newly discovered area names queued for submission as
+///   candidates for future suggestions. New table only.
 /// - v12: (QA/QC evidence pass) added `EvidenceRows.annotatedFilePath`
 ///   (nullable): a separate marked-up copy of a photo. The original file
 ///   is never modified. Null for every pre-existing photo. Additive only.
@@ -104,6 +107,7 @@ part 'database.g.dart';
     ReportRows,
     UserProfileRows,
     WalletCacheRows,
+    AreaCandidateRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -114,7 +118,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -266,6 +270,9 @@ class AppDatabase extends _$AppDatabase {
         // `evidenceRows` has existed since v1 and is never recreated
         // above, so the column is always missing here.
         await migrator.addColumn(evidenceRows, evidenceRows.annotatedFilePath);
+      }
+      if (from < 13) {
+        await migrator.createTable(areaCandidateRows);
       }
     },
   );

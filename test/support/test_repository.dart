@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:prodefact/core/inspection/areas/area_candidate_service.dart';
 import 'package:prodefact/core/inspection/billing/billing_service.dart';
 import 'package:prodefact/core/inspection/billing/house_pass_status_service.dart';
 import 'package:prodefact/core/inspection/billing/wallet_activity_service.dart';
@@ -15,6 +16,7 @@ import 'package:prodefact/core/inspection/repository/inspection_repository.dart'
 import 'package:prodefact/core/inspection/services/connectivity_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_file_store.dart';
+import 'package:prodefact/data/areas/area_candidate_providers.dart';
 import 'package:prodefact/data/billing/billing_providers.dart';
 import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/data/local/database.dart';
@@ -23,6 +25,7 @@ import 'package:prodefact/data/local/drift_inspection_repository.dart';
 import 'package:prodefact/data/remote/remote_providers.dart';
 import 'package:prodefact/data/report/report_providers.dart';
 
+import 'fake_area_candidate_service.dart';
 import 'fake_auth_service.dart';
 import 'fake_cloud_inspection_repository.dart';
 import 'fake_report_services.dart';
@@ -113,6 +116,7 @@ List<Override> testOverrides({
   ReportShareService? reportShareService,
   ConnectivityService? connectivityService,
   BillingService? billingService,
+  AreaCandidateService? areaCandidateService,
 }) {
   final resolvedBillingService = billingService ?? FakeBillingService();
   final resolvedWalletActivityService =
@@ -154,6 +158,10 @@ List<Override> testOverrides({
     // both providers, exactly like production's local-only mode (see
     // `billing_providers.dart`).
     billingServiceProvider.overrideWithValue(resolvedBillingService),
+    // Never the real callable client in a test (no Firebase app exists).
+    areaCandidateServiceProvider.overrideWithValue(
+      areaCandidateService ?? FakeAreaCandidateService(),
+    ),
     walletActivityServiceProvider.overrideWithValue(
       resolvedWalletActivityService,
     ),
@@ -174,6 +182,7 @@ List<Override> testOverridesWithSync({
   FakeCloudInspectionRepository? cloudRepository,
   ConnectivityService? connectivityService,
   BillingService? billingService,
+  AreaCandidateService? areaCandidateService,
 }) {
   return [
     ...testOverrides(
@@ -181,6 +190,7 @@ List<Override> testOverridesWithSync({
       captureService: captureService,
       connectivityService: connectivityService,
       billingService: billingService,
+      areaCandidateService: areaCandidateService,
     ),
     firebaseReadyProvider.overrideWithValue(true),
     authServiceProvider.overrideWithValue(authService ?? FakeAuthService()),

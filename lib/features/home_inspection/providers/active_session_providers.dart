@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../data/ai/ai_providers.dart';
+import '../../../data/areas/area_candidate_providers.dart';
 import '../../../data/analytics/analytics_providers.dart';
 import '../../../data/billing/billing_providers.dart';
 import '../../../data/local/database_providers.dart';
@@ -104,6 +105,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         final isOnlineNow = next.value == ConnectivityStatus.online;
         if (!wasOnline && isOnlineNow) {
           unawaited(processQueuedAiClassifications());
+          unawaited(flushAreaCandidates());
         }
       });
     }
@@ -198,6 +200,15 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         selectedAiLevel: selectedAiLevel,
       );
       state = session;
+      // Areas added during setup ("Add Newly Discovered Area") are
+      // candidates too (QA #12).
+      final discovered = [
+        for (final section in session.sections)
+          if (section.id.startsWith('custom_')) section.name,
+      ];
+      if (discovered.isNotEmpty) {
+        unawaited(_queueAreaCandidates(discovered, session.assetTypeId));
+      }
       ref.read(activeSessionErrorProvider.notifier).clear();
       ref.invalidate(sessionSummariesProvider);
       _logAnalytics(AnalyticsEvent.inspectionStarted);
@@ -233,6 +244,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       state = session;
       ref.read(activeSessionErrorProvider.notifier).clear();
       unawaited(processQueuedAiClassifications());
+      unawaited(flushAreaCandidates());
       return true;
     } catch (error, stackTrace) {
       AppLogger.error(
@@ -295,15 +307,84 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
   }
 
-  void addCustomArea(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
+  void addCustomArea(String name) => addDiscoveredArea(name);
+
+  /// Adds an area found on site that the suggested list didn't have
+  /// (QA #12). It joins this inspection immediately — no approval, no
+  /// network — and is queued as a candidate so a reviewed version can
+  /// later be suggested to other inspectors. Nothing is added to the
+  /// suggested-area catalogue itself. Returns the new area, or null for
+  /// a blank name.
+  Section? addDiscoveredArea(String name, {bool isPlumbing = false}) {
+    final trimmed = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (trimmed.isEmpty) return null;
     final session = state;
-    if (session == null) return;
-    _updateSections([
-      ...session.sections,
-      HomeInspectionConfig.customSection(trimmed),
-    ]);
+    if (session == null) return null;
+    final section = HomeInspectionConfig.customSection(
+      trimmed,
+      isPlumbing: isPlumbing,
+    );
+    _updateSections([...session.sections, section]);
+    unawaited(_queueAreaCandidates([trimmed], session.assetTypeId));
+    return section;
+  }
+
+  bool _isFlushingAreaCandidates = false;
+
+  Future<void> _queueAreaCandidates(
+    List<String> names,
+    String propertyType,
+  ) async {
+    try {
+      final now = DateTime.now();
+      for (final (i, name) in names.indexed) {
+        await _repository.saveAreaCandidate(
+          AreaCandidate(
+            id: 'area_candidate_${now.microsecondsSinceEpoch}_$i',
+            rawName: name,
+            normalizedName: AreaCandidate.normalizeLocally(name),
+            propertyType: propertyType,
+            createdAt: now,
+          ),
+        );
+      }
+    } catch (error, stackTrace) {
+      // Never blocks the inspection: the area is already added.
+      AppLogger.error('Could not queue an area candidate', error, stackTrace);
+      return;
+    }
+    await flushAreaCandidates();
+  }
+
+  /// Delivers queued area candidates, oldest first, stopping at the
+  /// first failure (e.g. offline) so order is kept for the next attempt.
+  /// Runs after an area is added, on reconnect, and when an inspection
+  /// is opened. Safe to call repeatedly.
+  Future<void> flushAreaCandidates() async {
+    if (_isFlushingAreaCandidates || !ref.mounted) return;
+    _isFlushingAreaCandidates = true;
+    try {
+      final pending = await _repository.pendingAreaCandidates();
+      for (final candidate in pending) {
+        if (!ref.mounted) return;
+        try {
+          await ref
+              .read(areaCandidateServiceProvider)
+              .submit(
+                rawName: candidate.rawName,
+                propertyType: candidate.propertyType,
+              );
+        } catch (error) {
+          AppLogger.info('area_candidate_pending id=${candidate.id}');
+          return;
+        }
+        await _repository.markAreaCandidateSubmitted(candidate.id);
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error('Could not deliver area candidates', error, stackTrace);
+    } finally {
+      _isFlushingAreaCandidates = false;
+    }
   }
 
   /// Records a contextual note for one area — not a defect, never sent

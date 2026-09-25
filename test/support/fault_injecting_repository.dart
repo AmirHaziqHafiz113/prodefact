@@ -100,6 +100,20 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<void> saveAreaCandidate(AreaCandidate candidate) {
+    _maybeFail('saveAreaCandidate');
+    return _inner.saveAreaCandidate(candidate);
+  }
+
+  @override
+  Future<List<AreaCandidate>> pendingAreaCandidates() =>
+      _inner.pendingAreaCandidates();
+
+  @override
+  Future<void> markAreaCandidateSubmitted(String candidateId) =>
+      _inner.markAreaCandidateSubmitted(candidateId);
+
+  @override
   Future<void> setEvidenceAnnotation(
     String sessionId,
     String evidenceId,
