@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -30,24 +31,36 @@ Future<void> showAnalyseApprovalDialog({
       .firstWhereOrNull((f) => f.id == findingId);
   if (finding == null || !finding.hasDefectNote) return;
 
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => const AlertDialog(
-      content: SizedBox(
-        height: 80,
-        child: Center(child: CircularProgressIndicator()),
+  // Captured before any await: the widget that opened this may be
+  // rebuilt away while pricing loads (background AI updates the list),
+  // and the spinner must still close — a stranded non-dismissible
+  // spinner blocks every tap on the page (QA #33).
+  final navigator = Navigator.of(context, rootNavigator: true);
+  var spinnerOpen = true;
+  unawaited(
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: SizedBox(
+          height: 80,
+          child: Center(child: CircularProgressIndicator()),
+        ),
       ),
-    ),
+    ).whenComplete(() => spinnerOpen = false),
   );
 
   AnalysisEstimate? estimate;
   try {
     estimate = await ref
         .read(activeSessionProvider.notifier)
-        .estimateFindingAnalysis(findingId);
+        .estimateFindingAnalysis(findingId)
+        .timeout(const Duration(seconds: 40));
+  } catch (_) {
+    estimate = null; // shown below as "Could not check pricing"
   } finally {
-    if (context.mounted) Navigator.of(context).pop(); // close the spinner
+    if (spinnerOpen && navigator.mounted) navigator.pop();
   }
 
   if (!context.mounted) return;

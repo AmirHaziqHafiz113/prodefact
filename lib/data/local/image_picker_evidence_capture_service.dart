@@ -42,17 +42,19 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
         source: source == EvidenceSource.camera
             ? ImageSource.camera
             : ImageSource.gallery,
-        // QA #19: keep the evidence close to the camera original. A
-        // symmetric 4096px bound leaves typical 12MP phone photos
-        // (4032x3024) untouched, applies equally to portrait and
-        // landscape (the old width-only 2000px cap shrank landscape
-        // photos more), never crops, and keeps aspect ratio. Setting a
-        // quality also makes iOS return JPEG rather than HEIC, which the
-        // report renderer and the AI pipeline can't read. The AI gets
-        // its own smaller copy server-side (1568px, JPEG 82).
-        maxWidth: 4096,
-        maxHeight: 4096,
-        imageQuality: 95,
+        // QA #19 + #26: high-quality evidence that still uploads fast
+        // on a phone connection. A symmetric 2560px bound applies equally
+        // to portrait and landscape, never crops, keeps aspect ratio, and
+        // exceeds what an A4 report prints at 300 dpi (~2480px). The
+        // previous 4096px / quality 95 produced ~4-6 MB files whose
+        // upload dominated the wait before AI could start; this is
+        // roughly a quarter of that. Setting a quality also makes iOS
+        // return JPEG rather than HEIC, which the report renderer and
+        // the AI pipeline need. The AI gets its own smaller copy
+        // server-side (1568px, JPEG 82).
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 90,
       );
     } catch (error) {
       // Most commonly a `PlatformException` for camera/photo-library

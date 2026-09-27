@@ -230,9 +230,14 @@ test("a failed AI provider call releases the reservation in full — the " +
       }),
     (error: unknown) => {
       assert.ok(error instanceof HttpsError);
-      // A repeated 500 is treated as transient (same as a timeout) —
-      // see `handle_classify_finding.ts`'s identical mapping.
-      assert.equal((error as HttpsError).code, "deadline-exceeded");
+      // The job is already recorded as failed and refunded, so the code
+      // must be one the app treats as definite. `deadline-exceeded`
+      // made it park the finding as "Queued for AI" (QA #27).
+      assert.equal((error as HttpsError).code, "internal");
+      assert.equal(
+        ((error as HttpsError).details as {reason: string}).reason,
+        "providerUnavailable"
+      );
       return true;
     }
   );

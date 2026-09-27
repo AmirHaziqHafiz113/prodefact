@@ -9,6 +9,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
+import 'area_inspection_screen.dart' show FindingAiStatusLine;
 import 'report_screen.dart';
 
 /// Overview of AI's progressive classification work across every
@@ -38,8 +39,16 @@ class AiReviewOverviewScreen extends ConsumerWidget {
 
     final processing = AiProcessingProgress.of(session);
     final review = AiReviewProgress.of(session);
-    final canContinue = processing.inFlight == 0 && review.pending == 0;
     final suggestions = session.aiSuggestions;
+    // Findings AI hasn't produced a suggestion for yet (queued,
+    // analysing, failed, or waiting for a note/approval). Previously
+    // these were not shown here at all, so a failed or stuck analysis
+    // left a page with nothing to tap (QA #33).
+    final suggestedIds = {for (final s in suggestions) s.findingId};
+    final withoutSuggestion = session.findings
+        .where((f) => f.isAiEligible && !suggestedIds.contains(f.id))
+        .toList();
+    final pendingNote = _pendingSummary(processing, review, withoutSuggestion);
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Review')),
@@ -57,7 +66,19 @@ class AiReviewOverviewScreen extends ConsumerWidget {
               child: _StatusPanel(processing: processing, review: review),
             ),
           ),
-          if (suggestions.isEmpty)
+          if (withoutSuggestion.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            AppSectionHeader(
+              title: 'Waiting on AI (${withoutSuggestion.length})',
+              subtitle: 'Each finding shows what happens next.',
+            ),
+            for (final finding in withoutSuggestion)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _PendingFindingCard(session: session, finding: finding),
+              ),
+          ],
+          if (suggestions.isEmpty && withoutSuggestion.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: AppSpacing.lg),
               child: Text(
@@ -65,7 +86,7 @@ class AiReviewOverviewScreen extends ConsumerWidget {
                 'to review.',
               ),
             )
-          else ...[
+          else if (suggestions.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.lg),
             for (final section in session.sections.where((s) => s.isIncluded))
               ..._sectionGroup(context, session, section, suggestions),
@@ -77,15 +98,119 @@ class AiReviewOverviewScreen extends ConsumerWidget {
           ],
         ],
       ),
+      // Always tappable (QA #32/#33): AI and review gate report
+      // *generation*, which the Report screen enforces and explains —
+      // never the way forward from this screen.
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: FilledButton(
-            onPressed: canContinue
-                ? () => context.push(ReportScreen.routePath)
-                : null,
-            child: const Text('Continue to Report'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (pendingNote != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Text(
+                    pendingNote,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              FilledButton(
+                onPressed: () => context.push(ReportScreen.routePath),
+                child: const Text('Continue to Report'),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Why the report isn't ready yet, in one line, or null when it is.
+String? _pendingSummary(
+  AiProcessingProgress processing,
+  AiReviewProgress review,
+  List<Finding> withoutSuggestion,
+) {
+  final parts = <String>[];
+  if (processing.inFlight > 0) {
+    parts.add(
+      'AI is still working on ${processing.inFlight} '
+      'finding${processing.inFlight == 1 ? '' : 's'}',
+    );
+  }
+  final failed = withoutSuggestion
+      .where((f) => f.aiStatus == AiFindingStatus.failed)
+      .length;
+  if (failed > 0) {
+    parts.add('$failed need${failed == 1 ? 's' : ''} a retry or manual classification');
+  }
+  if (review.pending > 0) {
+    parts.add('${review.pending} to review');
+  }
+  if (parts.isEmpty) return null;
+  return '${parts.join(' · ')}. The report can be generated once these are '
+      'done.';
+}
+
+/// A finding with no AI suggestion yet: its photo, note, and live AI
+/// status with the action that moves it on.
+class _PendingFindingCard extends StatelessWidget {
+  const _PendingFindingCard({required this.session, required this.finding});
+
+  final InspectionSession session;
+  final Finding finding;
+
+  @override
+  Widget build(BuildContext context) {
+    final area = session.sections
+        .firstWhereOrNull((s) => s.id == finding.sectionId)
+        ?.name;
+    final photo = finding.evidence.firstOrNull;
+    return Card(
+      key: ValueKey('pending-finding-${finding.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (photo != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Image.file(
+                    File(photo.displayFilePath),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const ColoredBox(color: AppColors.surfaceAlt),
+                  ),
+                ),
+              ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (area != null)
+                    Text(area, style: Theme.of(context).textTheme.labelLarge),
+                  if (finding.defectNote != null)
+                    Text(
+                      finding.defectNote!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(height: 4),
+                  FindingAiStatusLine(finding: finding, suggestion: null),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

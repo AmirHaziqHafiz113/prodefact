@@ -709,3 +709,40 @@ test("an insufficient balance fails the job definitively without " +
   assert.deepEqual(ledgerIds(store), []);
   assert.equal(job(store, "key_a")?.status, "failed");
 });
+
+test("QA #27/#29: an exhausted provider quota fails the job definitively " +
+  "(resource-exhausted, not deadline-exceeded), refunds, and replays " +
+  "report the same failure without calling the provider again",
+async (t) => {
+  let calls = 0;
+  const original = global.fetch;
+  global.fetch = (async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({error: {code: "insufficient_quota"}}),
+      {status: 429}
+    );
+  }) as typeof fetch;
+  t.after(() => {
+    global.fetch = original;
+  });
+  const {firestore, store} = seeded();
+
+  await assert.rejects(
+    analyse(firestore, payload("key_q")),
+    (error) => {
+      isHttpsError(error, "resource-exhausted", "providerQuotaExceeded");
+      return true;
+    }
+  );
+  assert.equal(calls, 1, "a quota failure is never retried");
+  assert.equal(await getWalletBalance(firestore, UID), START_BALANCE);
+  assert.equal(job(store, "key_q")?.status, "failed");
+  assert.equal(job(store, "key_q")?.failureReason, "provider_quotaExceeded");
+
+  await assert.rejects(
+    analyse(firestore, payload("key_q")),
+    (error) => isHttpsError(error, "internal")
+  );
+  assert.equal(calls, 1);
+});

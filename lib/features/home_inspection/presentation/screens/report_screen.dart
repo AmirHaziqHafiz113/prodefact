@@ -59,44 +59,71 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_errorMessage != null)
-            AppInlineErrorBanner(
-              message: 'Report generation failed: $_errorMessage',
-              onDismiss: () => setState(() => _errorMessage = null),
-            ),
-          if (isStale)
-            AppInlineWarningBanner(
-              message:
-                  'This inspection has an existing report (v${report!.version}). '
-                  'Inspection data has changed since it was generated — '
-                  'regenerating will create v${report.version + 1}.',
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              AppSpacing.sm,
-            ),
-            child: _ReadinessCard(session: session, report: report),
-          ),
-          Expanded(
-            child: report == null
-                ? _NotGeneratedView(
-                    isGenerating: _isGenerating,
-                    onGenerate: _generate,
-                  )
-                : _ReportReadyView(
-                    filePath: report.filePath,
-                    isGenerating: _isGenerating,
-                    onRegenerate: _generate,
-                    onShare: () =>
-                        ref.read(activeSessionProvider.notifier).shareReport(),
-                  ),
-          ),
-        ],
+      // QA #33: the page must stay scrollable with every action in
+      // reach. Before a report exists everything scrolls together; once
+      // one exists, the header area scrolls within a capped height so
+      // the report preview and its actions always keep space.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final header = Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null)
+                AppInlineErrorBanner(
+                  message: 'Report generation failed: $_errorMessage',
+                  onDismiss: () => setState(() => _errorMessage = null),
+                ),
+              if (isStale)
+                AppInlineWarningBanner(
+                  message:
+                      'This inspection has an existing report (v${report!.version}). '
+                      'Inspection data has changed since it was generated — '
+                      'regenerating will create v${report.version + 1}.',
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                ),
+                child: _ReadinessCard(session: session, report: report),
+              ),
+            ],
+          );
+          if (report == null) {
+            return ListView(
+              key: const ValueKey('report-scroll'),
+              children: [
+                header,
+                _NotGeneratedView(
+                  isGenerating: _isGenerating,
+                  onGenerate: _generate,
+                ),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * 0.45,
+                ),
+                child: SingleChildScrollView(child: header),
+              ),
+              Expanded(
+                child: _ReportReadyView(
+                  filePath: report.filePath,
+                  isGenerating: _isGenerating,
+                  onRegenerate: _generate,
+                  onShare: () =>
+                      ref.read(activeSessionProvider.notifier).shareReport(),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -107,14 +134,21 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       _errorMessage = null;
     });
 
-    final result = await ref
-        .read(activeSessionProvider.notifier)
-        .generateReport();
-
+    // Always reaches a terminal state (QA #33): an unexpected error must
+    // never leave "generating" on, which disables every action.
+    String? error;
+    try {
+      final result = await ref
+          .read(activeSessionProvider.notifier)
+          .generateReport();
+      error = result.isSuccess ? null : _messageFor(result);
+    } catch (e) {
+      error = 'Something went wrong. Please try again.';
+    }
     if (!mounted) return;
     setState(() {
       _isGenerating = false;
-      _errorMessage = result.isSuccess ? null : _messageFor(result);
+      _errorMessage = error;
     });
   }
 
@@ -372,7 +406,7 @@ class _NotGeneratedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -392,8 +426,9 @@ class _NotGeneratedView extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             const Text(
-              'AI review is complete. Generate the Home Inspection '
-              'report using the inspector-approved findings.',
+              'Generate the Home Inspection report from the '
+              'inspector-approved findings. The checks above show anything '
+              'still outstanding.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),

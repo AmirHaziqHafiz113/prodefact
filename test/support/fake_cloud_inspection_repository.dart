@@ -27,7 +27,13 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
   /// succeeding — simulating a network/Firebase failure.
   Object? failNextCallWith;
 
+  /// When set, every call throws this until cleared — a persistent
+  /// upload/network failure.
+  Object? failEveryCallWith;
+
   void _maybeThrow() {
+    final persistent = failEveryCallWith;
+    if (persistent != null) throw persistent;
     final failure = failNextCallWith;
     if (failure != null) {
       failNextCallWith = null;

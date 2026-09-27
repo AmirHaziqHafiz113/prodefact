@@ -588,7 +588,7 @@ class _FindingCard extends ConsumerWidget {
                 children: [
                   _FindingPhotoStrip(finding: finding),
                   const SizedBox(height: AppSpacing.sm),
-                  _AiStatusLine(finding: finding, suggestion: suggestion),
+                  FindingAiStatusLine(finding: finding, suggestion: suggestion),
                   if (finding.defectNote != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -770,8 +770,15 @@ class _FindingPhotoStrip extends StatelessWidget {
   }
 }
 
-class _AiStatusLine extends ConsumerWidget {
-  const _AiStatusLine({required this.finding, required this.suggestion});
+/// A finding's live AI state with the one action that moves it on
+/// (Analyse, Add Note, Retry, Classify Manually). Shared by the area
+/// screen and AI Review, so a finding never shows without a way forward.
+class FindingAiStatusLine extends ConsumerWidget {
+  const FindingAiStatusLine({
+    super.key,
+    required this.finding,
+    required this.suggestion,
+  });
 
   final Finding finding;
   final AiSuggestion? suggestion;
@@ -900,7 +907,9 @@ class _AiStatusLine extends ConsumerWidget {
               color: AppColors.danger,
               text: 'AI analysis failed',
             ),
-            Row(
+            // Wrap, not Row: on a narrow card both actions must stay
+            // visible (a Row overflowed and clipped them).
+            Wrap(
               children: [
                 TextButton(
                   onPressed: () => ref

@@ -100,8 +100,9 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'Continue to Report is gated until every AI suggestion is resolved, '
-    'and review state survives navigating away and back',
+    'Continue to Report is never a dead end (QA #32/#33): it stays '
+    'tappable while a note explains the pending review, and review state '
+    'survives navigating away and back',
     (tester) async {
       final container = await _pumpToAiReview(tester);
 
@@ -111,7 +112,8 @@ void main() {
       var continueButton = tester.widget<FilledButton>(
         _within(find.widgetWithText(FilledButton, 'Continue to Report')),
       );
-      expect(continueButton.onPressed, isNull);
+      expect(continueButton.onPressed, isNotNull);
+      expect(_within(find.textContaining('1 to review')), findsOneWidget);
 
       // Navigate away (back to the inspection queue) and forward again
       // — review state (the generated suggestion) must persist rather
@@ -171,6 +173,7 @@ void main() {
         _within(find.widgetWithText(FilledButton, 'Continue to Report')),
       );
       expect(continueButton.onPressed, isNotNull);
+      expect(find.textContaining('to review'), findsNothing);
 
       await tester.tap(
         _within(find.widgetWithText(FilledButton, 'Continue to Report')),

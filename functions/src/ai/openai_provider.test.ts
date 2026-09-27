@@ -115,19 +115,77 @@ test("a 400 response fails immediately, without retrying", async (t) => {
   assert.equal(calls, 1);
 });
 
-test("a 500 response is retried once, then still fails if it keeps " +
-  "failing", async (t) => {
+test("a 500 response is retried with backoff, then fails as unavailable " +
+  "if it keeps failing (bounded: 3 calls, never infinite)", async (t) => {
   let calls = 0;
   stubFetch(t, async () => {
     calls++;
     return new Response("server error", {status: 500});
   });
-  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
+  const waits: number[] = [];
+  const provider = new OpenAiProvider(
+    "fake-key",
+    "gpt-5.6-terra",
+    [1500, 4000],
+    async (ms) => {
+      waits.push(ms);
+    }
+  );
   await assert.rejects(
     () => provider.classifyFinding(sampleInput(), noImages()),
-    AiProviderError
+    (error) => error instanceof AiProviderError &&
+      error.detail.kind === "unavailable" && error.detail.status === 500
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [1500, 4000]);
+});
+
+test("QA #29: a 429 insufficient_quota is classified, logged safely, and " +
+  "never retried (retrying cannot help)", async (t) => {
+  let calls = 0;
+  stubFetch(t, async () => {
+    calls++;
+    return new Response(JSON.stringify({
+      error: {
+        message: "You exceeded your current quota.",
+        type: "insufficient_quota",
+        code: "insufficient_quota",
+      },
+    }), {status: 429});
+  });
+  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra", [0, 0]);
+  await assert.rejects(
+    () => provider.classifyFinding(sampleInput(), noImages()),
+    (error) => error instanceof AiProviderError &&
+      error.detail.kind === "quotaExceeded" &&
+      error.detail.providerCode === "insufficient_quota" &&
+      !error.retryable &&
+      !error.message.includes("fake-key")
+  );
+  assert.equal(calls, 1);
+});
+
+test("a 429 rate limit (not quota) is retried and can then succeed", async (
+  t
+) => {
+  let calls = 0;
+  stubFetch(t, async () => {
+    calls++;
+    if (calls < 3) {
+      return new Response(
+        JSON.stringify({error: {code: "rate_limit_exceeded"}}),
+        {status: 429}
+      );
+    }
+    return okResponse(JSON.stringify({
+      catalogueEntryId: "floor.floor_tiles.03",
+      needsReview: false,
+    }));
+  });
+  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra", [0, 0]);
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(calls, 3);
+  assert.equal(result.catalogueEntryId, "floor.floor_tiles.03");
 });
 
 test("a 429 (rate limit) response is retried once and can succeed on " +
@@ -141,7 +199,7 @@ test("a 429 (rate limit) response is retried once and can succeed on " +
       needsReview: false,
     }));
   });
-  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
+  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra", [0, 0]);
   const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
   assert.equal(result.catalogueEntryId, "floor.floor_tiles.03");
@@ -159,30 +217,29 @@ test("a network/abort failure is treated as transient and retried", async (
       needsReview: false,
     }));
   });
-  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
+  const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra", [0, 0]);
   const {result} = await provider.classifyFinding(sampleInput(), noImages());
   assert.equal(calls, 2);
   assert.equal(result.catalogueEntryId, "door.door_hinge.03");
 });
 
-test("malformed (non-JSON) model output fails clearly instead of " +
-  "throwing an unrelated parse error", async (t) => {
+test("QA #28: malformed (non-JSON) model output becomes needsReview for " +
+  "the inspector, not a generic AI failure", async (t) => {
   stubFetch(t, async () => okResponse("not valid json {{{"));
   const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
-  await assert.rejects(
-    () => provider.classifyFinding(sampleInput(), noImages()),
-    AiProviderError
-  );
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(result.needsReview, true);
+  assert.equal(result.catalogueEntryId, undefined);
 });
 
-test("an empty model response body fails clearly", async (t) => {
+test("an empty model response becomes needsReview, not a failure", async (
+  t
+) => {
   stubFetch(t, async () =>
     new Response(JSON.stringify({choices: []}), {status: 200}));
   const provider = new OpenAiProvider("fake-key", "gpt-5.6-terra");
-  await assert.rejects(
-    () => provider.classifyFinding(sampleInput(), noImages()),
-    AiProviderError
-  );
+  const {result} = await provider.classifyFinding(sampleInput(), noImages());
+  assert.equal(result.needsReview, true);
 });
 
 test("a needsReview response with no catalogueEntryId is parsed " +

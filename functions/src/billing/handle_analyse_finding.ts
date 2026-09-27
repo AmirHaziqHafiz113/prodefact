@@ -500,6 +500,53 @@ export async function handleAnalyseFinding(params: {
 }
 
 /**
+ * The response for a provider failure. The job is already recorded as
+ * failed and its Credits released, so the outcome is definite: every
+ * code used here is one the app treats as final (it shows "failed" with
+ * Retry at once). `deadline-exceeded` is deliberately never used — the
+ * app reads that as "outcome unknown" (its own call timing out) and
+ * would park the finding as queued for minutes before re-checking.
+ * @param {unknown} error the provider error.
+ * @return {HttpsError} the error to throw to the app.
+ */
+function providerFailureError(error: unknown): HttpsError {
+  const kind = error instanceof AiProviderError ?
+    error.detail.kind ??
+      (error.message.includes("transient") ? "unavailable" : "rejected") :
+    "rejected";
+  switch (kind) {
+  case "quotaExceeded":
+    return new HttpsError(
+      "resource-exhausted",
+      "AI analysis is unavailable right now. You have not been charged. " +
+        "Please try again later or classify manually.",
+      {reason: "providerQuotaExceeded", retryable: false}
+    );
+  case "rateLimited":
+    return new HttpsError(
+      "resource-exhausted",
+      "AI is busy right now. You have not been charged. Please retry " +
+        "in a moment or classify manually.",
+      {reason: "providerRateLimited", retryable: true}
+    );
+  case "unavailable":
+    return new HttpsError(
+      "internal",
+      "AI analysis timed out. You have not been charged. Please retry " +
+        "or classify manually.",
+      {reason: "providerUnavailable", retryable: true}
+    );
+  default:
+    return new HttpsError(
+      "internal",
+      "AI analysis failed. You have not been charged. Please retry or " +
+        "classify manually.",
+      {reason: "providerRejected", retryable: true}
+    );
+  }
+}
+
+/**
  * Advances a claimed job from its current durable stage to a final
  * state. Each stage is written before the next begins, so a takeover
  * after a crash resumes exactly where this left off.
@@ -626,8 +673,15 @@ async function runClaimedJob(params: {
       // A definite provider failure: no result exists, so nothing is
       // charged. The release refuses to apply if this reservation was
       // somehow already settled.
+      const detail = error instanceof AiProviderError ? error.detail : {};
       console.error("AI provider request failed", {
         provider: provider.id,
+        model: levelConfig.model,
+        idempotencyKey,
+        findingId: input.findingId,
+        kind: detail.kind ?? null,
+        status: detail.status ?? null,
+        providerCode: detail.providerCode ?? null,
         message: error instanceof Error ? error.message : "unknown error",
       });
       if (job.reservationId) {
@@ -640,18 +694,8 @@ async function runClaimedJob(params: {
         });
         console.info("credit_released", {idempotencyKey});
       }
-      await failDefinitively("providerFailed");
-
-      const isTimeout = error instanceof AiProviderError &&
-        error.message.toLowerCase().includes("transient");
-      throw new HttpsError(
-        isTimeout ? "deadline-exceeded" : "internal",
-        isTimeout ?
-          "AI analysis timed out. You have not been charged. Please " +
-            "retry or classify manually." :
-          "AI analysis failed. You have not been charged. Please retry " +
-            "or classify manually."
-      );
+      await failDefinitively(`provider_${detail.kind ?? "failed"}`);
+      throw providerFailureError(error);
     }
 
     const normalized = validateAndNormalize(input, result);

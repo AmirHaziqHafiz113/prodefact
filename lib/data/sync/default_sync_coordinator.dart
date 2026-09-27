@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 import '../../core/inspection/inspection_domain.dart';
 
 /// Pushes one local session (sections, findings, evidence metadata and
@@ -25,6 +27,62 @@ class DefaultSyncCoordinator implements SyncCoordinator {
   /// Guards against two concurrent `syncSession` calls for the same
   /// session — see `docs/production_readiness.md` ("Concurrency").
   final Set<String> _inFlight = {};
+  final Set<String> _findingsInFlight = {};
+
+  @override
+  Future<SyncResult> syncFindingEvidence(
+    String sessionId,
+    String findingId,
+  ) async {
+    final key = '$sessionId/$findingId';
+    if (!_findingsInFlight.add(key)) {
+      return const SyncResult.failure('This finding is already uploading.');
+    }
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return const SyncResult.unauthenticated();
+      final session = await _local.loadSession(sessionId);
+      if (session == null) return const SyncResult.sessionNotFound();
+      if (session.ownerUid != null && session.ownerUid != user.uid) {
+        return const SyncResult.unauthenticated();
+      }
+      if (session.ownerUid == null) {
+        await _local.setSessionOwner(session.id, user.uid);
+      }
+      final finding = session.findings.firstWhereOrNull(
+        (f) => f.id == findingId,
+      );
+      if (finding == null) {
+        return const SyncResult.failure('That finding no longer exists.');
+      }
+
+      await _cloud.pushSession(user.uid, session);
+      await _cloud.pushFinding(user.uid, session.id, finding);
+      for (final evidence in finding.evidence) {
+        if (evidence.syncStatus == SyncStatus.synced) continue;
+        final storagePath = await _cloud.uploadEvidenceFile(
+          user.uid,
+          session.id,
+          evidence,
+        );
+        final synced = evidence.copyWith(
+          syncStatus: SyncStatus.synced,
+          storagePath: storagePath,
+        );
+        await _cloud.pushEvidenceMetadata(user.uid, session.id, synced);
+        await _local.updateEvidenceSyncState(
+          evidence.id,
+          syncStatus: SyncStatus.synced,
+          storagePath: storagePath,
+        );
+      }
+      return const SyncResult.success();
+    } catch (error) {
+      return SyncResult.failure(error.toString());
+    } finally {
+      _findingsInFlight.remove(key);
+    }
+  }
 
   @override
   Future<SyncResult> syncSession(String sessionId) async {

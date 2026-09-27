@@ -871,6 +871,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           : null,
       updatedAt: now,
     );
+    final saveTimer = Stopwatch()..start();
     final findingPersisted = _persist(
       () async {
         if (areaWasUntouched) {
@@ -882,7 +883,10 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         }
         await _repository.saveFinding(session.id, finding);
         await _repository.addEvidence(session.id, evidence);
-        AppLogger.info('finding_saved_local finding=${finding.id}');
+        AppLogger.info(
+          'finding_saved_local finding=${finding.id} '
+          'ms=${saveTimer.elapsedMilliseconds}',
+        );
       },
       previous: session,
       action: 'save finding',
@@ -1020,45 +1024,42 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
   }
 
-  /// The evidence sync currently running for AI, and the single
-  /// follow-up sync queued behind it, per session.
-  final Map<String, Future<SyncResult>> _aiSyncRunning = {};
-  final Map<String, Future<SyncResult>> _aiSyncFollowUp = {};
+  /// How long to wait before re-trying a finding's evidence upload
+  /// after a failure while online (QA #27). The queue wakes itself on
+  /// these timers; no reconnect or app reopen is needed. After the last
+  /// delay the finding moves to `failed`, where Retry is offered.
+  static const _uploadRetryDelays = [
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 45),
+    Duration(minutes: 2),
+  ];
 
-  /// Uploads a session's pending evidence ahead of AI analysis.
-  ///
-  /// `SyncCoordinator.syncSession` allows one sync per session and
-  /// answers any concurrent caller with a failure ("already running").
-  /// Calling it once per finding meant that when several findings were
-  /// enqueued together (two quick saves, or session-load recovery of
-  /// several interrupted findings) all but one were parked in `queued`
-  /// until the next reconnect or reopen. Instead, a caller arriving
-  /// while a sync runs waits for it and then shares one follow-up sync,
-  /// which also covers evidence saved after the running sync started.
-  Future<SyncResult> _syncEvidenceForAi(String sessionId) {
-    final running = _aiSyncRunning[sessionId];
-    if (running == null) {
-      final tracked = ref
-          .read(syncCoordinatorProvider)
-          .syncSession(sessionId)
-          // Block body on purpose: an arrow would return the removed
-          // entry — this very future — and `whenComplete` waits for a
-          // returned future, so the sync would wait on itself forever.
-          .whenComplete(() {
-            _aiSyncRunning.remove(sessionId);
-          });
-      _aiSyncRunning[sessionId] = tracked;
-      return tracked;
+  /// Consecutive upload failures per finding in this app session.
+  final Map<String, int> _uploadFailures = {};
+
+  void _onEvidenceUploadFailed(
+    String sessionId,
+    String findingId,
+    String reason,
+  ) {
+    final failures = (_uploadFailures[findingId] ?? 0) + 1;
+    if (failures > _uploadRetryDelays.length) {
+      _uploadFailures.remove(findingId);
+      AppLogger.info(
+        'evidence_upload_failed finding=$findingId attempts=$failures',
+      );
+      _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
+      return;
     }
-    return _aiSyncFollowUp[sessionId] ??= running
-        .then<void>((_) {}, onError: (Object _) {})
-        .then((_) {
-          _aiSyncFollowUp.remove(sessionId);
-          if (!ref.mounted) {
-            return const SyncResult.failure('Session closed.');
-          }
-          return _syncEvidenceForAi(sessionId);
-        });
+    _uploadFailures[findingId] = failures;
+    final delay = _uploadRetryDelays[failures - 1];
+    AppLogger.info(
+      'evidence_upload_retry finding=$findingId attempt=$failures '
+      'inSeconds=${delay.inSeconds} reason=$reason',
+    );
+    _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.queued);
+    _scheduleAiReplay(sessionId, findingId, DateTime.now().add(delay));
   }
 
   /// Persists [status] (and mirrors it locally) without touching the
@@ -1292,33 +1293,38 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           AiFindingStatus.uploading,
         );
         AppLogger.info('evidence_upload_started finding=$findingId');
+        final upload = Stopwatch()..start();
         try {
-          final syncResult = await _syncEvidenceForAi(sessionId);
+          // Only this finding's photos, with no session-wide lock: a
+          // second or third finding never waits behind (or gets
+          // parked by) another finding's upload (QA #27).
+          final syncResult = await ref
+              .read(syncCoordinatorProvider)
+              .syncFindingEvidence(sessionId, findingId);
           if (!ref.mounted) return;
           if (!syncResult.isSuccess) {
-            // Offline or a transient sync failure — back to `queued`
-            // rather than `failed`, since nothing about the
-            // classification itself was attempted yet. Reconnect or the
-            // next session load resumes it.
-            _setFindingAiStatusDurable(
+            // Nothing about the classification was attempted yet: back
+            // to `queued`, with a self-waking retry (never parked until
+            // a reconnect or reopen), then `failed` after a few tries.
+            _onEvidenceUploadFailed(
               sessionId,
               findingId,
-              AiFindingStatus.queued,
+              syncResult.outcome.name,
             );
             return;
           }
-          AppLogger.info('evidence_upload_completed finding=$findingId');
+          _uploadFailures.remove(findingId);
+          AppLogger.info(
+            'evidence_upload_completed finding=$findingId '
+            'ms=${upload.elapsedMilliseconds}',
+          );
         } catch (error) {
           AppLogger.warning(
             'Evidence sync before AI classification failed',
             error,
           );
           if (!ref.mounted) return;
-          _setFindingAiStatusDurable(
-            sessionId,
-            findingId,
-            AiFindingStatus.queued,
-          );
+          _onEvidenceUploadFailed(sessionId, findingId, 'exception');
           return;
         }
       }
@@ -1327,9 +1333,14 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       // the idempotency key right before the request is sent.
       _setFindingAiStatusLocal(findingId, AiFindingStatus.analyzing);
 
+      final analysis = Stopwatch()..start();
       final result = await ref
           .read(aiClassificationCoordinatorProvider)
           .classifyFinding(sessionId, findingId, aiLevel: aiLevel);
+      AppLogger.info(
+        'ai_job_client_finished finding=$findingId '
+        'outcome=${result.outcome.name} ms=${analysis.elapsedMilliseconds}',
+      );
 
       if (!ref.mounted) return;
       // Reload from the durable store rather than patching in-memory

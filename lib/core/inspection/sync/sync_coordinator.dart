@@ -9,4 +9,11 @@ import 'sync_result.dart';
 /// local edit with a stale cloud one.
 abstract class SyncCoordinator {
   Future<SyncResult> syncSession(String sessionId);
+
+  /// Uploads just what AI analysis of one finding needs: the finding
+  /// document and its not-yet-uploaded photos (plus their metadata).
+  /// Unlike [syncSession] there is no session-wide lock, so several
+  /// findings can prepare for AI at the same time without one parking
+  /// the others (QA #27).
+  Future<SyncResult> syncFindingEvidence(String sessionId, String findingId);
 }

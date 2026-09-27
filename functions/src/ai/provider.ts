@@ -27,14 +27,49 @@ export interface AiProvider {
   ): Promise<ProviderClassification>;
 }
 
+/**
+ * Why a provider call failed, as far as the backend can tell:
+ * - `rateLimited`: 429 rate limiting; worth retrying shortly.
+ * - `quotaExceeded`: 429 `insufficient_quota`; the provider account is
+ *   out of credit, so retrying cannot help until billing is fixed.
+ * - `unavailable`: 5xx, network failure, or timeout.
+ * - `rejected`: any other non-2xx (bad request, auth, unknown model).
+ */
+export type AiProviderFailureKind =
+  | "rateLimited"
+  | "quotaExceeded"
+  | "unavailable"
+  | "rejected";
+
+/** Safe, loggable facts about a provider failure: never keys or bodies. */
+export interface AiProviderFailureDetail {
+  kind?: AiProviderFailureKind;
+  /** The HTTP status, when a response arrived. */
+  status?: number;
+  /** The provider's own error code/type (e.g. `insufficient_quota`). */
+  providerCode?: string;
+}
+
 /** Thrown by a provider adapter for any request/response failure. */
 export class AiProviderError extends Error {
   /**
    * @param {string} message a human-readable description.
    * @param {unknown} cause the underlying error, if any.
+   * @param {AiProviderFailureDetail} detail safe, loggable facts.
    */
-  constructor(message: string, public readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+    public readonly detail: AiProviderFailureDetail = {}
+  ) {
     super(message);
     this.name = "AiProviderError";
+  }
+
+  /** @return {boolean} whether a retry shortly after could succeed. */
+  get retryable(): boolean {
+    return this.detail.kind === "rateLimited" ||
+      this.detail.kind === "unavailable" ||
+      (this.detail.kind === undefined && this.message.includes("transient"));
   }
 }

@@ -144,16 +144,23 @@ class ScriptedBillingService implements BillingService {
   Future<CommercialConfig> getCommercialConfig() =>
       _inner.getCommercialConfig();
 
+  /// When set, price checks wait for this before answering.
+  Completer<void>? estimateGate;
+
   @override
   Future<AnalysisEstimate> estimateFindingAnalysis({
     required String inspectionId,
     required String findingId,
     required AiLevel aiLevel,
-  }) => _inner.estimateFindingAnalysis(
-    inspectionId: inspectionId,
-    findingId: findingId,
-    aiLevel: aiLevel,
-  );
+  }) async {
+    final pending = estimateGate;
+    if (pending != null) await pending.future;
+    return _inner.estimateFindingAnalysis(
+      inspectionId: inspectionId,
+      findingId: findingId,
+      aiLevel: aiLevel,
+    );
+  }
 
   @override
   Future<TopUpIntent> createTopUpIntent(double amountMyr) =>
