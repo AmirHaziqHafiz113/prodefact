@@ -98,6 +98,12 @@ class AiSuggestion {
 
   bool get isResolved => status != AiSuggestionStatus.pending;
 
+  /// Accepted by the system (a valid, confident AI match) rather than
+  /// by the inspector — an inspector decision always stamps
+  /// [reviewedAt].
+  bool get isAutoAccepted =>
+      status == AiSuggestionStatus.accepted && reviewedAt == null;
+
   /// Whether [finalCatalogueEntryId] is a real, chosen entry (as
   /// opposed to null/empty).
   bool get hasFinalEntry =>

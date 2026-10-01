@@ -8,6 +8,7 @@ import 'package:prodefact/features/home_inspection/providers/active_session_prov
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/test_repository.dart';
+import 'support/uncertain_ai_billing_service.dart';
 
 Finder _within(Finder matching) =>
     find.descendant(of: find.byType(Scaffold).last, matching: matching);
@@ -112,7 +113,10 @@ void main() {
     tester.view.physicalSize = const Size(390, 2600);
     tester.view.devicePixelRatio = 1.0;
 
-    final container = ProviderContainer(overrides: testOverrides());
+    // Uncertain AI keeps the full Accept/Change/Reject card on screen.
+    final container = ProviderContainer(
+      overrides: testOverrides(billingService: UncertainAiBillingService()),
+    );
     addTearDown(container.dispose);
 
     await tester.pumpWidget(

@@ -51,6 +51,10 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
   bool cancelNextPick;
   int captureCount = 0;
 
+  /// How many photos the next gallery multi-pick returns (the
+  /// inspector's selection), capped at the requested maximum.
+  int galleryPickCount = 1;
+
   @override
   Future<CapturedEvidence?> captureImage({
     required String findingId,
@@ -62,6 +66,22 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
       filePath: '/fake/evidence/$findingId/$captureCount.jpg',
       source: source,
     );
+  }
+
+  @override
+  Future<List<CapturedEvidence>> captureImages({
+    required String findingId,
+    required EvidenceSource source,
+    int maxImages = 3,
+  }) async {
+    if (cancelNextPick) return const [];
+    final count = source == EvidenceSource.camera
+        ? 1
+        : galleryPickCount.clamp(0, maxImages);
+    return [
+      for (var i = 0; i < count; i++)
+        (await captureImage(findingId: findingId, source: source))!,
+    ];
   }
 }
 

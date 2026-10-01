@@ -66,10 +66,18 @@ class AiProcessingProgress {
 /// still pending review. Distinct from [AiProcessingProgress] — AI can
 /// finish analysing every finding while review is still 0%.
 class AiReviewProgress {
-  const AiReviewProgress({required this.total, required this.resolved});
+  const AiReviewProgress({
+    required this.total,
+    required this.resolved,
+    this.autoAccepted = 0,
+  });
 
   final int total;
   final int resolved;
+
+  /// Resolved by a confident AI match rather than an inspector tap
+  /// (included in [resolved]).
+  final int autoAccepted;
 
   int get pending => total - resolved;
   double get fraction => total == 0 ? 0 : resolved / total;
@@ -82,6 +90,7 @@ class AiReviewProgress {
     return AiReviewProgress(
       total: suggestions.length,
       resolved: suggestions.where((s) => s.isResolved).length,
+      autoAccepted: suggestions.where((s) => s.isAutoAccepted).length,
     );
   }
 }
@@ -111,7 +120,8 @@ enum AreaVisitState {
 
 /// The [AreaVisitState] of [section] within [session].
 AreaVisitState areaVisitStateOf(InspectionSession session, Section section) {
-  final status = session.sectionStatuses[section.id] ?? SectionStatus.notStarted;
+  final status =
+      session.sectionStatuses[section.id] ?? SectionStatus.notStarted;
   if (status == SectionStatus.completed) return AreaVisitState.completed;
   if (status == SectionStatus.inProgress) return AreaVisitState.started;
   final hasFinding = session.findings.any((f) => f.sectionId == section.id);

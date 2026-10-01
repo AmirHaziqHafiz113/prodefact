@@ -9,6 +9,7 @@ import 'package:prodefact/features/home_inspection/providers/new_inspection_draf
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import '../support/test_repository.dart';
+import '../support/uncertain_ai_billing_service.dart';
 
 /// AI Review's evidence photo is shown prominently, and Accept/Change/
 /// Reject are visually distinct tiers — Accept (primary, filled),
@@ -19,7 +20,9 @@ void main() {
     'a pending suggestion shows its evidence photo, and Accept/Change/'
     'Reject render as filled/outlined/text respectively',
     (tester) async {
-      final container = ProviderContainer(overrides: testOverrides());
+      final container = ProviderContainer(
+        overrides: testOverrides(billingService: UncertainAiBillingService()),
+      );
       addTearDown(container.dispose);
 
       await tester.runAsync(() async {

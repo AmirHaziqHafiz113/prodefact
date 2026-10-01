@@ -8,6 +8,7 @@ import 'package:prodefact/features/home_inspection/providers/physical_inspection
 
 import '../support/fake_report_services.dart';
 import '../support/test_repository.dart';
+import '../support/uncertain_ai_billing_service.dart';
 
 /// Resolves whatever suggestion is pending on the active session,
 /// tolerating either a confident (`accept`) or `needsReview`
@@ -60,6 +61,8 @@ void main() {
       overrides: testOverrides(
         reportRenderer: renderer,
         reportFileStore: fileStore,
+        // Uncertain, so review stays incomplete until resolved.
+        billingService: UncertainAiBillingService(),
       ),
     );
     addTearDown(container.dispose);

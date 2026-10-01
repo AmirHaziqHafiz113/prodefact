@@ -99,7 +99,8 @@ Future<void> showAnalyseApprovalDialog({
 
   ref
       .read(activeSessionProvider.notifier)
-      .approveAndRunAnalysis(findingId, aiLevel: kFieldAnalysisAiLevel);
+      // Exactly the level that was priced (the saved preference).
+      .approveAndRunAnalysis(findingId, aiLevel: estimate.aiLevel);
 }
 
 Future<void> _showIneligibleDialog(
@@ -201,7 +202,14 @@ class _EstimateApprovalDialog extends ConsumerWidget {
         : estimate.maximumCredits;
 
     return AlertDialog(
-      title: const Text('Smart AI'),
+      // Shows which level is used (set in Profile); never a selector.
+      title: Text(
+        '${switch (estimate.aiLevel) {
+          AiLevel.fast => 'Fast',
+          AiLevel.smart => 'Smart',
+          AiLevel.expert => 'Expert',
+        }} AI',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

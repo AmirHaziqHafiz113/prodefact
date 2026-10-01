@@ -252,4 +252,13 @@ class _PermissionDeniedCaptureService implements EvidenceCaptureService {
   }) {
     throw Exception('Camera permission denied');
   }
+
+  @override
+  Future<List<CapturedEvidence>> captureImages({
+    required String findingId,
+    required EvidenceSource source,
+    int maxImages = 3,
+  }) {
+    throw Exception('Photo library permission denied');
+  }
 }

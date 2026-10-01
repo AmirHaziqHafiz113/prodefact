@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
-import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import '../support/test_repository.dart';
+import '../support/uncertain_ai_billing_service.dart';
 
 /// Lets any fire-and-forget AI classification queued by
 /// `saveCameraFinding` actually run before assertions.
@@ -22,7 +22,8 @@ Future<void> _pumpAiQueue() => Future<void>.delayed(Duration.zero);
 
 void main() {
   test(
-    'AI review overview: one suggestion is generated and starts pending',
+    'AI review overview: one suggestion is generated and, as a valid '
+    'catalogue match, is accepted automatically',
     () async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -48,7 +49,8 @@ void main() {
 
       final session = container.read(activeSessionProvider)!;
       expect(session.aiSuggestions, hasLength(1));
-      expect(session.aiSuggestions.single.status, AiSuggestionStatus.pending);
+      expect(session.aiSuggestions.single.status, AiSuggestionStatus.accepted);
+      expect(session.aiSuggestions.single.isAutoAccepted, isTrue);
     },
   );
 
@@ -243,7 +245,7 @@ void main() {
     // durable save, so the runs no longer overlap that way.
     final container = ProviderContainer(
       overrides: testOverrides(
-        billingService: FakeBillingService(initialBalanceCredits: 5000),
+        billingService: UncertainAiBillingService(initialBalanceCredits: 5000),
       ),
     );
     addTearDown(container.dispose);

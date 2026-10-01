@@ -65,7 +65,50 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
       );
     }
     if (picked == null) return null;
+    return CapturedEvidence(
+      filePath: await _copyIntoEvidenceDir(findingId, picked),
+      source: source,
+    );
+  }
 
+  @override
+  Future<List<CapturedEvidence>> captureImages({
+    required String findingId,
+    required EvidenceSource source,
+    int maxImages = 3,
+  }) async {
+    if (source == EvidenceSource.camera) {
+      final single = await captureImage(findingId: findingId, source: source);
+      return single == null ? const [] : [single];
+    }
+    final List<XFile> picked;
+    try {
+      // Same quality bound as a single pick: whole photo, no crop.
+      picked = await _picker.pickMultiImage(
+        limit: maxImages,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 90,
+      );
+    } catch (error) {
+      throw EvidenceCaptureException(
+        'Could not access the photo library ($error).',
+      );
+    }
+    final captured = <CapturedEvidence>[];
+    // Some platforms ignore `limit`; never attach more than asked.
+    for (final file in picked.take(maxImages)) {
+      captured.add(
+        CapturedEvidence(
+          filePath: await _copyIntoEvidenceDir(findingId, file),
+          source: source,
+        ),
+      );
+    }
+    return captured;
+  }
+
+  Future<String> _copyIntoEvidenceDir(String findingId, XFile picked) async {
     try {
       final documentsDir = await getApplicationDocumentsDirectory();
       final evidenceDir = Directory(
@@ -79,8 +122,7 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
         '${DateTime.now().microsecondsSinceEpoch}${extension.isEmpty ? '.jpg' : extension}',
       );
       await File(picked.path).copy(destinationPath);
-
-      return CapturedEvidence(filePath: destinationPath, source: source);
+      return destinationPath;
     } catch (error) {
       throw EvidenceCaptureException('Could not save that photo ($error).');
     }

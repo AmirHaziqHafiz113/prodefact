@@ -14,7 +14,8 @@ import {AiLevel} from "./types";
 
 /**
  * The OpenAI model lineup (2026-10-01): Fast gpt-6-luna, Smart
- * gpt-5.6-terra, Expert gpt-6.1-sol, at OpenAI's published prices, with
+ * gpt-6.1-sol, Expert gpt-6.1-sol (no GPT-6 Terra exists yet), at
+ * OpenAI's published prices, with
  * the customer markup and Credit conversion unchanged.
  */
 
@@ -25,7 +26,7 @@ type Price = {model: string; inPerM: number; outPerM: number};
 const LINEUP: Record<AiLevel, Price> =
   {
     fast: {model: "gpt-6-luna", inPerM: 0.1, outPerM: 0.5},
-    smart: {model: "gpt-5.6-terra", inPerM: 2, outPerM: 12},
+    smart: {model: "gpt-6.1-sol", inPerM: 2, outPerM: 10},
     expert: {model: "gpt-6.1-sol", inPerM: 2, outPerM: 10},
   };
 
@@ -160,7 +161,7 @@ test("7. estimateFindingAnalysis and analyseFinding resolve the same " +
     assert.equal(result.aiLevel, level);
     assert.ok(result.creditsCharged <= estimate.maximumCredits, level);
   }
-  assert.deepEqual(models, ["gpt-6-luna", "gpt-5.6-terra", "gpt-6.1-sol"]);
+  assert.deepEqual(models, ["gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-sol"]);
 });
 
 test("11 + 12. the adapter sends the selected model with an image, as " +

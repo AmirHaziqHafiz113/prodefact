@@ -184,12 +184,15 @@ guessed):
 | Level  | Provider | Model            | Provider price (input / output, per 1M tokens) |
 |--------|----------|------------------|------------------------------------------------|
 | Fast   | openai   | `gpt-6-luna`     | $0.10 / $0.50                                  |
-| Smart  | openai   | `gpt-5.6-terra`  | $2.00 / $12.00                                 |
+| Smart  | openai   | `gpt-6.1-sol`    | $2.00 / $10.00                                 |
 | Expert | openai   | `gpt-6.1-sol`    | $2.00 / $10.00                                 |
 
-(Model ids and prices re-checked against OpenAI's model pages on
-2026-10-01. All three support Chat Completions, image input and
-structured output.)
+Lineup v3 (`MODEL_LINEUP_VERSION = 3`), checked against OpenAI's model
+pages on 2026-10-01. The requested "GPT-6.1 Luna" and "GPT-6 Terra" do
+not exist: Fast uses GPT-6 Luna, and Expert uses GPT-6.1 Sol until a
+real Expert model is chosen. `gpt-5.6-terra` is retired from the active
+lineup. Smart is the default; each user can change their level in
+Profile → AI Analysis Preference.
 
 This mapping lives in `pricing/config` (Firestore), not in Flutter or
 even hardcoded permanently in the Functions bundle beyond the

@@ -22,4 +22,14 @@ abstract class EvidenceCaptureService {
     required String findingId,
     required EvidenceSource source,
   });
+
+  /// Acquires several photos of the same defect in one action (QA:
+  /// multi-image). From the gallery the inspector can select up to
+  /// [maxImages] at once; the camera still takes a single shot. Returns
+  /// an empty list if cancelled.
+  Future<List<CapturedEvidence>> captureImages({
+    required String findingId,
+    required EvidenceSource source,
+    int maxImages = 3,
+  });
 }

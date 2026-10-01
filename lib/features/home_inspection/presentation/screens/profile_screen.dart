@@ -149,16 +149,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            // Read-only (QA #24): every field analysis uses Smart AI.
-            // The old Fast/Smart/Expert preference here was never read
-            // when an inspection started, so it was a dead control.
+            // The one place the AI level is chosen: it applies silently
+            // to every analysis (never asked per finding, at upload, or
+            // in the approval dialog). Saved as soon as it is tapped.
             _SectionCard(
               icon: Icons.psychology_outlined,
-              title: 'AI Analysis',
-              subtitle: 'Used for every finding',
-              child: Text(
-                'Smart AI: ${_aiLevelDescription(kFieldAnalysisAiLevel)}',
-                style: Theme.of(context).textTheme.bodySmall,
+              title: 'AI Analysis Preference',
+              subtitle: 'Used for every finding you analyse',
+              child: Column(
+                children: [
+                  for (final level in AiLevel.values)
+                    ListTile(
+                      key: ValueKey('ai-pref-${level.name}'),
+                      contentPadding: EdgeInsets.zero,
+                      selected:
+                          (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level,
+                      leading: Icon(
+                        (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                      ),
+                      title: Text(_aiLevelLabel(level)),
+                      subtitle: Text(_aiLevelPreferenceCopy(level)),
+                      onTap: () => _setAiPreference(level),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -257,17 +272,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  String _aiLevelDescription(AiLevel level) => switch (level) {
-    AiLevel.fast =>
-      'Fastest results — best for straightforward inspections where '
-          'speed matters most.',
-    AiLevel.smart =>
-      'Balanced speed and thoroughness — the right default for most '
-          'inspections.',
-    AiLevel.expert =>
-      'Most thorough analysis — best for complex properties or when '
-          'accuracy matters most.',
+  String _aiLevelLabel(AiLevel level) => switch (level) {
+    AiLevel.fast => 'Fast',
+    AiLevel.smart => 'Smart',
+    AiLevel.expert => 'Expert',
   };
+
+  String _aiLevelPreferenceCopy(AiLevel level) => switch (level) {
+    AiLevel.fast => 'Fastest and lowest cost',
+    AiLevel.smart => 'Recommended · Default',
+    AiLevel.expert => 'Best for difficult or unclear defects',
+  };
+
+  /// Persists only the AI level, keeping the stored names as they are
+  /// (unsaved edits to the text fields are not saved by this tap).
+  Future<void> _setAiPreference(AiLevel level) async {
+    setState(() => _defaultAiLevel = level);
+    final repository = ref.read(inspectionRepositoryProvider);
+    final stored = await repository.loadUserProfile();
+    await repository.saveUserProfile(
+      UserProfile(
+        companyName: stored.companyName,
+        inspectorName: stored.inspectorName,
+        defaultAiLevel: level,
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('AI analysis set to ${_aiLevelLabel(level)}.')),
+    );
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);

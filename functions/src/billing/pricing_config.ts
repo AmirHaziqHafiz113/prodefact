@@ -93,9 +93,14 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   creditsPerMyr: 100,
   markupMultiplier: 2.0,
   aiLevels: {
-    // Provider prices from OpenAI's model pages (checked 2026-10-01):
-    // GPT-6 Luna $0.10 / $0.50, GPT-5.6 Terra $2.00 / $12.00,
-    // GPT-6.1 Sol $2.00 / $10.00 per 1M input / output tokens.
+    // Lineup v3 (2026-10-01). Provider prices per 1M input / output
+    // tokens from OpenAI's model pages: GPT-6 Luna $0.10 / $0.50,
+    // GPT-6.1 Sol $2.00 / $10.00.
+    // Requested "GPT-6.1 Luna" does not exist, so Fast uses GPT-6 Luna.
+    // Requested Expert "GPT-6 Terra" does not exist either (the only
+    // Terra is gpt-5.6-terra, deliberately retired from the lineup), so
+    // Expert uses GPT-6.1 Sol until a real model is chosen. Change it
+    // via pricing/config (modelLineupVersion >= 3) without a redeploy.
     fast: {
       provider: "openai",
       model: "gpt-6-luna",
@@ -108,9 +113,9 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     },
     smart: {
       provider: "openai",
-      model: "gpt-5.6-terra",
+      model: "gpt-6.1-sol",
       providerCostPerKInputTokensUsd: 0.002,
-      providerCostPerKOutputTokensUsd: 0.012,
+      providerCostPerKOutputTokensUsd: 0.01,
       estimatedInputTokens: 3000,
       estimatedOutputTokens: 200,
       label: "Smart",
@@ -145,13 +150,13 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 const PRICING_DOC_PATH = ["pricing", "config"] as const;
 
 /**
- * The model lineup the deployed code expects (2 = the 2026-10-01
- * lineup: gpt-6-luna / gpt-5.6-terra / gpt-6.1-sol). A persisted
+ * The model lineup the deployed code expects (3 = the 2026-10-01
+ * lineup: gpt-6-luna / gpt-6.1-sol / gpt-6.1-sol). A persisted
  * `pricing/config` only overrides model ids and provider prices if it
  * declares `modelLineupVersion` at or above this — so a document written
  * for an older lineup can never silently revert a newly deployed one.
  */
-export const MODEL_LINEUP_VERSION = 2;
+export const MODEL_LINEUP_VERSION = 3;
 
 export interface PricingConfigResolution {
   config: PricingConfig;

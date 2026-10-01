@@ -190,6 +190,9 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         .toList();
     final needsReview = classification.needsReview || validEntryId == null;
 
+    // A confident, valid catalogue match is accepted automatically —
+    // report-ready without a tap. The inspector can still Change or
+    // Reject it in AI Review. Anything uncertain stays pending.
     await _local.saveAiSuggestion(
       AiSuggestion(
         id: _suggestionIdFor(finding.id),
@@ -202,6 +205,9 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         suggestedShortReason: classification.shortReason,
         suggestedCandidateEntryIds: validCandidates,
         finalCatalogueEntryId: validEntryId,
+        status: needsReview
+            ? AiSuggestionStatus.pending
+            : AiSuggestionStatus.accepted,
       ),
     );
     await _local.finishFindingAiAttempt(

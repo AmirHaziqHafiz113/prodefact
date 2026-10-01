@@ -144,7 +144,9 @@ void main() {
       expect(suggestion.sessionId, session.id);
       expect(suggestion.findingId, finding.id);
       expect(suggestion.providerId, isNotEmpty);
-      expect(suggestion.status, AiSuggestionStatus.pending);
+      // A confident, valid match is accepted automatically.
+      expect(suggestion.status, AiSuggestionStatus.accepted);
+      expect(suggestion.isAutoAccepted, isTrue);
       // "Master Bathroom" (a plumbing area) deterministically matches the
       // fake AI's sanitary_fitting keyword — a genuinely valid catalogue
       // entry, never a fabricated one.

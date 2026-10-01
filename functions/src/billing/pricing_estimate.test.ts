@@ -108,7 +108,12 @@ test("8. no pricing/config document: the deployed defaults apply", () => {
 test("9. the deployed model lineup is intact", () => {
   const levels = resolvePricingConfig(undefined).config.aiLevels;
   assert.equal(levels.fast.model, "gpt-6-luna");
-  assert.equal(levels.smart.model, "gpt-5.6-terra");
+  assert.equal(levels.smart.model, "gpt-6.1-sol");
+  assert.equal(
+    Object.values(levels).some((l) => l.model === "gpt-5.6-terra"),
+    false,
+    "gpt-5.6-terra is retired from the active lineup"
+  );
   assert.equal(levels.expert.model, "gpt-6.1-sol");
 });
 

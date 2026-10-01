@@ -591,6 +591,10 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       previous: session,
       action: 'complete physical inspection',
     );
+    final completed = state;
+    if (ref.mounted && completed != null && completed.id == session.id) {
+      state = _completeAiReviewIfSettled(completed);
+    }
     ref.invalidate(sessionSummariesProvider);
     return true;
   }
@@ -715,6 +719,45 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
+  /// Captures the photos for a **new** finding in one action (QA:
+  /// multi-image): from the gallery the inspector can pick up to
+  /// [maxImages] photos of the same defect; the camera takes one. All
+  /// share one pending finding id and become that single finding's
+  /// evidence when saved. Empty if cancelled or on a capture failure
+  /// (surfaced via [activeSessionErrorProvider]).
+  Future<List<CapturedFindingPhoto>> captureFindingPhotos({
+    required EvidenceSource source,
+    int maxImages = 3,
+  }) async {
+    final pendingFindingId = 'finding_${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final captured = await ref
+          .read(evidenceCaptureServiceProvider)
+          .captureImages(
+            findingId: pendingFindingId,
+            source: source,
+            maxImages: maxImages,
+          );
+      return [
+        for (final c in captured)
+          CapturedFindingPhoto(
+            pendingFindingId: pendingFindingId,
+            filePath: c.filePath,
+            source: c.source,
+          ),
+      ];
+    } catch (error, stackTrace) {
+      AppLogger.error('Finding photo capture failed', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set(
+            'Could not add those photos. Check camera/photo permissions and '
+            'try again.',
+          );
+      return const [];
+    }
+  }
+
   /// Discards a photo captured via [captureFindingPhoto] that was never
   /// saved — deletes the temp file; nothing else to roll back, since
   /// nothing was ever persisted to the database.
@@ -824,6 +867,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     required String sectionId,
     required CapturedFindingPhoto photo,
     String? note,
+    List<CapturedFindingPhoto> additionalPhotos = const [],
   }) {
     final session = state;
     if (session == null) {
@@ -838,13 +882,27 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       createdAt: now,
       source: photo.source,
     );
+    // Further photos of the same defect (gallery multi-select) become
+    // more evidence on this one finding, never separate findings.
+    final evidenceList = [
+      evidence,
+      for (final (i, extra) in additionalPhotos.indexed)
+        Evidence(
+          id: 'evidence_${now.microsecondsSinceEpoch}_${i + 1}',
+          findingId: photo.pendingFindingId,
+          filePath: extra.filePath,
+          annotatedFilePath: extra.annotatedFilePath,
+          createdAt: now,
+          source: extra.source,
+        ),
+    ];
     final draft = Finding(
       id: photo.pendingFindingId,
       sectionId: sectionId,
       description: _orNull(note),
       createdAt: now,
       updatedAt: now,
-      evidence: [evidence],
+      evidence: evidenceList,
     );
     // AI waits for a quick defect note (QA #16); saving never does.
     final startsAi = session.autoAnalyseEnabled && draft.hasDefectNote;
@@ -882,7 +940,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           );
         }
         await _repository.saveFinding(session.id, finding);
-        await _repository.addEvidence(session.id, evidence);
+        for (final e in evidenceList) {
+          await _repository.addEvidence(session.id, e);
+        }
         AppLogger.info(
           'finding_saved_local finding=${finding.id} '
           'ms=${saveTimer.elapsedMilliseconds}',
@@ -1211,8 +1271,21 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         .estimateFindingAnalysis(
           inspectionId: session.id,
           findingId: findingId,
-          aiLevel: aiLevel ?? kFieldAnalysisAiLevel,
+          aiLevel: aiLevel ?? await _preferredAiLevel(),
         );
+  }
+
+  /// The inspector's saved AI level (Profile → AI Analysis Preference),
+  /// or Smart when none is saved. Every analysis path resolves its level
+  /// here, so the choice applies silently and consistently.
+  Future<AiLevel> _preferredAiLevel() async {
+    try {
+      final profile = await _repository.loadUserProfile();
+      return profile.defaultAiLevel ?? kFieldAnalysisAiLevel;
+    } catch (error) {
+      AppLogger.warning('Could not read the AI preference', error);
+      return kFieldAnalysisAiLevel;
+    }
   }
 
   /// The explicit approval action — the **only** way a finding that's
@@ -1363,9 +1436,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       _setFindingAiStatusLocal(findingId, AiFindingStatus.analyzing);
 
       final analysis = Stopwatch()..start();
+      // A replay keeps its original level (stored on the attempt); a new
+      // job uses the inspector's saved preference.
+      final level = aiLevel ?? await _preferredAiLevel();
+      if (!ref.mounted) return;
       final result = await ref
           .read(aiClassificationCoordinatorProvider)
-          .classifyFinding(sessionId, findingId, aiLevel: aiLevel);
+          .classifyFinding(sessionId, findingId, aiLevel: level);
       AppLogger.info(
         'ai_job_client_finished finding=$findingId '
         'outcome=${result.outcome.name} ms=${analysis.elapsedMilliseconds}',
@@ -1381,7 +1458,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       if (state?.id == sessionId) {
         final reloaded = await _repository.loadSession(sessionId);
         if (ref.mounted && state?.id == sessionId && reloaded != null) {
-          state = reloaded;
+          state = _completeAiReviewIfSettled(reloaded);
           ref.invalidate(sessionSummariesProvider);
           final attempt = reloaded.findings
               .firstWhereOrNull((f) => f.id == findingId)
@@ -1530,6 +1607,33 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       ),
     );
     ref.invalidate(sessionSummariesProvider);
+  }
+
+  /// Auto-accepted results can settle the whole review without a tap:
+  /// once physical inspection is complete, nothing is still analysing
+  /// and no suggestion is pending, the session moves to AI review
+  /// complete exactly as if the inspector had resolved the last one.
+  InspectionSession _completeAiReviewIfSettled(InspectionSession session) {
+    if (session.status != InspectionStatus.physicalInspectionComplete ||
+        session.aiSuggestions.isEmpty ||
+        AiReviewProgress.of(session).pending > 0 ||
+        AiProcessingProgress.of(session).inFlight > 0) {
+      return session;
+    }
+    unawaited(
+      _repository.setAiReviewState(session.id, AiReviewState.completed),
+    );
+    unawaited(
+      _repository.setSessionStatus(
+        session.id,
+        InspectionStatus.aiReviewComplete,
+      ),
+    );
+    _logAnalytics(AnalyticsEvent.aiReviewCompleted);
+    return session.copyWith(
+      aiReviewState: AiReviewState.completed,
+      status: InspectionStatus.aiReviewComplete,
+    );
   }
 
   void _reviewSuggestion(

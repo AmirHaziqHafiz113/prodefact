@@ -7,12 +7,16 @@ import 'package:prodefact/features/home_inspection/providers/active_session_prov
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/test_repository.dart';
+import 'support/uncertain_ai_billing_service.dart';
 
 Finder _within(Finder matching) =>
     find.descendant(of: find.byType(Scaffold).last, matching: matching);
 
 Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
-  final container = ProviderContainer(overrides: testOverrides());
+  // An uncertain AI result: never auto-accepted, so it waits for review.
+  final container = ProviderContainer(
+    overrides: testOverrides(billingService: UncertainAiBillingService()),
+  );
   addTearDown(container.dispose);
 
   // A tall surface so every area card is actually built (not just

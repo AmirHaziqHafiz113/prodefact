@@ -104,21 +104,24 @@ Future<ProviderContainer> _pumpToReportScreen(
       .read(activeSessionProvider)!
       .aiSuggestions
       .single;
-  final resolveLabel = suggestion.needsReview ? 'Change' : 'Accept';
-  await tester.scrollUntilVisible(
-    _within(find.text(resolveLabel)),
-    300,
-    scrollable: find.byType(Scrollable).first,
-  );
-  // The bottom nav bar floats over the tail of the scrollable body —
-  // nudge further so the button clears it before tapping.
-  await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
-  await tester.pumpAndSettle();
-  await tester.tap(_within(find.text(resolveLabel)));
-  await tester.pumpAndSettle();
-  if (suggestion.needsReview) {
-    await tester.tap(find.byType(ListTile).first);
+  // A confident result is accepted automatically — nothing to resolve.
+  if (!suggestion.isResolved) {
+    final resolveLabel = suggestion.needsReview ? 'Change' : 'Accept';
+    await tester.scrollUntilVisible(
+      _within(find.text(resolveLabel)),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    // The bottom nav bar floats over the tail of the scrollable body —
+    // nudge further so the button clears it before tapping.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
     await tester.pumpAndSettle();
+    await tester.tap(_within(find.text(resolveLabel)));
+    await tester.pumpAndSettle();
+    if (suggestion.needsReview) {
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+    }
   }
 
   await tester.tap(

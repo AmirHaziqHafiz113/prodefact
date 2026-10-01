@@ -146,7 +146,9 @@ String? _pendingSummary(
       .where((f) => f.aiStatus == AiFindingStatus.failed)
       .length;
   if (failed > 0) {
-    parts.add('$failed need${failed == 1 ? 's' : ''} a retry or manual classification');
+    parts.add(
+      '$failed need${failed == 1 ? 's' : ''} a retry or manual classification',
+    );
   }
   if (review.pending > 0) {
     parts.add('${review.pending} to review');
@@ -310,7 +312,10 @@ class _StatusPanel extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           AppProgressBar(
             value: review.fraction,
-            label: 'Reviewed by you',
+            label: review.autoAccepted > 0
+                ? 'Report-ready (${review.autoAccepted} accepted '
+                      'automatically)'
+                : 'Reviewed by you',
             valueLabel: '${review.resolved} of ${review.total}',
           ),
         ],
@@ -372,7 +377,10 @@ class _SuggestionCard extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                _StatusChip(status: suggestion.status),
+                _StatusChip(
+                  status: suggestion.status,
+                  automatic: suggestion.isAutoAccepted,
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -450,7 +458,9 @@ class _SuggestionCard extends ConsumerWidget {
             if (suggestion.isResolved) ...[
               const SizedBox(height: AppSpacing.sm),
               _AttributedBlock(
-                label: 'Your final decision',
+                label: suggestion.isAutoAccepted
+                    ? 'Accepted automatically'
+                    : 'Your final decision',
                 icon: Icons.fact_check_outlined,
                 color: AppColors.success,
                 child: Text(
@@ -458,6 +468,35 @@ class _SuggestionCard extends ConsumerWidget {
                       ? finalEntry.defectDescription
                       : 'Unresolved — pending manual classification',
                 ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              // A decision — automatic or the inspector's — is never
+              // final: it can still be changed or rejected.
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  OutlinedButton(
+                    key: ValueKey('change-${suggestion.id}'),
+                    onPressed: () => showAiSuggestionReviewDialog(
+                      context: context,
+                      ref: ref,
+                      suggestion: suggestion,
+                    ),
+                    child: const Text('Change'),
+                  ),
+                  if (suggestion.status != AiSuggestionStatus.rejected)
+                    TextButton(
+                      key: ValueKey('reject-${suggestion.id}'),
+                      onPressed: () => ref
+                          .read(activeSessionProvider.notifier)
+                          .rejectSuggestion(suggestion.id),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                      child: const Text('Reject / Unresolved'),
+                    ),
+                ],
               ),
             ],
             if (!suggestion.isResolved) ...[
@@ -609,9 +648,10 @@ class _AiDetailsToggleState extends State<_AiDetailsToggle> {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+  const _StatusChip({required this.status, this.automatic = false});
 
   final AiSuggestionStatus status;
+  final bool automatic;
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +663,7 @@ class _StatusChip extends StatelessWidget {
         AppColors.warningBg,
       ),
       AiSuggestionStatus.accepted => (
-        'Accepted',
+        automatic ? 'Auto-accepted' : 'Accepted',
         Icons.check_circle_outline,
         AppColors.success,
         AppColors.successBg,

@@ -132,10 +132,15 @@ class DefaultAiClassificationCoordinator
         suggestedShortReason: classification.shortReason,
         suggestedCandidateEntryIds: validCandidates,
         // A confident match starts out as its own final value —
-        // Accept keeps it; Change/Reject replace it later. A
+        // Change/Reject replace it later. A
         // needs-review finding starts with no final value at all;
         // the inspector must pick one via the catalogue picker.
         finalCatalogueEntryId: validEntryId,
+        // A confident match is accepted automatically (still
+        // changeable); an uncertain one waits for the inspector.
+        status: needsReview
+            ? AiSuggestionStatus.pending
+            : AiSuggestionStatus.accepted,
       ),
     );
     await _local.setFindingAiStatus(

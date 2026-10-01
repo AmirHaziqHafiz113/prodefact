@@ -35,21 +35,31 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Profile shows Smart AI as the fixed analysis level, with no '
-      'Fast/Smart/Expert selector (QA #24)', (tester) async {
+  testWidgets('1 + 2. Profile offers the AI Analysis Preference with Fast, '
+      'Smart and Expert, and Smart is selected when nothing is saved', (
+    tester,
+  ) async {
     final container = ProviderContainer(overrides: testOverrides());
     addTearDown(container.dispose);
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
 
     await openProfile(tester, container);
     expect(find.byType(ProfileScreen), findsOneWidget);
 
+    expect(find.text('AI Analysis Preference'), findsOneWidget);
+    expect(find.text('Fastest and lowest cost'), findsOneWidget);
+    expect(find.text('Recommended · Default'), findsOneWidget);
     expect(
-      find.textContaining('Balanced speed and thoroughness'),
+      find.text('Best for difficult or unclear defects'),
       findsOneWidget,
     );
-    expect(find.byType(SegmentedButton<AiLevel>), findsNothing);
-    expect(find.text('Fast'), findsNothing);
-    expect(find.text('Expert'), findsNothing);
+    ListTile tile(AiLevel level) =>
+        tester.widget<ListTile>(find.byKey(ValueKey('ai-pref-${level.name}')));
+    expect(tile(AiLevel.smart).selected, isTrue);
+    expect(tile(AiLevel.fast).selected, isFalse);
+    expect(tile(AiLevel.expert).selected, isFalse);
   });
 
   testWidgets('a QA build identifier shows the real platform version and build '

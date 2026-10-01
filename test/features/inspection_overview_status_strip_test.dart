@@ -9,6 +9,7 @@ import 'package:prodefact/features/home_inspection/providers/new_inspection_draf
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import '../support/test_repository.dart';
+import '../support/uncertain_ai_billing_service.dart';
 
 /// Inspection Overview's compact contextual strip — the single
 /// highest-priority real state, never more than two at once (mission
@@ -37,7 +38,10 @@ void main() {
     'an unresolved AI suggestion surfaces as "1 finding needs review", '
     'ahead of sync state',
     (tester) async {
-      final container = ProviderContainer(overrides: testOverrides());
+      final container = ProviderContainer(
+        // Uncertain, so it is not auto-accepted.
+        overrides: testOverrides(billingService: UncertainAiBillingService()),
+      );
       addTearDown(container.dispose);
 
       await tester.runAsync(() async {

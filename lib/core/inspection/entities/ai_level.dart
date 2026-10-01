@@ -13,8 +13,7 @@ enum AiLevel {
   expert,
 }
 
-/// The AI level every normal field analysis uses in V1. Fast and Expert
-/// stay fully supported (pricing, provider mappings, backend) but are
-/// never offered per finding — the inspector saves a finding and Smart
-/// AI runs. See the QA/QC pass (QA #24).
+/// The AI level used when the inspector has not chosen one in Profile →
+/// AI Analysis Preference (Smart). Fast and Expert are chosen only there,
+/// never per finding, at upload, or in the approval dialog.
 const AiLevel kFieldAnalysisAiLevel = AiLevel.smart;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -222,27 +223,35 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
 
     setState(() => _isCapturing = true);
     final notifier = ref.read(activeSessionProvider.notifier);
-    final photo = await notifier.captureFindingPhoto(source: source);
+    // Gallery: up to 3 photos of this defect in one pick. Camera: one.
+    final photos = await notifier.captureFindingPhotos(source: source);
     if (!mounted) return;
     setState(() => _isCapturing = false);
-    if (photo == null) return; // cancelled, or a capture error already shown
+    if (photos.isEmpty) return; // cancelled, or a capture error was shown
 
     final result = await showAppBottomSheet<_PreviewResult>(
       context: context,
-      builder: (context) => _PhotoPreviewSheet(photo: photo),
+      builder: (context) => _PhotoPreviewSheet(photos: photos),
     );
 
     if (!mounted) return;
-    // The sheet may have marked the photo up (a separate annotated copy;
-    // the original file is untouched).
-    final finalPhoto = result?.photo ?? photo;
+    // The sheet may have marked photos up (separate annotated copies; the
+    // originals are untouched) or removed some.
+    final kept = result?.photos ?? photos;
+    // File cleanup only; nothing waits on it.
+    for (final removed in result?.removed ?? const <CapturedFindingPhoto>[]) {
+      unawaited(notifier.discardCapturedFindingPhoto(removed));
+    }
     if (result == null || !result.save) {
-      await notifier.discardCapturedFindingPhoto(finalPhoto);
+      for (final photo in kept) {
+        unawaited(notifier.discardCapturedFindingPhoto(photo));
+      }
       return;
     }
     notifier.saveCameraFinding(
       sectionId: sectionId,
-      photo: finalPhoto,
+      photo: kept.first,
+      additionalPhotos: kept.skip(1).toList(),
       note: result.note,
     );
     ScaffoldMessenger.of(context).showSnackBar(
@@ -431,12 +440,20 @@ class _AreaHeader extends StatelessWidget {
 }
 
 class _PreviewResult {
-  const _PreviewResult({required this.save, this.photo, this.note});
+  const _PreviewResult({
+    required this.save,
+    required this.photos,
+    this.removed = const [],
+    this.note,
+  });
 
   final bool save;
 
-  /// The photo as it left the sheet — possibly with a markup copy.
-  final CapturedFindingPhoto? photo;
+  /// The photos kept for this finding, possibly with markup copies.
+  final List<CapturedFindingPhoto> photos;
+
+  /// Photos the inspector removed in the sheet (their files are deleted).
+  final List<CapturedFindingPhoto> removed;
   final String? note;
 }
 
@@ -448,13 +465,14 @@ const _quickNoteHint =
 const _quickNoteHelper =
     'Needed before AI analysis. Shorthand, BM or English is fine.';
 
-/// "Preview Photo -> mark up (optional) -> quick defect note -> Save
-/// Finding". Saving never needs the note; AI analysis does (QA #16), so
-/// a finding saved without one simply waits for it.
+/// "Preview photos -> mark up (optional) -> quick defect note -> Save
+/// Finding". All photos here belong to ONE finding (several angles of the
+/// same defect). Saving never needs the note; AI analysis does (QA #16),
+/// so a finding saved without one simply waits for it.
 class _PhotoPreviewSheet extends ConsumerStatefulWidget {
-  const _PhotoPreviewSheet({required this.photo});
+  const _PhotoPreviewSheet({required this.photos});
 
-  final CapturedFindingPhoto photo;
+  final List<CapturedFindingPhoto> photos;
 
   @override
   ConsumerState<_PhotoPreviewSheet> createState() => _PhotoPreviewSheetState();
@@ -462,7 +480,9 @@ class _PhotoPreviewSheet extends ConsumerStatefulWidget {
 
 class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
   final _noteController = TextEditingController();
-  late CapturedFindingPhoto _photo = widget.photo;
+  late final List<CapturedFindingPhoto> _photos = [...widget.photos];
+  final List<CapturedFindingPhoto> _removed = [];
+  int _selected = 0;
 
   @override
   void dispose() {
@@ -471,32 +491,43 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
   }
 
   Future<void> _markUp() async {
-    final bytes = await showPhotoAnnotation(context, filePath: _photo.filePath);
+    final photo = _photos[_selected];
+    final bytes = await showPhotoAnnotation(context, filePath: photo.filePath);
     if (bytes == null || !mounted) return;
     final annotated = await ref
         .read(activeSessionProvider.notifier)
-        .annotateCapturedPhoto(_photo, bytes);
-    if (mounted) setState(() => _photo = annotated);
+        .annotateCapturedPhoto(photo, bytes);
+    if (mounted) setState(() => _photos[_selected] = annotated);
+  }
+
+  void _remove(int index) {
+    // A finding keeps at least one photo.
+    if (_photos.length < 2) return;
+    setState(() {
+      _removed.add(_photos.removeAt(index));
+      if (_selected >= _photos.length) _selected = _photos.length - 1;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Image-first: the photo gets most of the viewport, shown whole in
-    // its own orientation (QA #18) — never cropped to fit. Save/Discard
-    // are pinned (QA #15), so they stay visible with the keyboard open,
-    // on short screens, and at large text sizes.
-    final imageHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
-      160.0,
-      420.0,
+    // Image-first: the selected photo gets most of the viewport, shown
+    // whole in its own orientation (QA #18) — never cropped to fit.
+    // Save/Discard are pinned (QA #15), so they stay visible with the
+    // keyboard open, on short screens, and at large text sizes.
+    final imageHeight = (MediaQuery.sizeOf(context).height * 0.38).clamp(
+      150.0,
+      400.0,
     );
+    final current = _photos[_selected];
     return AppSheetFrame(
       actions: Row(
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () =>
-                  Navigator.of(context)
-                      .pop(_PreviewResult(save: false, photo: _photo)),
+              onPressed: () => Navigator.of(context).pop(
+                _PreviewResult(save: false, photos: _photos, removed: _removed),
+              ),
               child: const Text('Discard'),
             ),
           ),
@@ -506,7 +537,8 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
               onPressed: () => Navigator.of(context).pop(
                 _PreviewResult(
                   save: true,
-                  photo: _photo,
+                  photos: _photos,
+                  removed: _removed,
                   note: _noteController.text,
                 ),
               ),
@@ -527,20 +559,44 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
                 height: imageHeight,
                 width: double.infinity,
                 child: Image.file(
-                  File(_photo.displayFilePath),
-                  key: ValueKey(_photo.displayFilePath),
+                  File(current.displayFilePath),
+                  key: ValueKey(current.displayFilePath),
                   fit: BoxFit.contain,
                 ),
               ),
             ),
           ),
+          if (_photos.length > 1) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              '${_photos.length} photos of this defect',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            SizedBox(
+              height: 64,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _photos.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(width: AppSpacing.sm),
+                itemBuilder: (context, i) => _PreviewThumb(
+                  key: ValueKey('preview-thumb-$i'),
+                  photo: _photos[i],
+                  selected: i == _selected,
+                  onTap: () => setState(() => _selected = i),
+                  onRemove: () => _remove(i),
+                ),
+              ),
+            ),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: _markUp,
               icon: const Icon(Icons.draw_outlined),
               label: Text(
-                _photo.annotatedFilePath == null ? 'Mark Up' : 'Redo Markup',
+                current.annotatedFilePath == null ? 'Mark Up' : 'Redo Markup',
               ),
             ),
           ),
@@ -558,6 +614,72 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One selectable thumbnail in the capture preview, with a remove
+/// button (removal is refused for the last remaining photo).
+class _PreviewThumb extends StatelessWidget {
+  const _PreviewThumb({
+    super.key,
+    required this.photo,
+    required this.selected,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final CapturedFindingPhoto photo;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        InkWell(
+          onTap: onTap,
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.outline,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.file(
+              File(photo.displayFilePath),
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  const ColoredBox(color: AppColors.surfaceAlt),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: InkWell(
+            onTap: onRemove,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(2),
+              child: const Icon(
+                Icons.close,
+                size: 14,
+                color: Colors.white,
+                semanticLabel: 'Remove photo',
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
