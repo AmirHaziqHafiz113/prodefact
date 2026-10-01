@@ -190,7 +190,12 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
             for (final finding in areaFindings)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _FindingCard(finding: finding),
+                child: _FindingCard(
+                  finding: finding,
+                  onCaptureAnother: _isCapturing
+                      ? null
+                      : () => _takePhoto(section.id),
+                ),
               ),
         ],
       ),
@@ -223,7 +228,8 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
 
     setState(() => _isCapturing = true);
     final notifier = ref.read(activeSessionProvider.notifier);
-    // Gallery: up to 3 photos of this defect in one pick. Camera: one.
+    // Gallery: up to 3 photos in one pick. Camera: one. Either way, each
+    // photo becomes its own finding.
     final photos = await notifier.captureFindingPhotos(source: source);
     if (!mounted) return;
     setState(() => _isCapturing = false);
@@ -248,16 +254,21 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
       }
       return;
     }
-    notifier.saveCameraFinding(
+    // One photo = one finding: each kept photo is saved as its own
+    // finding with its own note (and its own AI job and report entry).
+    final saved = notifier.saveCameraFindings(
       sectionId: sectionId,
-      photo: kept.first,
-      additionalPhotos: kept.skip(1).toList(),
-      note: result.note,
+      photos: kept,
+      notes: result.notes,
     );
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✓ Finding saved'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(
+          saved.length == 1
+              ? '✓ Finding saved'
+              : '✓ ${saved.length} findings saved',
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -444,17 +455,20 @@ class _PreviewResult {
     required this.save,
     required this.photos,
     this.removed = const [],
-    this.note,
+    this.notes = const [],
   });
 
   final bool save;
 
-  /// The photos kept for this finding, possibly with markup copies.
+  /// The photos kept — one new finding each — possibly with markup
+  /// copies.
   final List<CapturedFindingPhoto> photos;
 
   /// Photos the inspector removed in the sheet (their files are deleted).
   final List<CapturedFindingPhoto> removed;
-  final String? note;
+
+  /// Each kept photo's own quick note, in the same order as [photos].
+  final List<String> notes;
 }
 
 /// Quick defect note field wording (QA #16), shared by capture and edit.
@@ -465,10 +479,11 @@ const _quickNoteHint =
 const _quickNoteHelper =
     'Needed before AI analysis. Shorthand, BM or English is fine.';
 
-/// "Preview photos -> mark up (optional) -> quick defect note -> Save
-/// Finding". All photos here belong to ONE finding (several angles of the
-/// same defect). Saving never needs the note; AI analysis does (QA #16),
-/// so a finding saved without one simply waits for it.
+/// "Preview photos -> mark up (optional) -> quick defect note -> Save".
+/// One photo = one finding: every photo here is saved as its OWN finding
+/// with its own note, even when it shows the same defect from another
+/// angle. Saving never needs a note; AI analysis does (QA #16), so a
+/// finding saved without one simply waits for it.
 class _PhotoPreviewSheet extends ConsumerStatefulWidget {
   const _PhotoPreviewSheet({required this.photos});
 
@@ -479,14 +494,20 @@ class _PhotoPreviewSheet extends ConsumerStatefulWidget {
 }
 
 class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
-  final _noteController = TextEditingController();
   late final List<CapturedFindingPhoto> _photos = [...widget.photos];
+  // One note per photo, since each photo is its own finding.
+  late final List<TextEditingController> _notes = [
+    for (final _ in widget.photos) TextEditingController(),
+  ];
   final List<CapturedFindingPhoto> _removed = [];
+  final List<TextEditingController> _removedNotes = [];
   int _selected = 0;
 
   @override
   void dispose() {
-    _noteController.dispose();
+    for (final c in [..._notes, ..._removedNotes]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -501,10 +522,11 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
   }
 
   void _remove(int index) {
-    // A finding keeps at least one photo.
+    // The last photo isn't removed here — Discard drops it.
     if (_photos.length < 2) return;
     setState(() {
       _removed.add(_photos.removeAt(index));
+      _removedNotes.add(_notes.removeAt(index));
       if (_selected >= _photos.length) _selected = _photos.length - 1;
     });
   }
@@ -539,10 +561,14 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
                   save: true,
                   photos: _photos,
                   removed: _removed,
-                  note: _noteController.text,
+                  notes: [for (final c in _notes) c.text],
                 ),
               ),
-              child: const Text('Save Finding'),
+              child: Text(
+                _photos.length == 1
+                    ? 'Save Finding'
+                    : 'Save ${_photos.length} Findings',
+              ),
             ),
           ),
         ],
@@ -569,7 +595,9 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
           if (_photos.length > 1) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
-              '${_photos.length} photos of this defect',
+              'Photo ${_selected + 1} of ${_photos.length}. Each photo is '
+              'saved as its own finding, with its own note.',
+              key: const ValueKey('preview-photo-count'),
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -601,7 +629,9 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
             ),
           ),
           TextField(
-            controller: _noteController,
+            // Rebuilt per photo so each finding keeps its own note.
+            key: ValueKey('preview-note-$_selected-${_photos.length}'),
+            controller: _notes[_selected],
             maxLines: 2,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
@@ -687,9 +717,12 @@ class _PreviewThumb extends StatelessWidget {
 enum _FindingAction { editNote, remove }
 
 class _FindingCard extends ConsumerWidget {
-  const _FindingCard({required this.finding});
+  const _FindingCard({required this.finding, required this.onCaptureAnother});
 
   final Finding finding;
+
+  /// Starts a fresh capture in this area — a new finding.
+  final VoidCallback? onCaptureAnother;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -721,18 +754,16 @@ class _FindingCard extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                  // One photo = one finding: another photo — even of
+                  // this same defect — is captured as a NEW finding,
+                  // never added to this one.
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: () async {
-                        final source = await chooseEvidenceSource(context);
-                        if (source == null) return; // cancelled the picker
-                        await ref
-                            .read(activeSessionProvider.notifier)
-                            .addEvidence(findingId: finding.id, source: source);
-                      },
+                      key: ValueKey('add-defect-photo-${finding.id}'),
+                      onPressed: onCaptureAnother,
                       icon: const Icon(Icons.add_a_photo_outlined),
-                      label: const Text('Add angle'),
+                      label: const Text('Add another defect photo'),
                     ),
                   ),
                 ],

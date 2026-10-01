@@ -260,8 +260,9 @@ class PdfReportRenderer implements ReportRenderer {
             ],
           ),
         ),
-        // A finding with more than 3 photos (extra angles) continues
-        // in further rows; they follow it and never split a photo.
+        // New findings have exactly one photo (one photo = one finding).
+        // A historical multi-photo finding with more than 3 continues in
+        // further rows; they follow it and never split a photo.
         for (final row in photoRows.skip(1))
           pw.Inseparable(
             child: pw.Container(

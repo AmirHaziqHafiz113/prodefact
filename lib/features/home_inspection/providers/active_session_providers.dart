@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
@@ -601,10 +602,19 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
 
   // ---- evidence (Phase 4) ----
 
-  /// Captures/imports a photo and attaches it to a finding. Any capture
-  /// failure (permission denied, picker/import error) or persistence
-  /// failure is caught and surfaced via [activeSessionErrorProvider]
-  /// instead of throwing out of a UI callback.
+  /// Captures/imports a photo and attaches it to an EXISTING finding.
+  ///
+  /// Not part of the field workflow: one photo = one finding (tester
+  /// feedback, 2026-10-01), so the app never stacks a new photo onto a
+  /// finding — "Add another defect photo" creates a new finding instead.
+  /// Kept only to build historical multi-photo findings in tests; the
+  /// annotation makes any app-code call an analyzer warning.
+  ///
+  /// Any capture failure (permission denied, picker/import error) or
+  /// persistence failure is caught and surfaced via
+  /// [activeSessionErrorProvider] instead of throwing out of a UI
+  /// callback.
+  @visibleForTesting
   Future<void> addEvidence({
     required String findingId,
     required EvidenceSource source,
@@ -719,12 +729,12 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
-  /// Captures the photos for a **new** finding in one action (QA:
-  /// multi-image): from the gallery the inspector can pick up to
-  /// [maxImages] photos of the same defect; the camera takes one. All
-  /// share one pending finding id and become that single finding's
-  /// evidence when saved. Empty if cancelled or on a capture failure
-  /// (surfaced via [activeSessionErrorProvider]).
+  /// Captures photos for **new** findings in one action: from the
+  /// gallery the inspector can pick up to [maxImages] photos; the camera
+  /// takes one. One photo = one finding, so every photo gets its OWN
+  /// pending finding id and is saved as its own finding — even several
+  /// angles of the same defect. Empty if cancelled or on a capture
+  /// failure (surfaced via [activeSessionErrorProvider]).
   Future<List<CapturedFindingPhoto>> captureFindingPhotos({
     required EvidenceSource source,
     int maxImages = 3,
@@ -739,9 +749,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
             maxImages: maxImages,
           );
       return [
-        for (final c in captured)
+        for (final (i, c) in captured.indexed)
           CapturedFindingPhoto(
-            pendingFindingId: pendingFindingId,
+            pendingFindingId: i == 0
+                ? pendingFindingId
+                : '${pendingFindingId}_$i',
             filePath: c.filePath,
             source: c.source,
           ),
@@ -867,42 +879,30 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     required String sectionId,
     required CapturedFindingPhoto photo,
     String? note,
-    List<CapturedFindingPhoto> additionalPhotos = const [],
   }) {
     final session = state;
     if (session == null) {
       throw StateError('Cannot save a finding without an active session');
     }
     final now = DateTime.now();
+    // Exactly one photo per new finding. The evidence id derives from
+    // the (unique) finding id, so findings saved together in one gallery
+    // pick can never collide on an id.
     final evidence = Evidence(
-      id: 'evidence_${now.microsecondsSinceEpoch}',
+      id: 'evidence_${photo.pendingFindingId.replaceFirst('finding_', '')}',
       findingId: photo.pendingFindingId,
       filePath: photo.filePath,
       annotatedFilePath: photo.annotatedFilePath,
       createdAt: now,
       source: photo.source,
     );
-    // Further photos of the same defect (gallery multi-select) become
-    // more evidence on this one finding, never separate findings.
-    final evidenceList = [
-      evidence,
-      for (final (i, extra) in additionalPhotos.indexed)
-        Evidence(
-          id: 'evidence_${now.microsecondsSinceEpoch}_${i + 1}',
-          findingId: photo.pendingFindingId,
-          filePath: extra.filePath,
-          annotatedFilePath: extra.annotatedFilePath,
-          createdAt: now,
-          source: extra.source,
-        ),
-    ];
     final draft = Finding(
       id: photo.pendingFindingId,
       sectionId: sectionId,
       description: _orNull(note),
       createdAt: now,
       updatedAt: now,
-      evidence: evidenceList,
+      evidence: [evidence],
     );
     // AI waits for a quick defect note (QA #16); saving never does.
     final startsAi = session.autoAnalyseEnabled && draft.hasDefectNote;
@@ -940,9 +940,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           );
         }
         await _repository.saveFinding(session.id, finding);
-        for (final e in evidenceList) {
-          await _repository.addEvidence(session.id, e);
-        }
+        await _repository.addEvidence(session.id, evidence);
         AppLogger.info(
           'finding_saved_local finding=${finding.id} '
           'ms=${saveTimer.elapsedMilliseconds}',
@@ -967,6 +965,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
     return finding;
   }
+
+  /// Saves each captured photo as its own independent finding, in
+  /// order, with the matching note from [notes] (missing entries mean no
+  /// note). Each finding gets its own id, evidence, AI job and review —
+  /// nothing is shared between them.
+  List<Finding> saveCameraFindings({
+    required String sectionId,
+    required List<CapturedFindingPhoto> photos,
+    List<String?> notes = const [],
+  }) => [
+    for (final (i, photo) in photos.indexed)
+      saveCameraFinding(
+        sectionId: sectionId,
+        photo: photo,
+        note: i < notes.length ? notes[i] : null,
+      ),
+  ];
 
   /// Removes one photo from a finding (QA #20) without touching the
   /// finding or its other photos. A finding's last photo can't be

@@ -79,8 +79,8 @@ void main() {
     expect(persistedEvidence.filePath, photo.filePath);
   });
 
-  test('"Add another photo" via the gallery attaches a second photo '
-      'identically to a camera one', () async {
+  test('historical multi-photo data (test-only attach path): a gallery '
+      'photo attaches identically to a camera one', () async {
     final container = ProviderContainer(overrides: testOverrides());
     addTearDown(container.dispose);
     await container

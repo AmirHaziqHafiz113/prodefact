@@ -145,8 +145,8 @@ void main() {
   );
 
   testWidgets(
-    '"Add angle" attaches a second photo of the same defect to the '
-    'existing finding (QA #20), shown as a second thumbnail',
+    '6. "Add another defect photo" (formerly "Add angle") never appends to '
+    'the existing finding: the new photo becomes a NEW finding',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
       final firstAreaName = container.read(inspectionQueueProvider).first.name;
@@ -155,24 +155,26 @@ void main() {
       await tester.pumpAndSettle();
 
       await _takePhotoAndSave(tester, 'Leaking tap');
+      expect(_within(find.text('Add angle')), findsNothing);
 
-      await tester.tap(_within(find.text('Add angle')));
+      await tester.tap(_within(find.text('Add another defect photo')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
+      await tester.enterText(_previewNoteField(), 'Leaking tap, side view');
+      await tester.tap(_previewButton('Save Finding'));
+      await tester.pumpAndSettle();
 
-      final finding = container
-          .read(activeSessionProvider)!
-          .findings
-          .singleWhere((f) => f.description == 'Leaking tap');
-      expect(finding.evidence, hasLength(2));
-      for (final photo in finding.evidence) {
-        expect(
-          _within(find.byKey(ValueKey('finding-photo-${photo.id}'))),
-          findsOneWidget,
-        );
-      }
-      expect(container.read(activeSessionProvider)!.findings, hasLength(1));
+      final findings = container.read(activeSessionProvider)!.findings;
+      expect(findings, hasLength(2));
+      final first = findings.singleWhere((f) => f.description == 'Leaking tap');
+      final second = findings.singleWhere(
+        (f) => f.description == 'Leaking tap, side view',
+      );
+      expect(first.evidence, hasLength(1));
+      expect(second.evidence, hasLength(1));
+      expect(first.id, isNot(second.id));
+      expect(first.evidence.single.id, isNot(second.evidence.single.id));
     },
   );
 
@@ -189,7 +191,7 @@ void main() {
     expect(_within(find.text('Original text')), findsOneWidget);
 
     // Edit note/Remove now live behind the finding card's overflow menu
-    // — only "Add another photo" stays a direct icon button.
+    // — only "Add another defect photo" stays a direct button.
     await tester.tap(_within(find.byIcon(Icons.more_vert)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit note'));

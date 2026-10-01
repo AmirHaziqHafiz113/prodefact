@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
-import 'area_inspection_screen.dart' show chooseEvidenceSource;
 import 'photo_annotation_screen.dart';
 
 /// Opens every photo of one defect ticket (QA #20), starting at
@@ -25,12 +24,14 @@ Future<void> showFindingPhotos(
   );
 }
 
-/// All photos of one defect, e.g. front angle, side angle, close-up
-/// (QA #20). Each photo is shown whole in its own orientation, never
-/// cropped or stretched (QA #18), and can be zoomed. From here the
-/// inspector can add another angle, mark up a photo (the original is
-/// kept; QA #14), view the original of a marked-up photo, or remove one
-/// photo without touching the finding or its other photos.
+/// A finding's photo — one for every new finding (one photo = one
+/// finding); a historical finding may still hold several, all viewable
+/// here (QA #20). Each photo is shown whole in its own orientation,
+/// never cropped or stretched (QA #18), and can be zoomed. From here the
+/// inspector can mark up a photo (the original is kept; QA #14), view
+/// the original of a marked-up photo, or remove one photo of a
+/// historical multi-photo finding. Photos are never added here: another
+/// photo is always captured as a new finding.
 class PhotoViewerScreen extends ConsumerStatefulWidget {
   const PhotoViewerScreen({
     required this.findingId,
@@ -69,19 +70,6 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
           pngBytes: bytes,
         );
     if (mounted) setState(() => _showOriginal = false);
-  }
-
-  Future<void> _addAngle(int currentCount) async {
-    final source = await chooseEvidenceSource(context);
-    if (source == null || !mounted) return;
-    await ref
-        .read(activeSessionProvider.notifier)
-        .addEvidence(findingId: widget.findingId, source: source);
-    if (!mounted) return;
-    // Jump to the newly added photo.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_pages.hasClients) _pages.jumpToPage(currentCount);
-    });
   }
 
   Future<void> _remove(Evidence photo) async {
@@ -192,11 +180,6 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
                     icon: Icons.draw_outlined,
                     label: current.isAnnotated ? 'Redo Markup' : 'Mark Up',
                     onPressed: () => _markUp(current),
-                  ),
-                  _ViewerAction(
-                    icon: Icons.add_a_photo_outlined,
-                    label: 'Add Angle',
-                    onPressed: () => _addAngle(photos.length),
                   ),
                   _ViewerAction(
                     icon: Icons.delete_outline,
