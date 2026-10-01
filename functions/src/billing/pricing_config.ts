@@ -145,29 +145,246 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 const PRICING_DOC_PATH = ["pricing", "config"] as const;
 
 /**
- * Loads the live pricing config from Firestore, falling back to
- * [DEFAULT_PRICING_CONFIG] only when no document has ever been written
- * (e.g. a fresh project/emulator) — never silently on a malformed
- * document, which throws instead so a bad config is never
- * half-applied.
+ * The model lineup the deployed code expects (2 = the 2026-10-01
+ * lineup: gpt-6-luna / gpt-5.6-terra / gpt-6.1-sol). A persisted
+ * `pricing/config` only overrides model ids and provider prices if it
+ * declares `modelLineupVersion` at or above this — so a document written
+ * for an older lineup can never silently revert a newly deployed one.
+ */
+export const MODEL_LINEUP_VERSION = 2;
+
+export interface PricingConfigResolution {
+  config: PricingConfig;
+  /** Where the config came from. */
+  source: "default" | "firestore";
+  /** Safe descriptions of persisted fields that were invalid, missing,
+   * or deliberately not applied — empty when the document was clean. */
+  issues: string[];
+}
+
+const AI_LEVELS: AiLevel[] = ["fast", "smart", "expert"];
+
+/**
+ * @param {unknown} v a value.
+ * @return {boolean} whether it is a finite number.
+ */
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+/**
+ * Builds the effective config from the deployed defaults plus a
+ * persisted `pricing/config` document (QA pricing fix, 2026-10-01).
+ *
+ * Precedence, field by field:
+ * 1. The deployed defaults ([DEFAULT_PRICING_CONFIG]) are the base, so a
+ *    document written before a field existed can never erase it.
+ * 2. Commercial settings (version, creditsPerMyr, markupMultiplier,
+ *    House Pass, top-up packages, low-balance threshold) are overridden
+ *    by any persisted value that is valid.
+ * 3. Model ids, providers and provider prices (`aiLevels`) are taken
+ *    from the document only when it declares
+ *    `modelLineupVersion >= MODEL_LINEUP_VERSION`; otherwise the deployed
+ *    lineup wins.
+ * Anything invalid is ignored (the default stays) and reported in
+ * `issues`: a bad document never causes an undefined-property crash
+ * later.
+ * @param {unknown} raw the persisted document data (or undefined).
+ * @return {PricingConfigResolution} the effective config and findings.
+ */
+export function resolvePricingConfig(raw: unknown): PricingConfigResolution {
+  const base = DEFAULT_PRICING_CONFIG;
+  if (raw === undefined) {
+    return {config: base, source: "default", issues: []};
+  }
+  const issues: string[] = [];
+  if (typeof raw !== "object" || raw === null) {
+    issues.push("pricing/config is not an object; using defaults");
+    return {config: base, source: "firestore", issues};
+  }
+  const doc = raw as Record<string, unknown>;
+
+  const num = (
+    field: string,
+    value: unknown,
+    fallback: number,
+    valid: (n: number) => boolean
+  ): number => {
+    if (value === undefined) return fallback;
+    if (isFiniteNumber(value) && valid(value)) return value;
+    issues.push(`${field} is invalid`);
+    return fallback;
+  };
+
+  const housePassRaw = doc.housePass;
+  const hp = (typeof housePassRaw === "object" && housePassRaw !== null ?
+    housePassRaw :
+    {}) as Record<string, unknown>;
+  if (housePassRaw !== undefined && Object.keys(hp).length === 0) {
+    issues.push("housePass is invalid");
+  }
+  const housePass: HousePassConfig = {
+    enabled: typeof hp.enabled === "boolean" ?
+      hp.enabled :
+      base.housePass.enabled,
+    priceMyr: num("housePass.priceMyr", hp.priceMyr,
+      base.housePass.priceMyr, (n) => n > 0),
+    includedAiLevel: AI_LEVELS.includes(hp.includedAiLevel as AiLevel) ?
+      hp.includedAiLevel as AiLevel :
+      base.housePass.includedAiLevel,
+    version: num("housePass.version", hp.version, base.housePass.version,
+      (n) => n >= 0),
+    allowanceFindings: num("housePass.allowanceFindings",
+      hp.allowanceFindings, base.housePass.allowanceFindings,
+      (n) => n >= 0 && Number.isInteger(n)),
+    environment: hp.environment === "production" ||
+      hp.environment === "test" ?
+      hp.environment :
+      base.housePass.environment,
+  };
+  if (hp.includedAiLevel !== undefined &&
+    !AI_LEVELS.includes(hp.includedAiLevel as AiLevel)) {
+    issues.push("housePass.includedAiLevel is invalid");
+  }
+
+  let topUpPackagesMyr = base.topUpPackagesMyr;
+  if (doc.topUpPackagesMyr !== undefined) {
+    const packages = doc.topUpPackagesMyr;
+    if (Array.isArray(packages) && packages.length > 0 &&
+      packages.every((p) => isFiniteNumber(p) && p > 0)) {
+      topUpPackagesMyr = packages as number[];
+    } else {
+      issues.push("topUpPackagesMyr is invalid");
+    }
+  }
+
+  const lineup = doc.modelLineupVersion;
+  const lineupCurrent = isFiniteNumber(lineup) &&
+    lineup >= MODEL_LINEUP_VERSION;
+  if (doc.aiLevels !== undefined && !lineupCurrent) {
+    issues.push(
+      "aiLevels not applied: document is for an older model lineup " +
+        `(modelLineupVersion ${isFiniteNumber(lineup) ? lineup : "missing"}` +
+        `, deployed ${MODEL_LINEUP_VERSION})`
+    );
+  }
+  const levelsRaw = (lineupCurrent &&
+    typeof doc.aiLevels === "object" && doc.aiLevels !== null ?
+    doc.aiLevels :
+    {}) as Record<string, unknown>;
+  const aiLevels = {} as Record<AiLevel, AiLevelConfig>;
+  for (const level of AI_LEVELS) {
+    const fallback = base.aiLevels[level];
+    const rawLevel = levelsRaw[level];
+    if (rawLevel === undefined) {
+      if (lineupCurrent && doc.aiLevels !== undefined) {
+        issues.push(`aiLevels.${level} is missing`);
+      }
+      aiLevels[level] = fallback;
+      continue;
+    }
+    if (typeof rawLevel !== "object" || rawLevel === null) {
+      issues.push(`aiLevels.${level} is invalid`);
+      aiLevels[level] = fallback;
+      continue;
+    }
+    const l = rawLevel as Record<string, unknown>;
+    const str = (field: keyof AiLevelConfig, value: unknown) => {
+      if (value === undefined) return fallback[field] as string;
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value;
+      }
+      issues.push(`aiLevels.${level}.${field} is invalid`);
+      return fallback[field] as string;
+    };
+    const provider = l.provider === "openai" || l.provider === "deepseek" ?
+      l.provider :
+      fallback.provider;
+    if (l.provider !== undefined && provider !== l.provider) {
+      issues.push(`aiLevels.${level}.provider is invalid`);
+    }
+    aiLevels[level] = {
+      provider,
+      model: str("model", l.model),
+      providerCostPerKInputTokensUsd: num(
+        `aiLevels.${level}.providerCostPerKInputTokensUsd`,
+        l.providerCostPerKInputTokensUsd,
+        fallback.providerCostPerKInputTokensUsd,
+        (n) => n >= 0
+      ),
+      providerCostPerKOutputTokensUsd: num(
+        `aiLevels.${level}.providerCostPerKOutputTokensUsd`,
+        l.providerCostPerKOutputTokensUsd,
+        fallback.providerCostPerKOutputTokensUsd,
+        (n) => n >= 0
+      ),
+      estimatedInputTokens: num(
+        `aiLevels.${level}.estimatedInputTokens`,
+        l.estimatedInputTokens,
+        fallback.estimatedInputTokens,
+        (n) => n > 0
+      ),
+      estimatedOutputTokens: num(
+        `aiLevels.${level}.estimatedOutputTokens`,
+        l.estimatedOutputTokens,
+        fallback.estimatedOutputTokens,
+        (n) => n > 0
+      ),
+      label: str("label", l.label),
+      description: str("description", l.description),
+    };
+  }
+
+  const config: PricingConfig = {
+    version: num("version", doc.version, base.version, (n) => n >= 0),
+    creditsPerMyr: num("creditsPerMyr", doc.creditsPerMyr,
+      base.creditsPerMyr, (n) => n > 0),
+    markupMultiplier: num("markupMultiplier", doc.markupMultiplier,
+      base.markupMultiplier, (n) => n > 0),
+    aiLevels,
+    housePass,
+    topUpPackagesMyr,
+    lowBalanceThresholdCredits: num("lowBalanceThresholdCredits",
+      doc.lowBalanceThresholdCredits, base.lowBalanceThresholdCredits,
+      (n) => n >= 0),
+  };
+  return {config, source: "firestore", issues};
+}
+
+/**
+ * Loads `pricing/config` and resolves it against the deployed defaults
+ * (see [resolvePricingConfig]), logging any issues with safe field
+ * names only.
+ * @param {Firestore} firestore the Admin Firestore client.
+ * @return {Promise<PricingConfigResolution>} the effective config.
+ */
+export async function loadPricingConfigWithSource(
+  firestore: Firestore
+): Promise<PricingConfigResolution> {
+  const snap = await firestore
+    .collection(PRICING_DOC_PATH[0])
+    .doc(PRICING_DOC_PATH[1])
+    .get();
+  const resolution = resolvePricingConfig(
+    snap.exists ? snap.data() : undefined
+  );
+  if (resolution.issues.length > 0) {
+    console.warn("pricing_config_issues", {issues: resolution.issues});
+  }
+  return resolution;
+}
+
+/**
+ * The effective pricing config: the deployed defaults plus any valid,
+ * applicable overrides from `pricing/config` — see
+ * [resolvePricingConfig] for precedence.
  * @param {Firestore} firestore the Admin Firestore client.
  * @return {Promise<PricingConfig>} the resolved config.
  */
 export async function loadPricingConfig(
   firestore: Firestore
 ): Promise<PricingConfig> {
-  const snap = await firestore
-    .collection(PRICING_DOC_PATH[0])
-    .doc(PRICING_DOC_PATH[1])
-    .get();
-  if (!snap.exists) {
-    return DEFAULT_PRICING_CONFIG;
-  }
-  const data = snap.data();
-  if (!data || typeof data !== "object") {
-    throw new Error("pricing/config exists but is empty/malformed.");
-  }
-  return data as PricingConfig;
+  return (await loadPricingConfigWithSource(firestore)).config;
 }
 
 /**

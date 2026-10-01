@@ -14,6 +14,7 @@ export 'ai/ai_review_coordinator.dart';
 export 'areas/area_candidate.dart';
 export 'areas/area_candidate_service.dart';
 export 'billing/analyse_finding_exception.dart';
+export 'billing/billing_call_exception.dart';
 export 'billing/analyse_finding_result.dart';
 export 'billing/analysis_estimate.dart';
 export 'billing/billing_service.dart';

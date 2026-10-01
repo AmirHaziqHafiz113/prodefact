@@ -16,4 +16,9 @@ abstract class SyncCoordinator {
   /// findings can prepare for AI at the same time without one parking
   /// the others (QA #27).
   Future<SyncResult> syncFindingEvidence(String sessionId, String findingId);
+
+  /// Writes just the session and finding documents — no photos — so the
+  /// backend recognises the finding as the caller's own. Pricing needs
+  /// this before it can answer; it is fast because nothing is uploaded.
+  Future<SyncResult> registerFinding(String sessionId, String findingId);
 }

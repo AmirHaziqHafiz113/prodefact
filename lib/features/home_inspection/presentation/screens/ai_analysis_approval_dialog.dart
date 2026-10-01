@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../providers/active_session_providers.dart';
 import 'top_up_screen.dart';
@@ -52,13 +53,16 @@ Future<void> showAnalyseApprovalDialog({
   );
 
   AnalysisEstimate? estimate;
+  Object? pricingError;
   try {
     estimate = await ref
         .read(activeSessionProvider.notifier)
         .estimateFindingAnalysis(findingId)
         .timeout(const Duration(seconds: 40));
-  } catch (_) {
-    estimate = null; // shown below as "Could not check pricing"
+  } catch (error, stackTrace) {
+    // Never swallowed: the real cause is logged and explained below.
+    pricingError = error;
+    AppLogger.error('Pricing check failed for $findingId', error, stackTrace);
   } finally {
     if (spinnerOpen && navigator.mounted) navigator.pop();
   }
@@ -69,10 +73,7 @@ Future<void> showAnalyseApprovalDialog({
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Could not check pricing'),
-        content: const Text(
-          'Check your connection and try again — physical inspection is '
-          'never affected.',
-        ),
+        content: Text(pricingErrorMessage(pricingError)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -128,6 +129,31 @@ Future<void> _showIneligibleDialog(
       ],
     ),
   );
+}
+
+/// What to tell the inspector when a price check fails — specific to
+/// the real cause, never a stack trace. Physical inspection is never
+/// affected either way.
+String pricingErrorMessage(Object? error) {
+  if (error is TimeoutException) {
+    return 'Pricing service is temporarily unavailable. Try again.';
+  }
+  if (error is BillingCallException) {
+    switch (error.code) {
+      case 'permission-denied':
+        return "We couldn't verify this finding. Please save/sync the "
+            'finding and try again.';
+      case 'unauthenticated':
+        return 'Your session has expired. Please sign in again.';
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return 'Pricing service is temporarily unavailable. Try again.';
+      case 'internal':
+      case 'failed-precondition':
+        return 'Pricing is temporarily unavailable.';
+    }
+  }
+  return 'Could not check pricing.';
 }
 
 String _reasonMessage(AnalysisEstimate estimate) {

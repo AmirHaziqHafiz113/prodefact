@@ -1,6 +1,10 @@
 import {HttpsError} from "firebase-functions/v2/https";
 import type {Firestore} from "firebase-admin/firestore";
-import {loadPricingConfig} from "./pricing_config";
+import {
+  loadPricingConfig,
+  loadPricingConfigWithSource,
+  PricingConfig,
+} from "./pricing_config";
 import {estimateMaxCredits, housePassSurchargeCredits} from "./pricing";
 import {getWalletBalance} from "./wallet";
 import {findHousePassForInspection, hasRemainingAllowance} from "./house_pass";
@@ -76,15 +80,23 @@ export async function isOwnedFinding(
  * @param {Firestore} firestore the Admin Firestore client.
  * @param {string} uid the caller.
  * @param {EstimateRequest} req the validated request.
+ * @param {object} options an already-resolved config and a stage hook.
  * @return {Promise<EstimateResult>} the estimate.
  */
 export async function computeEstimate(
   firestore: Firestore,
   uid: string,
-  req: EstimateRequest
+  req: EstimateRequest,
+  options: {
+    config?: PricingConfig;
+    /** Called as each stage completes, for safe diagnostic logging. */
+    onStage?: (stage: string, detail?: Record<string, unknown>) => void;
+  } = {}
 ): Promise<EstimateResult> {
-  const config = await loadPricingConfig(firestore);
+  const config = options.config ?? await loadPricingConfig(firestore);
+  const onStage = options.onStage ?? (() => undefined);
   const balance = await getWalletBalance(firestore, uid);
+  onStage("wallet_balance_read");
   const maximumCredits = estimateMaxCredits(req.aiLevel, config);
 
   // Billing mode is decided here, never by the client (QA #23): the
@@ -99,6 +111,7 @@ export async function computeEstimate(
     uid,
     req.inspectionId
   );
+  onStage("house_pass_lookup", {passStatus: pass?.status ?? "none"});
   if (!pass || pass.status !== "active") {
     const eligible = balance >= maximumCredits;
     return {
@@ -155,18 +168,80 @@ export async function handleEstimateFindingAnalysis(params: {
   firestore: Firestore;
 }): Promise<EstimateResult> {
   const {auth, data, firestore} = params;
-  if (!auth) {
-    throw new HttpsError("unauthenticated", "You must be signed in.");
-  }
-  const req = parseEstimateRequest(data);
+  // Safe, structured diagnostics for each stage (never keys, tokens,
+  // full user data or images): a failed price check must always be
+  // explainable from the logs.
+  let stage = "request_accepted";
+  const ids: Record<string, unknown> = {};
+  const log = (name: string, detail: Record<string, unknown> = {}) =>
+    console.info("estimate_finding_stage", {stage: name, ...ids, ...detail});
+  try {
+    log(stage, {uidPresent: Boolean(auth?.uid)});
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
+    }
+    stage = "parse_request";
+    const req = parseEstimateRequest(data);
+    Object.assign(ids, {
+      inspectionId: req.inspectionId,
+      findingId: req.findingId,
+      aiLevel: req.aiLevel,
+    });
 
-  const owned = await isOwnedFinding(firestore, auth.uid, req);
-  if (!owned) {
+    stage = "ownership_check";
+    const owned = await isOwnedFinding(firestore, auth.uid, req);
+    log(stage, {owned});
+    if (!owned) {
+      throw new HttpsError(
+        "permission-denied",
+        "That finding does not belong to you.",
+        {reason: "findingNotSynced"}
+      );
+    }
+
+    stage = "pricing_config";
+    const pricing = await loadPricingConfigWithSource(firestore);
+    const level = pricing.config.aiLevels[req.aiLevel];
+    log(stage, {
+      source: pricing.source,
+      version: pricing.config.version,
+      hasFast: Boolean(pricing.config.aiLevels.fast),
+      hasSmart: Boolean(pricing.config.aiLevels.smart),
+      hasExpert: Boolean(pricing.config.aiLevels.expert),
+      selectedLevel: req.aiLevel,
+      selectedModel: level?.model ?? null,
+      pricingFieldsValid: Boolean(level) &&
+        Number.isFinite(level.providerCostPerKInputTokensUsd) &&
+        Number.isFinite(level.providerCostPerKOutputTokensUsd) &&
+        Number.isFinite(level.estimatedInputTokens) &&
+        Number.isFinite(level.estimatedOutputTokens),
+      issues: pricing.issues.length,
+    });
+
+    stage = "compute_estimate";
+    const result = await computeEstimate(firestore, auth.uid, req, {
+      config: pricing.config,
+      onStage: (name, detail) => log(name, detail),
+    });
+    log("estimate_ready", {
+      estimatedCredits: result.estimatedCredits,
+      maximumCredits: result.maximumCredits,
+      paymentMode: result.paymentMode,
+      eligible: result.eligible,
+    });
+    return result;
+  } catch (error) {
+    console.error("estimate_finding_failed", {
+      stage,
+      ...ids,
+      code: error instanceof HttpsError ? error.code : null,
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+    if (error instanceof HttpsError) throw error;
     throw new HttpsError(
-      "permission-denied",
-      "That finding does not belong to you."
+      "internal",
+      "Pricing is temporarily unavailable.",
+      {reason: "pricingUnavailable"}
     );
   }
-
-  return computeEstimate(firestore, auth.uid, req);
 }

@@ -30,11 +30,19 @@ class DefaultSyncCoordinator implements SyncCoordinator {
   final Set<String> _findingsInFlight = {};
 
   @override
-  Future<SyncResult> syncFindingEvidence(
+  Future<SyncResult> registerFinding(String sessionId, String findingId) =>
+      _syncFinding(sessionId, findingId, uploadEvidence: false);
+
+  @override
+  Future<SyncResult> syncFindingEvidence(String sessionId, String findingId) =>
+      _syncFinding(sessionId, findingId, uploadEvidence: true);
+
+  Future<SyncResult> _syncFinding(
     String sessionId,
-    String findingId,
-  ) async {
-    final key = '$sessionId/$findingId';
+    String findingId, {
+    required bool uploadEvidence,
+  }) async {
+    final key = '$sessionId/$findingId/${uploadEvidence ? 'all' : 'doc'}';
     if (!_findingsInFlight.add(key)) {
       return const SyncResult.failure('This finding is already uploading.');
     }
@@ -58,6 +66,7 @@ class DefaultSyncCoordinator implements SyncCoordinator {
 
       await _cloud.pushSession(user.uid, session);
       await _cloud.pushFinding(user.uid, session.id, finding);
+      if (!uploadEvidence) return const SyncResult.success();
       for (final evidence in finding.evidence) {
         if (evidence.syncStatus == SyncStatus.synced) continue;
         final storagePath = await _cloud.uploadEvidenceFile(

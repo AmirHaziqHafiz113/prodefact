@@ -59,7 +59,7 @@ class FirebaseBillingService implements BillingService {
           outcomeUnknown: analyseFindingOutcomeUnknownForCode(error.code),
         );
       }
-      throw Exception(message);
+      throw billingCallExceptionFor(error.code, error.details);
     } catch (error, stackTrace) {
       AppLogger.error(
         'Billing callable "$name" failed unexpectedly',
@@ -74,7 +74,7 @@ class FirebaseBillingService implements BillingService {
         // been processed.
         throw const AnalyseFindingException(message, outcomeUnknown: true);
       }
-      throw Exception(message);
+      throw const BillingCallException('unavailable', message);
     }
   }
 
@@ -168,6 +168,20 @@ Map<String, dynamic> buildAnalyseFindingPayload({
     'aiLevel': aiLevel.name,
     'idempotencyKey': idempotencyKey,
   };
+}
+
+/// Keeps the backend's error code and `details.reason` (e.g.
+/// `permission-denied` / `findingNotSynced`) so the app can explain a
+/// failed price check precisely.
+@visibleForTesting
+BillingCallException billingCallExceptionFor(String code, Object? details) {
+  return BillingCallException(
+    code,
+    friendlyMessageForBillingFunctionsError(code),
+    reason: details is Map && details['reason'] is String
+        ? details['reason'] as String
+        : null,
+  );
 }
 
 @visibleForTesting

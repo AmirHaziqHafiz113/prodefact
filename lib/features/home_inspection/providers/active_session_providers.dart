@@ -1177,6 +1177,35 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     if (session == null) return null;
     final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
     if (finding == null) return null;
+    // The backend prices only a finding it can see under the caller's
+    // own inspection (ownership check). A finding saved with Auto Analyse
+    // off is local-only until something syncs it, so register it first;
+    // otherwise pricing always answers permission-denied. This writes
+    // only the session and finding documents, so it is quick.
+    if (ref.read(firebaseReadyProvider)) {
+      if (ref.read(authServiceProvider).currentUser == null) {
+        throw const BillingCallException(
+          'unauthenticated',
+          'Sign in to use this.',
+        );
+      }
+      final registered = await ref
+          .read(syncCoordinatorProvider)
+          .registerFinding(session.id, findingId);
+      if (!registered.isSuccess) {
+        AppLogger.warning(
+          'Could not register finding $findingId before pricing: '
+          '${registered.outcome.name}',
+        );
+        throw BillingCallException(
+          registered.outcome == SyncOutcome.unauthenticated
+              ? 'unauthenticated'
+              : 'unavailable',
+          'Could not reach the server.',
+          reason: 'findingNotSynced',
+        );
+      }
+    }
     return ref
         .read(billingServiceProvider)
         .estimateFindingAnalysis(
