@@ -181,11 +181,15 @@ written (**not from training-era model-name knowledge** — the spec
 driving this pass was explicit that stale model names must never be
 guessed):
 
-| Level  | Provider | Model            |
-|--------|----------|------------------|
-| Fast   | openai   | `gpt-5.6-luna`   |
-| Smart  | openai   | `gpt-5.6-terra`  |
-| Expert | openai   | `gpt-5.6-sol`    |
+| Level  | Provider | Model            | Provider price (input / output, per 1M tokens) |
+|--------|----------|------------------|------------------------------------------------|
+| Fast   | openai   | `gpt-6-luna`     | $0.10 / $0.50                                  |
+| Smart  | openai   | `gpt-5.6-terra`  | $2.00 / $12.00                                 |
+| Expert | openai   | `gpt-6.1-sol`    | $2.00 / $10.00                                 |
+
+(Model ids and prices re-checked against OpenAI's model pages on
+2026-10-01. All three support Chat Completions, image input and
+structured output.)
 
 This mapping lives in `pricing/config` (Firestore), not in Flutter or
 even hardcoded permanently in the Functions bundle beyond the

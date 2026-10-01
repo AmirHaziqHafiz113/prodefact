@@ -49,8 +49,11 @@ test("estimateMaxCredits is a ceiling computed from the level's " +
 
 test("actualCreditsForUsage scales with real token usage", () => {
   const config = DEFAULT_PRICING_CONFIG;
+  // GPT-6 Luna is cheap enough that small requests all round up to the
+  // 1-Credit minimum, so compare volumes far enough apart to differ.
   const small = actualCreditsForUsage("fast", 500, 50, config);
-  const large = actualCreditsForUsage("fast", 5000, 500, config);
+  const large = actualCreditsForUsage("fast", 500_000, 50_000, config);
+  assert.equal(small, 1);
   assert.ok(large > small);
 });
 

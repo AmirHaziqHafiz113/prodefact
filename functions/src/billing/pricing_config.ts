@@ -17,9 +17,9 @@ export interface AiLevelConfig {
   /** The exact model id to request — kept out of Flutter entirely, and
    * changeable here without an app update. */
   model: string;
-  /** Internal provider cost, in fractional US-cents per 1,000 tokens —
-   * used only to compute the customer charge; never returned to the
-   * client. */
+  /** Internal provider cost, in US dollars per 1,000 tokens (so
+   * OpenAI's "$2.00 / 1M tokens" is `0.002`) — used only to compute the
+   * customer charge; never returned to the client. */
   providerCostPerKInputTokensUsd: number;
   providerCostPerKOutputTokensUsd: number;
   /** A conservative worst-case token estimate for this level, used to
@@ -93,11 +93,14 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   creditsPerMyr: 100,
   markupMultiplier: 2.0,
   aiLevels: {
+    // Provider prices from OpenAI's model pages (checked 2026-10-01):
+    // GPT-6 Luna $0.10 / $0.50, GPT-5.6 Terra $2.00 / $12.00,
+    // GPT-6.1 Sol $2.00 / $10.00 per 1M input / output tokens.
     fast: {
       provider: "openai",
-      model: "gpt-5.6-luna",
-      providerCostPerKInputTokensUsd: 0.001,
-      providerCostPerKOutputTokensUsd: 0.006,
+      model: "gpt-6-luna",
+      providerCostPerKInputTokensUsd: 0.0001,
+      providerCostPerKOutputTokensUsd: 0.0005,
       estimatedInputTokens: 3000,
       estimatedOutputTokens: 200,
       label: "Fast",
@@ -106,8 +109,8 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     smart: {
       provider: "openai",
       model: "gpt-5.6-terra",
-      providerCostPerKInputTokensUsd: 0.0025,
-      providerCostPerKOutputTokensUsd: 0.015,
+      providerCostPerKInputTokensUsd: 0.002,
+      providerCostPerKOutputTokensUsd: 0.012,
       estimatedInputTokens: 3000,
       estimatedOutputTokens: 200,
       label: "Smart",
@@ -115,9 +118,9 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     },
     expert: {
       provider: "openai",
-      model: "gpt-5.6-sol",
-      providerCostPerKInputTokensUsd: 0.005,
-      providerCostPerKOutputTokensUsd: 0.03,
+      model: "gpt-6.1-sol",
+      providerCostPerKInputTokensUsd: 0.002,
+      providerCostPerKOutputTokensUsd: 0.01,
       estimatedInputTokens: 3000,
       estimatedOutputTokens: 300,
       label: "Expert",
