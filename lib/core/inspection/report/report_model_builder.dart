@@ -4,6 +4,7 @@ import '../ai/ai_progress.dart';
 import '../entities/ai_review.dart';
 import '../entities/component.dart';
 import '../entities/defect_catalogue.dart';
+import '../entities/defect_terms.dart';
 import '../entities/element.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
@@ -227,7 +228,13 @@ ReportFinding _buildCatalogueReportFinding(
     number: number,
     elementName: entry.mainElementName,
     componentName: entry.componentName,
-    defectType: entry.defectDescription,
+    // ONE concrete defect (e.g. "Wall Tile - hollow") when AI chose a
+    // term within a multi-defect entry; otherwise the catalogue wording.
+    defectType: concreteDefectText(
+      componentName: entry.componentName,
+      defectDescription: entry.defectDescription,
+      term: suggestion.finalDefectTerm,
+    ),
     recommendation: entry.correctiveAction,
     notes: finding.notes,
     evidenceFilePaths: evidencePaths,

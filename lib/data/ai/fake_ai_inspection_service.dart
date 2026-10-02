@@ -90,11 +90,18 @@ class FakeAiInspectionService implements AiInspectionService {
               )
               .firstOrNull;
     final chosen = matched ?? candidates.first;
+    // ONE concrete defect: for an entry that words several, the term
+    // the note mentions, else its first.
+    final terms = defectTermsFor(chosen.defectDescription);
+    final term = terms.isEmpty
+        ? null
+        : terms.firstWhere(noteLower.contains, orElse: () => terms.first);
 
     return AiFindingClassification(
       findingId: request.findingId,
       needsReview: false,
       catalogueEntryId: chosen.id,
+      defectTerm: term,
       confidence: matched != null ? 0.82 : 0.55,
       shortReason: matched != null
           ? 'Note mentions symptoms matching this catalogue defect.'

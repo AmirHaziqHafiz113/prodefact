@@ -21,11 +21,14 @@ test("keeps a valid catalogue id and marks it not needing review", () => {
   const result: ClassificationResult = {
     findingId: "finding_1",
     catalogueEntryId: VALID_ID,
+    // A multi-defect entry ("leaking/dripping") needs its ONE term.
+    defectTerm: "Leaking",
     confidence: 0.9,
     needsReview: false,
   };
   const normalized = validateAndNormalize(sampleInput(), result);
   assert.equal(normalized.catalogueEntryId, VALID_ID);
+  assert.equal(normalized.defectTerm, "leaking");
   assert.equal(normalized.needsReview, false);
 });
 

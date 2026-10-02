@@ -16,7 +16,6 @@ import '../../providers/house_pass_providers.dart';
 import '../../providers/physical_inspection_providers.dart';
 import '../../providers/wallet_providers.dart';
 import '../widgets/app_bottom_sheet.dart';
-import 'ai_analysis_approval_dialog.dart';
 import 'ai_suggestion_review_dialog.dart';
 import 'photo_annotation_screen.dart';
 import 'photo_viewer_screen.dart';
@@ -76,6 +75,9 @@ class AreaInspectionScreen extends ConsumerStatefulWidget {
 
 class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
   bool _isCapturing = false;
+
+  /// Display order only — never changes the findings.
+  FindingSort _sort = FindingSort.status;
 
   // Opening an area deliberately does NOT mark it started (QA #13/#21):
   // a stray tap into a suggested area the unit doesn't have must not
@@ -178,6 +180,14 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
           ),
           const SizedBox(height: AppSpacing.xl),
           AppSectionHeader(title: 'Saved findings (${areaFindings.length})'),
+          if (areaFindings.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _FindingSortControl(
+                value: _sort,
+                onChanged: (sort) => setState(() => _sort = sort),
+              ),
+            ),
           if (areaFindings.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
@@ -187,15 +197,25 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
               ),
             )
           else
-            for (final finding in areaFindings)
+            for (final unit in orderFindings(areaFindings, sort: _sort))
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _FindingCard(
-                  finding: finding,
-                  onCaptureAnother: _isCapturing
-                      ? null
-                      : () => _takePhoto(section.id),
-                ),
+                child: unit.isGroup
+                    ? _CaptureBatchGroup(
+                        unit: unit,
+                        cardFor: (finding) => _FindingCard(
+                          finding: finding,
+                          onCaptureAnother: _isCapturing
+                              ? null
+                              : () => _takePhoto(section.id),
+                        ),
+                      )
+                    : _FindingCard(
+                        finding: unit.findings.single,
+                        onCaptureAnother: _isCapturing
+                            ? null
+                            : () => _takePhoto(section.id),
+                      ),
               ),
         ],
       ),
@@ -714,6 +734,83 @@ class _PreviewThumb extends StatelessWidget {
   }
 }
 
+/// Status / Newest / Oldest for the area's findings (default Status).
+class _FindingSortControl extends StatelessWidget {
+  const _FindingSortControl({required this.value, required this.onChanged});
+
+  final FindingSort value;
+  final ValueChanged<FindingSort> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('Sort', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<FindingSort>(
+              key: const ValueKey('finding-sort'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: FindingSort.status, label: Text('Status')),
+                ButtonSegment(value: FindingSort.newest, label: Text('Newest')),
+                ButtonSegment(value: FindingSort.oldest, label: Text('Oldest')),
+              ],
+              selected: {value},
+              onSelectionChanged: (selection) => onChanged(selection.single),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The findings saved from one multi-photo gallery pick, inside one
+/// bordered group. Visual only: each card is still its own finding with
+/// its own note, AI status, review and report entry.
+class _CaptureBatchGroup extends StatelessWidget {
+  const _CaptureBatchGroup({required this.unit, required this.cardFor});
+
+  final FindingDisplayUnit unit;
+  final Widget Function(Finding finding) cardFor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('capture-batch-${unit.captureBatchId}'),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xs,
+              0,
+              AppSpacing.xs,
+              AppSpacing.sm,
+            ),
+            child: Text(
+              'Uploaded together · ${unit.findings.length} findings',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ),
+          for (final (i, finding) in unit.findings.indexed) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.sm),
+            cardFor(finding),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 enum _FindingAction { editNote, remove }
 
 class _FindingCard extends ConsumerWidget {
@@ -924,7 +1021,8 @@ class _FindingPhotoStrip extends StatelessWidget {
 }
 
 /// A finding's live AI state with the one action that moves it on
-/// (Analyse, Add Note, Retry, Classify Manually). Shared by the area
+/// (Add Note, Retry, Top Up, Classify Manually) — analysis itself is
+/// always automatic, so there is no Analyse button. Shared by the area
 /// screen and AI Review, so a finding never shows without a way forward.
 class FindingAiStatusLine extends ConsumerWidget {
   const FindingAiStatusLine({
@@ -982,62 +1080,14 @@ class FindingAiStatusLine extends ConsumerWidget {
             ],
           );
         }
-        // A zero-balance, Flex-only finding can never actually be
-        // analysed yet — surfaced up front on the card itself, rather
-        // than only after the inspector taps "Analyse" and hits the
-        // insufficient-credit dialog. Never shown for a House Pass
-        // inspection: its included allowance may well cover this
-        // finding for 0 Credits, which only the real estimate call
-        // knows for sure. Physical inspection (the card existing at
-        // all) is never affected either way.
-        final resolvedBalance =
-            ref.watch(walletBalanceProvider).value ??
-            ref.watch(walletCacheProvider).value?.balanceCredits;
-        // The backend decides House Pass vs Flex from the pass itself
-        // (QA #23); mirror that here rather than a local setting. While
-        // the pass status is still loading, don't claim Credits are
-        // missing.
-        final sessionId = ref.watch(activeSessionProvider)?.id;
-        final passStatus = sessionId == null
-            ? null
-            : ref.watch(housePassStatusProvider(sessionId)).value?.status;
-        final isFlexOnly =
-            passStatus != null && passStatus != HousePassLifecycleStatus.active;
-        if (isFlexOnly && resolvedBalance == 0) {
-          return Row(
-            children: [
-              const Expanded(
-                child: _StatusText(
-                  icon: Icons.smart_toy_outlined,
-                  color: AppColors.textMuted,
-                  text: 'AI: Waiting for Credits',
-                ),
-              ),
-              TextButton(
-                onPressed: () => context.push(TopUpScreen.routePath),
-                child: const Text('Top Up'),
-              ),
-            ],
-          );
-        }
-        return Row(
-          children: [
-            const Expanded(
-              child: _StatusText(
-                icon: Icons.smart_toy_outlined,
-                color: AppColors.textMuted,
-                text: 'Ready to analyse',
-              ),
-            ),
-            TextButton(
-              onPressed: () => showAnalyseApprovalDialog(
-                context: context,
-                ref: ref,
-                findingId: finding.id,
-              ),
-              child: const Text('Analyse'),
-            ),
-          ],
+        // AI analysis is always automatic: with its note, this finding
+        // is about to be picked up by the queue (no Analyse step).
+        return _StatusText(
+          icon: Icons.hourglass_empty,
+          color: AppColors.textMuted,
+          text: ref.watch(isOnlineForAiProvider)
+              ? 'Queued for AI'
+              : 'Waiting for connection',
         );
       case AiFindingStatus.uploading:
         return const _StatusText(
@@ -1052,18 +1102,42 @@ class FindingAiStatusLine extends ConsumerWidget {
           text: 'AI analysing…',
         );
       case AiFindingStatus.failed:
+        // A zero-balance, Flex-only inspection can't analyse anything
+        // until Credits are added — say so, with Top Up, rather than a
+        // bare failure. Never claimed while the House Pass status is
+        // still loading, or while a pass is active.
+        final resolvedBalance =
+            ref.watch(walletBalanceProvider).value ??
+            ref.watch(walletCacheProvider).value?.balanceCredits;
+        final sessionId = ref.watch(activeSessionProvider)?.id;
+        final passStatus = sessionId == null
+            ? null
+            : ref.watch(housePassStatusProvider(sessionId)).value?.status;
+        final waitingForCredits =
+            passStatus != null &&
+            passStatus != HousePassLifecycleStatus.active &&
+            resolvedBalance == 0;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _StatusText(
-              icon: Icons.error_outline,
-              color: AppColors.danger,
-              text: 'AI analysis failed',
+            _StatusText(
+              icon: waitingForCredits
+                  ? Icons.smart_toy_outlined
+                  : Icons.error_outline,
+              color: waitingForCredits ? AppColors.textMuted : AppColors.danger,
+              text: waitingForCredits
+                  ? 'AI: Waiting for Credits'
+                  : 'AI analysis failed',
             ),
             // Wrap, not Row: on a narrow card both actions must stay
             // visible (a Row overflowed and clipped them).
             Wrap(
               children: [
+                if (waitingForCredits)
+                  TextButton(
+                    onPressed: () => context.push(TopUpScreen.routePath),
+                    child: const Text('Top Up'),
+                  ),
                 TextButton(
                   onPressed: () => ref
                       .read(activeSessionProvider.notifier)

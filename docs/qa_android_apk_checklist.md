@@ -55,8 +55,9 @@ Add one finding with a portrait photo and one with a landscape photo.
   its own shape: nothing is cropped or stretched.
 
 ### 5. AI keeps running when you move on (QA #11)
-Turn on **Auto Analyse**. Save a finding with a note, go straight back
-and open a different area, and keep inspecting.
+AI analysis is always automatic (there is no Auto Analyse switch). Save
+a finding with a note, go straight back and open a different area, and
+keep inspecting.
 
 - Nothing waits for AI. When you return to the first area later, the
   finding shows its AI result (or **Needs manual review**).

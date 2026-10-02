@@ -64,7 +64,7 @@ test("the prompt carries the verbatim note plus a separate likely " +
     {findingId: "f1", images: [], unavailableCount: 0}
   );
   const text = (blocks[0] as {text: string}).text;
-  assert.match(text, /inspector note \(verbatim\): win frem gap/);
+  assert.match(text, /inspector note \(PRIMARY, verbatim\): win frem gap/);
   assert.match(text, /likely meaning: window frame gap/);
 
   const system = buildSystemPrompt();
@@ -85,6 +85,6 @@ test("a note with nothing to expand gets no likely-meaning line", () => {
     {findingId: "f1", images: [], unavailableCount: 0}
   );
   const text = (blocks[0] as {text: string}).text;
-  assert.match(text, /inspector note \(verbatim\): Poor skim finish/);
+  assert.match(text, /inspector note \(PRIMARY, verbatim\): Poor skim finish/);
   assert.doesNotMatch(text, /likely meaning/);
 });

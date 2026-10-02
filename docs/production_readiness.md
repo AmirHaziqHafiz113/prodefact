@@ -1178,6 +1178,9 @@ the callables' own test suites):
   (purchase screen, every lifecycle state, an inspection-queue re-entry
   banner, and an allowance-reached interrupt that turns Auto Analyse
   back off and asks for fresh consent before spending Flex Credits).
+- Auto Analyse (2026-10-02): now always on — no toggle; see
+  docs/commercial_model.md ("Auto Analyse is always on"). Historical
+  note follows.
 - Auto Analyse: a per-inspection toggle, off by default for Flex
   Credits (explicit opt-in required), turned on automatically the
   moment a House Pass becomes active.

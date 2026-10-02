@@ -47,7 +47,6 @@ Future<_Setup> _online({ScriptedBillingService? billing}) async {
   await container
       .read(activeSessionProvider.notifier)
       .startNew(PropertyType.highRise);
-  container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
   return (
     container: container,
     billing: resolvedBilling,
@@ -328,7 +327,7 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Classify Manually'), findsOneWidget);
       expect(
-        find.textContaining('AI is still working on 1 finding'),
+        find.textContaining('AI is still analysing 1 finding'),
         findsOneWidget,
       );
 

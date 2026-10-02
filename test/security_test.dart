@@ -119,7 +119,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
 
       final photo = await notifier.captureFindingPhoto(
@@ -164,7 +163,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final statusNotifier = container.read(sectionStatusesProvider.notifier);
 
@@ -228,7 +226,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
 
       // Must not throw — the whole point of the hardening is that
       // this awaits cleanly to completion.

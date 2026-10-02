@@ -301,7 +301,7 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
                       ],
                       if (activeSession != null) ...[
                         const SizedBox(height: AppSpacing.md),
-                        _AutoAnalyseToggle(session: activeSession),
+                        const _AutoAnalyseNotice(),
                       ],
                       const SizedBox(height: AppSpacing.lg),
                       AppSectionHeader(
@@ -501,13 +501,11 @@ extension on List<Section> {
   }
 }
 
-/// Keeps billing invisible during field work (QA #23) while preserving
-/// the existing spend-consent rule: the backend applies this
-/// inspection's House Pass automatically while it has allowance, then
-/// Flex Credits. The moment the allowance runs out, Auto Analyse is
-/// switched off, so no further finding silently starts spending
-/// Credits; new findings then ask before analysing. The inspector is
-/// told what happened but is never asked to choose a billing mechanism.
+/// Keeps billing invisible during field work (QA #23): the backend
+/// applies this inspection's House Pass automatically while it has
+/// allowance, then Flex Credits. When the allowance runs out the
+/// inspector is told that analysis continues on Credits, but is never
+/// asked to choose a billing mechanism (analysis is always automatic).
 class _HousePassAllowanceWatcher extends ConsumerWidget {
   const _HousePassAllowanceWatcher({required this.inspectionId});
 
@@ -515,17 +513,6 @@ class _HousePassAllowanceWatcher extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen(housePassStatusProvider(inspectionId), (previous, next) {
-      final becameAllowanceReached =
-          next.value?.status == HousePassLifecycleStatus.allowanceReached &&
-          previous?.value?.status != HousePassLifecycleStatus.allowanceReached;
-      if (!becameAllowanceReached) return;
-      final session = ref.read(activeSessionProvider);
-      if (session?.autoAnalyseEnabled == true) {
-        ref.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(false);
-      }
-    });
-
     final status = ref
         .watch(housePassStatusProvider(inspectionId))
         .value
@@ -548,8 +535,8 @@ class _HousePassAllowanceWatcher extends ConsumerWidget {
             SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
-                'House Pass AI allowance used up. New findings will ask '
-                'before using AI Credits.',
+                'House Pass AI allowance used up. New findings are '
+                'analysed with your AI Credits.',
                 style: TextStyle(fontSize: 13),
               ),
             ),
@@ -560,33 +547,26 @@ class _HousePassAllowanceWatcher extends ConsumerWidget {
   }
 }
 
-/// A per-inspection Auto Analyse switch — explicit opt-in for Flex
-/// Credits (never defaults on for a Flex inspection), so a saved
-/// finding never silently starts spending Credits without the
-/// inspector having turned this on themselves. See
-/// `InspectionSession.autoAnalyseEnabled` and
-/// `HousePassScreen._confirmSandbox`/`_purchase`, which turn this on
-/// automatically the moment a House Pass becomes active (its allowance
-/// makes auto-analysing safe by default) — see docs/commercial_model.md.
-class _AutoAnalyseToggle extends ConsumerWidget {
-  const _AutoAnalyseToggle({required this.session});
-
-  final InspectionSession session;
+/// AI analysis always runs automatically (tester feedback, 2026-10-02:
+/// it is the main reason to use the app), so there is no switch — just
+/// a passive line saying so.
+class _AutoAnalyseNotice extends StatelessWidget {
+  const _AutoAnalyseNotice();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      child: SwitchListTile(
-        title: const Text('Auto Analyse'),
-        subtitle: const Text(
-          'Saved findings are analysed with Smart AI automatically, '
-          'without asking each time.',
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey('auto-analyse-notice'),
+      children: [
+        const Icon(Icons.auto_awesome, size: 18, color: AppColors.primary),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            'AI analysis runs automatically for every saved finding.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
-        value: session.autoAnalyseEnabled,
-        onChanged: (enabled) => ref
-            .read(activeSessionProvider.notifier)
-            .setAutoAnalyseEnabled(enabled),
-      ),
+      ],
     );
   }
 }

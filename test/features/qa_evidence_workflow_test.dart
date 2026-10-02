@@ -22,7 +22,7 @@ import '../support/test_repository.dart';
 /// portrait/landscape, #19 original quality, #20 multiple angles.
 
 Future<(ProviderContainer, FakeEvidenceFileStore, ScriptedBillingService)>
-_started({bool autoAnalyse = true}) async {
+_started() async {
   final store = FakeEvidenceFileStore();
   final billing = ScriptedBillingService();
   final container = ProviderContainer(
@@ -31,9 +31,6 @@ _started({bool autoAnalyse = true}) async {
   await container
       .read(activeSessionProvider.notifier)
       .startNew(PropertyType.highRise);
-  container
-      .read(activeSessionProvider.notifier)
-      .setAutoAnalyseEnabled(autoAnalyse);
   return (container, store, billing);
 }
 
@@ -76,7 +73,7 @@ Future<ui.Image> _solidImage(int width, int height) {
 void main() {
   group('camera and gallery share one pipeline', () {
     test('both sources create the same kind of finding and evidence', () async {
-      final (container, _, _) = await _started(autoAnalyse: false);
+      final (container, _, _) = await _started();
       addTearDown(container.dispose);
 
       final fromCamera = await _save(container, note: 'Crack');
@@ -99,7 +96,7 @@ void main() {
   group('QA #14: annotation keeps the original', () {
     test('marking up a saved photo stores a separate copy; the original '
         'path is unchanged and never deleted', () async {
-      final (container, store, _) = await _started(autoAnalyse: false);
+      final (container, store, _) = await _started();
       addTearDown(container.dispose);
       final finding = await _save(container, note: 'Hollow tile');
       await pumpEventQueue();
@@ -146,7 +143,7 @@ void main() {
 
     test('a photo marked up before saving carries its copy into the '
         'finding', () async {
-      final (container, _, _) = await _started(autoAnalyse: false);
+      final (container, _, _) = await _started();
       addTearDown(container.dispose);
       final notifier = container.read(activeSessionProvider.notifier);
       final photo = await notifier.captureFindingPhoto(
@@ -324,7 +321,7 @@ void main() {
     });
 
     test('the report uses the marked-up copy when a photo has one', () async {
-      final (container, _, _) = await _started(autoAnalyse: false);
+      final (container, _, _) = await _started();
       addTearDown(container.dispose);
       final finding = await _save(container, note: 'Hollow tile');
       await pumpEventQueue();
@@ -378,7 +375,7 @@ void main() {
     });
 
     test('approving analysis is refused while the note is missing', () async {
-      final (container, _, billing) = await _started(autoAnalyse: false);
+      final (container, _, billing) = await _started();
       addTearDown(container.dispose);
       final finding = await _save(container);
       await pumpEventQueue();
@@ -392,10 +389,12 @@ void main() {
     });
   });
 
-  group('QA #20: multiple angles of one defect', () {
-    test('three photos attach to one finding and AI receives all of them '
-        '(the originals)', () async {
-      final (container, _, billing) = await _started(autoAnalyse: false);
+  // New findings hold exactly one photo (one photo = one finding); these
+  // cover HISTORICAL multi-photo findings, which still load and work.
+  group('QA #20: historical multi-photo findings', () {
+    test('a finding with three photos sends all of them (the originals) '
+        'to AI', () async {
+      final (container, _, billing) = await _started();
       addTearDown(container.dispose);
       final finding = await _save(container, note: 'Wall tile hollow');
       await pumpEventQueue();
@@ -404,11 +403,12 @@ void main() {
         findingId: finding.id,
         source: EvidenceSource.camera,
       );
+      await pumpEventQueue(times: 200);
       await notifier.addEvidence(
         findingId: finding.id,
         source: EvidenceSource.gallery,
       );
-      await pumpEventQueue();
+      await pumpEventQueue(times: 200);
       final photos = _current(container, finding.id).evidence;
       expect(photos, hasLength(3));
       expect(container.read(activeSessionProvider)!.findings, hasLength(1));
@@ -419,10 +419,9 @@ void main() {
         pngBytes: const [1],
       );
       await pumpEventQueue();
-      await notifier.approveAndRunAnalysis(finding.id);
-      await pumpEventQueue(times: 200);
 
-      final call = billing.calls.single;
+      // Analysis is automatic: the latest run covers every photo.
+      final call = billing.calls.last;
       expect(call.evidenceIds, photos.map((p) => p.id).toList());
       expect(
         call.evidenceFilePaths,
@@ -432,9 +431,10 @@ void main() {
     });
 
     testWidgets('the photo viewer shows every photo, removes one without '
-        'touching the finding, and keeps the last one', (tester) async {
+        'touching the finding, and then offers Delete Finding for the last '
+        'one', (tester) async {
       final (container, _, _) =
-          await tester.runAsync(() => _started(autoAnalyse: false)) ??
+          await tester.runAsync(() => _started()) ??
           (throw StateError('setup failed'));
       addTearDown(container.dispose);
       late Finding finding;
@@ -462,10 +462,9 @@ void main() {
 
       expect(find.text('Photo 1 of 1'), findsOneWidget);
       expect(container.read(activeSessionProvider)!.findings, hasLength(1));
-      final removeButton = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Remove Photo'),
-      );
-      expect(removeButton.onPressed, isNull);
+      // The last photo IS the finding: deleting it deletes the finding.
+      expect(find.text('Remove Photo'), findsNothing);
+      expect(find.text('Delete Finding'), findsOneWidget);
     });
   });
 }

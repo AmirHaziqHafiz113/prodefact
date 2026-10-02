@@ -1,4 +1,5 @@
 import {defectCatalogue} from "./defect_catalogue";
+import {defectTermsFor} from "./defect_terms";
 import {
   INSPECTOR_NOTE_GUIDANCE,
   normalizeInspectorNote,
@@ -31,11 +32,13 @@ import {
  */
 function buildCatalogueListing(): string {
   return defectCatalogue.entries
-    .map(
-      (e) =>
+    .map((e) => {
+      const terms = defectTermsFor(e.defectDescription);
+      const line =
         `${e.id} | ${e.mainElementName} | ${e.componentName} | ` +
-        e.defectDescription
-    )
+        e.defectDescription;
+      return terms.length ? `${line} | terms: ${terms.join(", ")}` : line;
+    })
     .join("\n");
 }
 
@@ -48,19 +51,45 @@ function buildCatalogueListing(): string {
  */
 export function buildSystemPrompt(): string {
   const jsonShape = "{\"catalogueEntryId\": string | null, " +
+    "\"defectTerm\": string | null, " +
     "\"confidence\": number, \"shortReason\": string, " +
     "\"candidateEntryIds\": string[], \"needsReview\": boolean}";
   return [
     "You are ProDefact's professional home inspection defect",
-    "classification engine. You can see a photo of one defect plus",
-    "the inspector's own optional note and the area it was found in.",
+    "classification engine. For ONE finding you receive the",
+    "inspector's note, the area it was found in, and ONE photo.",
+    "",
+    "EVIDENCE PRIORITY:",
+    "1. The inspector's note is the PRIMARY signal. The inspector was",
+    "   on site and can tap, test and see what a photo cannot (e.g. a",
+    "   hollow-sounding tile, a leak that only shows when water runs).",
+    "2. Use the photo to verify, refine or challenge the note — for",
+    "   example to tell a wall tile from a floor tile, or a frame from",
+    "   its glass.",
+    "3. If the photo clearly contradicts the note (it plainly shows a",
+    "   different element or defect), do not follow the note blindly:",
+    "   set needsReview to true.",
+    "4. If the note is plausible but the defect is subtle or not",
+    "   visible in the photo, prefer the note.",
+    "5. With no note, classify from the photo and area alone.",
     "",
     "You must classify this finding by choosing exactly ONE entry",
     "from the CONTROLLED DEFECT CATALOGUE below, identified by its",
     "id. You are NEVER allowed to invent a main element, component,",
     "defect, or corrective action that is not one of the ids listed.",
     "The catalogue format is: id | main element | component | defect",
-    "description.",
+    "description, optionally followed by \"| terms: ...\".",
+    "",
+    "ONE CONCRETE DEFECT ONLY:",
+    "Some descriptions list several defects in one entry. Those lines",
+    "end with \"terms:\" — when you choose such an entry you MUST also",
+    "set defectTerm to the ONE term from that list that best matches",
+    "this finding (copy it exactly). For entries without terms, set",
+    "defectTerm to null. Never combine defects: no \"/\", \"or\",",
+    "\"and\" or multiple ids anywhere in catalogueEntryId or",
+    "defectTerm. If several entries or terms are possible, choose the",
+    "single most likely one; if you cannot choose with reasonable",
+    "confidence, set needsReview to true.",
     "",
     "CONTROLLED DEFECT CATALOGUE:",
     buildCatalogueListing(),
@@ -71,14 +100,16 @@ export function buildSystemPrompt(): string {
     "authority and reviews every classification — never state or",
     "imply otherwise.",
     "",
-    "In your notes/reason, clearly distinguish what is directly",
-    "visible in the photo from what is inference from context. If",
-    "the photo is unclear, irrelevant, or does not clearly match any",
-    "catalogue entry, or if multiple entries are similarly plausible,",
-    "set needsReview to true and catalogueEntryId to null — do NOT",
-    "guess an entry just to have an answer. You may still list up to",
-    "3 plausible catalogueEntryIds in candidateEntryIds even when",
-    "needsReview is true, so the inspector has a shortlist.",
+    "In shortReason, say briefly what the note says and what the photo",
+    "shows. If the photo is unclear or irrelevant and the note does",
+    "not identify the defect, or if no entry fits, set needsReview to",
+    "true and catalogueEntryId to null — do NOT guess an entry just to",
+    "have an answer. You may still list up to 3 plausible",
+    "catalogueEntryIds in candidateEntryIds even when needsReview is",
+    "true, so the inspector has a shortlist.",
+    "",
+    "confidence is your probability (0 to 1) that catalogueEntryId",
+    "and defectTerm are both correct.",
     "",
     "Respond with JSON only, shaped exactly as:",
     jsonShape,
@@ -105,19 +136,22 @@ export function buildFindingContent(
   input: ClassifyFindingInput,
   images: FindingImages
 ): PromptContentBlock[] {
-  const lines = [
-    `findingId: ${input.findingId}`,
-    `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`,
-  ];
+  const lines = [`findingId: ${input.findingId}`];
   if (input.note) {
-    // Verbatim first; the expanded reading is a separate helper line so
-    // the inspector's own wording is never lost (QA #17).
+    // The note is the primary signal, so it comes first. Verbatim
+    // first; the expanded reading is a separate helper line so the
+    // inspector's own wording is never lost (QA #17).
     const note = normalizeInspectorNote(input.note);
-    lines.push(`inspector note (verbatim): ${note.original}`);
+    lines.push(`inspector note (PRIMARY, verbatim): ${note.original}`);
     if (note.normalized.toLowerCase() !== note.original.toLowerCase()) {
       lines.push(`likely meaning: ${note.normalized}`);
     }
+  } else {
+    lines.push("inspector note: none");
   }
+  lines.push(
+    `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`
+  );
 
   const photoCount = images.images.length;
   if (photoCount > 0) {
@@ -174,6 +208,7 @@ export function parseClassificationPayload(
     confidence: typeof r.confidence === "number" ? r.confidence : undefined,
     shortReason:
       typeof r.shortReason === "string" ? r.shortReason : undefined,
+    defectTerm: typeof r.defectTerm === "string" ? r.defectTerm : undefined,
     candidateEntryIds: Array.isArray(r.candidateEntryIds) ?
       r.candidateEntryIds.filter((x): x is string => typeof x === "string") :
       [],

@@ -142,9 +142,6 @@ void main() {
       await container
           .read(activeSessionProvider.notifier)
           .startNew(PropertyType.highRise);
-      container
-          .read(activeSessionProvider.notifier)
-          .setAutoAnalyseEnabled(true);
 
       await _saveFinding(container);
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -162,7 +159,6 @@ void main() {
     await container
         .read(activeSessionProvider.notifier)
         .startNew(PropertyType.highRise);
-    container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
 
     await _saveFinding(container);
     await Future<void>.delayed(const Duration(milliseconds: 50));

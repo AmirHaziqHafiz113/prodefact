@@ -29,15 +29,26 @@ type DocData = Record<string, unknown>;
  * -of-undefined optional field is caught here, in-memory, rather than
  * only in a real deployment.
  * @param {DocData} data the candidate document.
+ * @param {string} [prefix] the dotted path of [data] in its document.
  */
-function assertNoUndefinedValues(data: DocData): void {
+function assertNoUndefinedValues(data: DocData, prefix = ""): void {
+  // Nested maps too, exactly like the Admin SDK (a field such as
+  // "classification.catalogueEntryId" is rejected as well).
   for (const [key, value] of Object.entries(data)) {
+    const field = `${prefix}${key}`;
     if (value === undefined) {
       throw new Error(
         "Value for argument \"data\" is not a valid Firestore document. " +
           "Cannot use \"undefined\" as a Firestore value (found in field " +
-          `"${key}").`
+          `"${field}").`
       );
+    }
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      Object.getPrototypeOf(value) === Object.prototype
+    ) {
+      assertNoUndefinedValues(value as DocData, `${field}.`);
     }
   }
 }

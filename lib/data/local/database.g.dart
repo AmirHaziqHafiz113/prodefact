@@ -2302,6 +2302,17 @@ class $FindingRowsTable extends FindingRows
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _captureBatchIdMeta = const VerificationMeta(
+    'captureBatchId',
+  );
+  @override
+  late final GeneratedColumn<String> captureBatchId = GeneratedColumn<String>(
+    'capture_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2338,6 +2349,7 @@ class $FindingRowsTable extends FindingRows
     aiAttemptKey,
     aiAttemptLevel,
     aiAttemptSubmittedAt,
+    captureBatchId,
     createdAt,
     updatedAt,
   ];
@@ -2445,6 +2457,15 @@ class $FindingRowsTable extends FindingRows
         ),
       );
     }
+    if (data.containsKey('capture_batch_id')) {
+      context.handle(
+        _captureBatchIdMeta,
+        captureBatchId.isAcceptableOrUnknown(
+          data['capture_batch_id']!,
+          _captureBatchIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2518,6 +2539,10 @@ class $FindingRowsTable extends FindingRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}ai_attempt_submitted_at'],
       ),
+      captureBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}capture_batch_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2568,6 +2593,11 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
   final String? aiAttemptKey;
   final String? aiAttemptLevel;
   final DateTime? aiAttemptSubmittedAt;
+
+  /// Shared by findings saved from one multi-photo gallery pick (added
+  /// in schema v14) — a visual grouping only; each finding is still its
+  /// own finding. Null for single captures and every older finding.
+  final String? captureBatchId;
   final DateTime createdAt;
   final DateTime updatedAt;
   const FindingRow({
@@ -2583,6 +2613,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     this.aiAttemptKey,
     this.aiAttemptLevel,
     this.aiAttemptSubmittedAt,
+    this.captureBatchId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -2612,6 +2643,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     }
     if (!nullToAbsent || aiAttemptSubmittedAt != null) {
       map['ai_attempt_submitted_at'] = Variable<DateTime>(aiAttemptSubmittedAt);
+    }
+    if (!nullToAbsent || captureBatchId != null) {
+      map['capture_batch_id'] = Variable<String>(captureBatchId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2644,6 +2678,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       aiAttemptSubmittedAt: aiAttemptSubmittedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(aiAttemptSubmittedAt),
+      captureBatchId: captureBatchId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(captureBatchId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -2669,6 +2706,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       aiAttemptSubmittedAt: serializer.fromJson<DateTime?>(
         json['aiAttemptSubmittedAt'],
       ),
+      captureBatchId: serializer.fromJson<String?>(json['captureBatchId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -2691,6 +2729,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       'aiAttemptSubmittedAt': serializer.toJson<DateTime?>(
         aiAttemptSubmittedAt,
       ),
+      'captureBatchId': serializer.toJson<String?>(captureBatchId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -2709,6 +2748,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     Value<String?> aiAttemptKey = const Value.absent(),
     Value<String?> aiAttemptLevel = const Value.absent(),
     Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
+    Value<String?> captureBatchId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => FindingRow(
@@ -2728,6 +2768,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     aiAttemptSubmittedAt: aiAttemptSubmittedAt.present
         ? aiAttemptSubmittedAt.value
         : this.aiAttemptSubmittedAt,
+    captureBatchId: captureBatchId.present
+        ? captureBatchId.value
+        : this.captureBatchId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -2755,6 +2798,9 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
       aiAttemptSubmittedAt: data.aiAttemptSubmittedAt.present
           ? data.aiAttemptSubmittedAt.value
           : this.aiAttemptSubmittedAt,
+      captureBatchId: data.captureBatchId.present
+          ? data.captureBatchId.value
+          : this.captureBatchId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2775,6 +2821,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
           ..write('aiAttemptKey: $aiAttemptKey, ')
           ..write('aiAttemptLevel: $aiAttemptLevel, ')
           ..write('aiAttemptSubmittedAt: $aiAttemptSubmittedAt, ')
+          ..write('captureBatchId: $captureBatchId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2795,6 +2842,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
     aiAttemptKey,
     aiAttemptLevel,
     aiAttemptSubmittedAt,
+    captureBatchId,
     createdAt,
     updatedAt,
   );
@@ -2814,6 +2862,7 @@ class FindingRow extends DataClass implements Insertable<FindingRow> {
           other.aiAttemptKey == this.aiAttemptKey &&
           other.aiAttemptLevel == this.aiAttemptLevel &&
           other.aiAttemptSubmittedAt == this.aiAttemptSubmittedAt &&
+          other.captureBatchId == this.captureBatchId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2831,6 +2880,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
   final Value<String?> aiAttemptKey;
   final Value<String?> aiAttemptLevel;
   final Value<DateTime?> aiAttemptSubmittedAt;
+  final Value<String?> captureBatchId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -2847,6 +2897,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     this.aiAttemptKey = const Value.absent(),
     this.aiAttemptLevel = const Value.absent(),
     this.aiAttemptSubmittedAt = const Value.absent(),
+    this.captureBatchId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2864,6 +2915,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     this.aiAttemptKey = const Value.absent(),
     this.aiAttemptLevel = const Value.absent(),
     this.aiAttemptSubmittedAt = const Value.absent(),
+    this.captureBatchId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -2886,6 +2938,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     Expression<String>? aiAttemptKey,
     Expression<String>? aiAttemptLevel,
     Expression<DateTime>? aiAttemptSubmittedAt,
+    Expression<String>? captureBatchId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -2904,6 +2957,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
       if (aiAttemptLevel != null) 'ai_attempt_level': aiAttemptLevel,
       if (aiAttemptSubmittedAt != null)
         'ai_attempt_submitted_at': aiAttemptSubmittedAt,
+      if (captureBatchId != null) 'capture_batch_id': captureBatchId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2923,6 +2977,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
     Value<String?>? aiAttemptKey,
     Value<String?>? aiAttemptLevel,
     Value<DateTime?>? aiAttemptSubmittedAt,
+    Value<String?>? captureBatchId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -2940,6 +2995,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
       aiAttemptKey: aiAttemptKey ?? this.aiAttemptKey,
       aiAttemptLevel: aiAttemptLevel ?? this.aiAttemptLevel,
       aiAttemptSubmittedAt: aiAttemptSubmittedAt ?? this.aiAttemptSubmittedAt,
+      captureBatchId: captureBatchId ?? this.captureBatchId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2987,6 +3043,9 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
         aiAttemptSubmittedAt.value,
       );
     }
+    if (captureBatchId.present) {
+      map['capture_batch_id'] = Variable<String>(captureBatchId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3014,6 +3073,7 @@ class FindingRowsCompanion extends UpdateCompanion<FindingRow> {
           ..write('aiAttemptKey: $aiAttemptKey, ')
           ..write('aiAttemptLevel: $aiAttemptLevel, ')
           ..write('aiAttemptSubmittedAt: $aiAttemptSubmittedAt, ')
+          ..write('captureBatchId: $captureBatchId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -3903,6 +3963,17 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _suggestedDefectTermMeta =
+      const VerificationMeta('suggestedDefectTerm');
+  @override
+  late final GeneratedColumn<String> suggestedDefectTerm =
+      GeneratedColumn<String>(
+        'suggested_defect_term',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3927,6 +3998,7 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
     suggestedShortReason,
     suggestedCandidateEntryIds,
     finalCatalogueEntryId,
+    suggestedDefectTerm,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4124,6 +4196,15 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         ),
       );
     }
+    if (data.containsKey('suggested_defect_term')) {
+      context.handle(
+        _suggestedDefectTermMeta,
+        suggestedDefectTerm.isAcceptableOrUnknown(
+          data['suggested_defect_term']!,
+          _suggestedDefectTermMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4221,6 +4302,10 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         DriftSqlType.string,
         data['${effectivePrefix}final_catalogue_entry_id'],
       ),
+      suggestedDefectTerm: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}suggested_defect_term'],
+      ),
     );
   }
 
@@ -4265,6 +4350,10 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
   /// empty string (not SQL NULL) means "reviewed, explicitly left
   /// unresolved".
   final String? finalCatalogueEntryId;
+
+  /// The AI's ONE concrete defect within a multi-defect catalogue
+  /// entry's wording (added in schema v14) — see `defectTermsFor`.
+  final String? suggestedDefectTerm;
   const AiSuggestionRow({
     required this.id,
     required this.sessionId,
@@ -4288,6 +4377,7 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     this.suggestedShortReason,
     this.suggestedCandidateEntryIds,
     this.finalCatalogueEntryId,
+    this.suggestedDefectTerm,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4352,6 +4442,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     if (!nullToAbsent || finalCatalogueEntryId != null) {
       map['final_catalogue_entry_id'] = Variable<String>(finalCatalogueEntryId);
     }
+    if (!nullToAbsent || suggestedDefectTerm != null) {
+      map['suggested_defect_term'] = Variable<String>(suggestedDefectTerm);
+    }
     return map;
   }
 
@@ -4413,6 +4506,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       finalCatalogueEntryId: finalCatalogueEntryId == null && nullToAbsent
           ? const Value.absent()
           : Value(finalCatalogueEntryId),
+      suggestedDefectTerm: suggestedDefectTerm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suggestedDefectTerm),
     );
   }
 
@@ -4464,6 +4560,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       finalCatalogueEntryId: serializer.fromJson<String?>(
         json['finalCatalogueEntryId'],
       ),
+      suggestedDefectTerm: serializer.fromJson<String?>(
+        json['suggestedDefectTerm'],
+      ),
     );
   }
   @override
@@ -4500,6 +4599,7 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       'finalCatalogueEntryId': serializer.toJson<String?>(
         finalCatalogueEntryId,
       ),
+      'suggestedDefectTerm': serializer.toJson<String?>(suggestedDefectTerm),
     };
   }
 
@@ -4526,6 +4626,7 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     Value<String?> suggestedShortReason = const Value.absent(),
     Value<String?> suggestedCandidateEntryIds = const Value.absent(),
     Value<String?> finalCatalogueEntryId = const Value.absent(),
+    Value<String?> suggestedDefectTerm = const Value.absent(),
   }) => AiSuggestionRow(
     id: id ?? this.id,
     sessionId: sessionId ?? this.sessionId,
@@ -4577,6 +4678,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     finalCatalogueEntryId: finalCatalogueEntryId.present
         ? finalCatalogueEntryId.value
         : this.finalCatalogueEntryId,
+    suggestedDefectTerm: suggestedDefectTerm.present
+        ? suggestedDefectTerm.value
+        : this.suggestedDefectTerm,
   );
   AiSuggestionRow copyWithCompanion(AiSuggestionRowsCompanion data) {
     return AiSuggestionRow(
@@ -4638,6 +4742,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       finalCatalogueEntryId: data.finalCatalogueEntryId.present
           ? data.finalCatalogueEntryId.value
           : this.finalCatalogueEntryId,
+      suggestedDefectTerm: data.suggestedDefectTerm.present
+          ? data.suggestedDefectTerm.value
+          : this.suggestedDefectTerm,
     );
   }
 
@@ -4665,7 +4772,8 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           ..write('suggestedConfidence: $suggestedConfidence, ')
           ..write('suggestedShortReason: $suggestedShortReason, ')
           ..write('suggestedCandidateEntryIds: $suggestedCandidateEntryIds, ')
-          ..write('finalCatalogueEntryId: $finalCatalogueEntryId')
+          ..write('finalCatalogueEntryId: $finalCatalogueEntryId, ')
+          ..write('suggestedDefectTerm: $suggestedDefectTerm')
           ..write(')'))
         .toString();
   }
@@ -4694,6 +4802,7 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     suggestedShortReason,
     suggestedCandidateEntryIds,
     finalCatalogueEntryId,
+    suggestedDefectTerm,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4720,7 +4829,8 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           other.suggestedConfidence == this.suggestedConfidence &&
           other.suggestedShortReason == this.suggestedShortReason &&
           other.suggestedCandidateEntryIds == this.suggestedCandidateEntryIds &&
-          other.finalCatalogueEntryId == this.finalCatalogueEntryId);
+          other.finalCatalogueEntryId == this.finalCatalogueEntryId &&
+          other.suggestedDefectTerm == this.suggestedDefectTerm);
 }
 
 class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
@@ -4746,6 +4856,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
   final Value<String?> suggestedShortReason;
   final Value<String?> suggestedCandidateEntryIds;
   final Value<String?> finalCatalogueEntryId;
+  final Value<String?> suggestedDefectTerm;
   final Value<int> rowid;
   const AiSuggestionRowsCompanion({
     this.id = const Value.absent(),
@@ -4770,6 +4881,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.suggestedShortReason = const Value.absent(),
     this.suggestedCandidateEntryIds = const Value.absent(),
     this.finalCatalogueEntryId = const Value.absent(),
+    this.suggestedDefectTerm = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AiSuggestionRowsCompanion.insert({
@@ -4795,6 +4907,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.suggestedShortReason = const Value.absent(),
     this.suggestedCandidateEntryIds = const Value.absent(),
     this.finalCatalogueEntryId = const Value.absent(),
+    this.suggestedDefectTerm = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sessionId = Value(sessionId),
@@ -4824,6 +4937,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Expression<String>? suggestedShortReason,
     Expression<String>? suggestedCandidateEntryIds,
     Expression<String>? finalCatalogueEntryId,
+    Expression<String>? suggestedDefectTerm,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4859,6 +4973,8 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
         'suggested_candidate_entry_ids': suggestedCandidateEntryIds,
       if (finalCatalogueEntryId != null)
         'final_catalogue_entry_id': finalCatalogueEntryId,
+      if (suggestedDefectTerm != null)
+        'suggested_defect_term': suggestedDefectTerm,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4886,6 +5002,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Value<String?>? suggestedShortReason,
     Value<String?>? suggestedCandidateEntryIds,
     Value<String?>? finalCatalogueEntryId,
+    Value<String?>? suggestedDefectTerm,
     Value<int>? rowid,
   }) {
     return AiSuggestionRowsCompanion(
@@ -4915,6 +5032,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
           suggestedCandidateEntryIds ?? this.suggestedCandidateEntryIds,
       finalCatalogueEntryId:
           finalCatalogueEntryId ?? this.finalCatalogueEntryId,
+      suggestedDefectTerm: suggestedDefectTerm ?? this.suggestedDefectTerm,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5002,6 +5120,11 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
         finalCatalogueEntryId.value,
       );
     }
+    if (suggestedDefectTerm.present) {
+      map['suggested_defect_term'] = Variable<String>(
+        suggestedDefectTerm.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5033,6 +5156,7 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
           ..write('suggestedShortReason: $suggestedShortReason, ')
           ..write('suggestedCandidateEntryIds: $suggestedCandidateEntryIds, ')
           ..write('finalCatalogueEntryId: $finalCatalogueEntryId, ')
+          ..write('suggestedDefectTerm: $suggestedDefectTerm, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8232,6 +8356,7 @@ typedef $$FindingRowsTableCreateCompanionBuilder =
       Value<String?> aiAttemptKey,
       Value<String?> aiAttemptLevel,
       Value<DateTime?> aiAttemptSubmittedAt,
+      Value<String?> captureBatchId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -8250,6 +8375,7 @@ typedef $$FindingRowsTableUpdateCompanionBuilder =
       Value<String?> aiAttemptKey,
       Value<String?> aiAttemptLevel,
       Value<DateTime?> aiAttemptSubmittedAt,
+      Value<String?> captureBatchId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -8377,6 +8503,11 @@ class $$FindingRowsTableFilterComposer
 
   ColumnFilters<DateTime> get aiAttemptSubmittedAt => $composableBuilder(
     column: $table.aiAttemptSubmittedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get captureBatchId => $composableBuilder(
+    column: $table.captureBatchId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8529,6 +8660,11 @@ class $$FindingRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get captureBatchId => $composableBuilder(
+    column: $table.captureBatchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -8613,6 +8749,11 @@ class $$FindingRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get aiAttemptSubmittedAt => $composableBuilder(
     column: $table.aiAttemptSubmittedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get captureBatchId => $composableBuilder(
+    column: $table.captureBatchId,
     builder: (column) => column,
   );
 
@@ -8741,6 +8882,7 @@ class $$FindingRowsTableTableManager
                 Value<String?> aiAttemptKey = const Value.absent(),
                 Value<String?> aiAttemptLevel = const Value.absent(),
                 Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
+                Value<String?> captureBatchId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -8757,6 +8899,7 @@ class $$FindingRowsTableTableManager
                 aiAttemptKey: aiAttemptKey,
                 aiAttemptLevel: aiAttemptLevel,
                 aiAttemptSubmittedAt: aiAttemptSubmittedAt,
+                captureBatchId: captureBatchId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -8775,6 +8918,7 @@ class $$FindingRowsTableTableManager
                 Value<String?> aiAttemptKey = const Value.absent(),
                 Value<String?> aiAttemptLevel = const Value.absent(),
                 Value<DateTime?> aiAttemptSubmittedAt = const Value.absent(),
+                Value<String?> captureBatchId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -8791,6 +8935,7 @@ class $$FindingRowsTableTableManager
                 aiAttemptKey: aiAttemptKey,
                 aiAttemptLevel: aiAttemptLevel,
                 aiAttemptSubmittedAt: aiAttemptSubmittedAt,
+                captureBatchId: captureBatchId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -9355,6 +9500,7 @@ typedef $$AiSuggestionRowsTableCreateCompanionBuilder =
       Value<String?> suggestedShortReason,
       Value<String?> suggestedCandidateEntryIds,
       Value<String?> finalCatalogueEntryId,
+      Value<String?> suggestedDefectTerm,
       Value<int> rowid,
     });
 typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
@@ -9381,6 +9527,7 @@ typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
       Value<String?> suggestedShortReason,
       Value<String?> suggestedCandidateEntryIds,
       Value<String?> finalCatalogueEntryId,
+      Value<String?> suggestedDefectTerm,
       Value<int> rowid,
     });
 
@@ -9536,6 +9683,11 @@ class $$AiSuggestionRowsTableFilterComposer
 
   ColumnFilters<String> get finalCatalogueEntryId => $composableBuilder(
     column: $table.finalCatalogueEntryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get suggestedDefectTerm => $composableBuilder(
+    column: $table.suggestedDefectTerm,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9696,6 +9848,11 @@ class $$AiSuggestionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get suggestedDefectTerm => $composableBuilder(
+    column: $table.suggestedDefectTerm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$InspectionSessionRowsTableOrderingComposer get sessionId {
     final $$InspectionSessionRowsTableOrderingComposer composer =
         $composerBuilder(
@@ -9849,6 +10006,11 @@ class $$AiSuggestionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get suggestedDefectTerm => $composableBuilder(
+    column: $table.suggestedDefectTerm,
+    builder: (column) => column,
+  );
+
   $$InspectionSessionRowsTableAnnotationComposer get sessionId {
     final $$InspectionSessionRowsTableAnnotationComposer composer =
         $composerBuilder(
@@ -9950,6 +10112,7 @@ class $$AiSuggestionRowsTableTableManager
                 Value<String?> suggestedCandidateEntryIds =
                     const Value.absent(),
                 Value<String?> finalCatalogueEntryId = const Value.absent(),
+                Value<String?> suggestedDefectTerm = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion(
                 id: id,
@@ -9974,6 +10137,7 @@ class $$AiSuggestionRowsTableTableManager
                 suggestedShortReason: suggestedShortReason,
                 suggestedCandidateEntryIds: suggestedCandidateEntryIds,
                 finalCatalogueEntryId: finalCatalogueEntryId,
+                suggestedDefectTerm: suggestedDefectTerm,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10001,6 +10165,7 @@ class $$AiSuggestionRowsTableTableManager
                 Value<String?> suggestedCandidateEntryIds =
                     const Value.absent(),
                 Value<String?> finalCatalogueEntryId = const Value.absent(),
+                Value<String?> suggestedDefectTerm = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion.insert(
                 id: id,
@@ -10025,6 +10190,7 @@ class $$AiSuggestionRowsTableTableManager
                 suggestedShortReason: suggestedShortReason,
                 suggestedCandidateEntryIds: suggestedCandidateEntryIds,
                 finalCatalogueEntryId: finalCatalogueEntryId,
+                suggestedDefectTerm: suggestedDefectTerm,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

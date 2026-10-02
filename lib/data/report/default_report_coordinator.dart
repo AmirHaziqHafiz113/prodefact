@@ -68,15 +68,14 @@ class DefaultReportCoordinator implements ReportCoordinator {
     if (session.status == InspectionStatus.inProgress) {
       return const ReportGenerationResult.physicalInspectionIncomplete();
     }
-    final processing = AiProcessingProgress.of(session);
-    final review = AiReviewProgress.of(session);
-    // `processing.inFlight` catches a finding still queued/uploading/
-    // analyzing (including one that was never even queued at all);
-    // `review.pending` catches one that finished processing but has an
-    // unreviewed (or needs-review, still-unresolved) suggestion.
-    final aiReviewIncomplete = processing.inFlight > 0 || review.pending > 0;
-    if (aiReviewIncomplete) {
-      return const ReportGenerationResult.aiReviewIncomplete();
+    // The one readiness rule shared with the Report screen and AI
+    // Review: only the session's current findings count — never deleted
+    // findings, orphan suggestions, or stale queue state — and every
+    // one must be resolved (a failed analysis needs Retry or Classify
+    // Manually; it is never silently included).
+    final readiness = ReportReadiness.of(session);
+    if (!readiness.isReady) {
+      return ReportGenerationResult.aiReviewIncomplete(readiness.summary);
     }
     // The one Basic Details field deferrable at setup but required
     // before finalization (see QA/QC simplification pass) — resolved

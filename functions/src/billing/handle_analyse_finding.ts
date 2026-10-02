@@ -177,17 +177,38 @@ function aiJobRef(db: Firestore, uid: string, idempotencyKey: string) {
 }
 
 /**
- * Firestore rejects `undefined` field values, and a job record's
- * optional fields are often unset.
+ * Firestore rejects `undefined` field values anywhere in a document —
+ * nested maps included — and a job record's optional fields are often
+ * unset. Before 2026-10-02 only top-level fields were stripped, so a
+ * stored classification with an unset field (every needsReview answer
+ * has no `catalogueEntryId`; a model may omit `confidence`) made the
+ * write throw: the job was never finalised, the app parked the finding
+ * as queued, and its replay failed the same way.
  * @param {AiJobRecord} job a job record.
  * @return {AiJobRecord} the same record without undefined fields.
  */
 function withoutUndefined(job: AiJobRecord): AiJobRecord {
-  const result = {} as Record<string, unknown>;
-  for (const [key, value] of Object.entries(job)) {
-    if (value !== undefined) result[key] = value;
+  return stripUndefined(job) as unknown as AiJobRecord;
+}
+
+/**
+ * @param {unknown} value any value.
+ * @return {unknown} the value with undefined fields removed from it and
+ *   from every nested plain object (arrays are kept as they are).
+ */
+function stripUndefined(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    return value;
   }
-  return result as unknown as AiJobRecord;
+  const result = {} as Record<string, unknown>;
+  for (const [key, field] of Object.entries(value)) {
+    if (field !== undefined) result[key] = stripUndefined(field);
+  }
+  return result;
 }
 
 /**
@@ -246,6 +267,7 @@ function toResult(
     classification: {
       findingId: job.classification.findingId,
       catalogueEntryId: job.classification.catalogueEntryId,
+      defectTerm: job.classification.defectTerm,
       confidence: job.classification.confidence,
       shortReason: job.classification.shortReason,
       candidateEntryIds: job.classification.candidateEntryIds ?? [],
@@ -665,10 +687,30 @@ async function runClaimedJob(params: {
     let result: ClassificationResult;
     let usage: {inputTokens: number; outputTokens: number} | undefined;
     try {
-      console.info("ai_job_started", {idempotencyKey, provider: provider.id});
+      // Safe facts only (no note text, image bytes or keys), so Fast,
+      // Smart and Expert runs can be compared in the logs.
+      const providerStartedAt = Date.now();
+      console.info("provider_started", {
+        idempotencyKey,
+        provider: provider.id,
+        model: levelConfig.model,
+        aiLevel,
+        images: images.images.length,
+        unavailableImages: images.unavailableCount,
+        hasNote: Boolean(input.note),
+      });
       const classification = await provider.classifyFinding(input, images);
       result = classification.result;
       usage = classification.usage;
+      console.info("provider_completed", {
+        idempotencyKey,
+        model: levelConfig.model,
+        aiLevel,
+        ms: Date.now() - providerStartedAt,
+        needsReview: result.needsReview,
+        hasEntry: Boolean(result.catalogueEntryId),
+        hasTerm: Boolean(result.defectTerm),
+      });
     } catch (error) {
       // A definite provider failure: no result exists, so nothing is
       // charged. The release refuses to apply if this reservation was

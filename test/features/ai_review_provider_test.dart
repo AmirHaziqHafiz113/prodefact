@@ -13,8 +13,7 @@ import '../support/uncertain_ai_billing_service.dart';
 /// `saveCameraFinding` actually run before assertions.
 Future<void> _pumpAiQueue() => Future<void>.delayed(Duration.zero);
 
-// Every test below enables Auto Analyse right after starting the
-// inspection (`notifier.setAutoAnalyseEnabled(true)`) so `saveCameraFinding`
+// AI analysis is always automatic, so `saveCameraFinding`
 // queues AI immediately, exactly like this suite's pre-commercial-pass
 // behavior — this file is about AI *review* (accept/change/reject), not
 // the separate estimate/approval gate, which has its own dedicated
@@ -34,7 +33,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
 
       final photo = await notifier.captureFindingPhoto(
@@ -63,7 +61,6 @@ void main() {
         .begin(PropertyType.highRise);
     await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     // "Master Bathroom" deterministically resolves to a confident
     // match in the fake AI (a plumbing/sanitary-fitting area name).
@@ -104,7 +101,6 @@ void main() {
         .begin(PropertyType.highRise);
     await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final bathroom = queue.firstWhere((s) => s.name.contains('Bathroom'));
 
@@ -151,7 +147,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final bathroom = queue.firstWhere((s) => s.name.contains('Bathroom'));
 
@@ -196,7 +191,6 @@ void main() {
           .read(newInspectionDraftProvider.notifier)
           .startInspection();
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final bathroom = queue.firstWhere((s) => s.name.contains('Bathroom'));
 
@@ -254,7 +248,6 @@ void main() {
         .begin(PropertyType.highRise);
     await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final bathroom = queue.firstWhere((s) => s.name.contains('Bathroom'));
 
@@ -310,7 +303,6 @@ void main() {
         .begin(PropertyType.highRise);
     await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final bathroom = queue.firstWhere((s) => s.name.contains('Bathroom'));
 

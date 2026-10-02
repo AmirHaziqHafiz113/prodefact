@@ -301,14 +301,36 @@ are built (see `ActiveInspectionSession.saveCameraFinding`/
    analysis offers Retry (a fresh `idempotencyKey`) and Classify
    Manually, exactly like the pre-existing unpriced path did.
 
-**Auto Analyse.** `InspectionSession.autoAnalyseEnabled` (default
-false) skips the manual approval tap: `saveCameraFinding` queues AI
-immediately instead of stopping at `awaitingApproval`. This still goes
+**Auto Analyse is always on (2026-10-02).** Tester feedback: automatic
+AI analysis is the main reason to use the app, so it is no longer a
+setting. `saveCameraFinding` queues AI as soon as a finding has its quick
+defect note (QA #16); a finding saved without one waits as
+`awaitingApproval` ("Add a quick defect note to start AI") and is queued
+the moment the note is added. Older inspections stored with the opt-out
+are treated as on (schema v14 sets the column to true, and the queue
+drains any finding left waiting for an approval tap). This still goes
 through the exact same priced `analyseFinding` protocol above —
-"automatic" only means the client-side tap is skipped, never that
-pricing/reservation is bypassed. Toggled via
-`ActiveInspectionSession.setAutoAnalyseEnabled` — no dedicated Settings
-UI for it yet (see "What's still needed").
+"automatic" only means there is no client-side tap, never that
+pricing/reservation is bypassed. The estimate/approval dialog
+(`ai_analysis_approval_dialog.dart`) is no longer opened from the field
+workflow. When a Flex inspection has no Credits, the automatic analysis
+fails and the finding shows "AI: Waiting for Credits" with Top Up and
+Retry.
+
+**Queue guarantee.** A queued finding always reaches analysing,
+completed/auto-accepted, needsReview, or failed (with Retry) without user
+action — see `ActiveInspectionSession` ("queue guarantee"): parked
+(offline/signed-out) findings wake themselves on a bounded backoff,
+sign-in and reconnect drain the queue, a watchdog re-drains anything not
+being worked on, uploads time out and retry (bounded), and replays reuse
+the idempotency key so nothing is charged twice.
+
+**Report readiness.** One rule (`ReportReadiness`) is shared by the
+report gate, the Report screen and AI Review: only the session's current
+findings count (never deleted findings, orphan suggestions or stale queue
+state), and every one with a photo must be resolved — still analysing,
+waiting for a note, failed (Retry or Classify Manually) and pending review
+are each reported as what is outstanding.
 
 ## The wallet ledger
 

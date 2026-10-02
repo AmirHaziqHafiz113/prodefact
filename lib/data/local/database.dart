@@ -97,6 +97,10 @@ part 'database.g.dart';
 /// - v12: (QA/QC evidence pass) added `EvidenceRows.annotatedFilePath`
 ///   (nullable): a separate marked-up copy of a photo. The original file
 ///   is never modified. Null for every pre-existing photo. Additive only.
+/// - v14: (P0 AI workflow pass) added `FindingRows.captureBatchId` and
+///   `AiSuggestionRows.suggestedDefectTerm` (both nullable, additive),
+///   and set every session's `autoAnalyseEnabled` to true — AI analysis
+///   is now always automatic, so an old opt-out is retired, not kept.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -118,7 +122,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -274,8 +278,42 @@ class AppDatabase extends _$AppDatabase {
       if (from < 13) {
         await migrator.createTable(areaCandidateRows);
       }
+      if (from < 14) {
+        // Purely additive. A table created above from today's Dart
+        // definition (e.g. `aiSuggestionRows` for from < 3) already has
+        // these columns, so each is added only where it is missing.
+        await _addColumnIfMissing(
+          migrator,
+          findingRows,
+          findingRows.captureBatchId,
+        );
+        await _addColumnIfMissing(
+          migrator,
+          aiSuggestionRows,
+          aiSuggestionRows.suggestedDefectTerm,
+        );
+        await customStatement(
+          'UPDATE inspection_session_rows SET auto_analyse_enabled = 1',
+        );
+      }
     },
   );
+
+  /// Adds [column] to [table] unless the table is absent or already has
+  /// it — for additive migrations that can follow a step which built
+  /// the table from the current definition.
+  static Future<void> _addColumnIfMissing(
+    Migrator migrator,
+    TableInfo table,
+    GeneratedColumn column,
+  ) async {
+    final info = await migrator.database
+        .customSelect('PRAGMA table_info(${table.actualTableName})')
+        .get();
+    if (info.isEmpty) return; // no such table
+    final exists = info.any((row) => row.read<String>('name') == column.name);
+    if (!exists) await migrator.addColumn(table, column);
+  }
 
   static Future<void> _createV5Indexes(Migrator migrator) async {
     await migrator.database.customStatement(

@@ -72,6 +72,32 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
     if (mounted) setState(() => _showOriginal = false);
   }
 
+  Future<void> _deleteFinding() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this finding?'),
+        content: const Text(
+          'This photo is the finding, so the finding is deleted with it — '
+          'from the area, AI Review and the report.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete Finding'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    ref.read(activeSessionProvider.notifier).removeFinding(widget.findingId);
+    Navigator.of(context).pop();
+  }
+
   Future<void> _remove(Evidence photo) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -181,23 +207,24 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
                     label: current.isAnnotated ? 'Redo Markup' : 'Mark Up',
                     onPressed: () => _markUp(current),
                   ),
-                  _ViewerAction(
-                    icon: Icons.delete_outline,
-                    label: 'Remove Photo',
-                    onPressed: canRemove ? () => _remove(current) : null,
-                  ),
+                  // One photo = one finding: deleting a finding's only
+                  // photo deletes the finding. Remove Photo applies to a
+                  // historical multi-photo finding.
+                  if (canRemove)
+                    _ViewerAction(
+                      icon: Icons.delete_outline,
+                      label: 'Remove Photo',
+                      onPressed: () => _remove(current),
+                    )
+                  else
+                    _ViewerAction(
+                      icon: Icons.delete_outline,
+                      label: 'Delete Finding',
+                      onPressed: _deleteFinding,
+                    ),
                 ],
               ),
             ),
-            if (!canRemove)
-              const Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Text(
-                  'A finding keeps at least one photo. Remove the finding '
-                  'instead.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ),
           ],
         ),
       ),

@@ -250,9 +250,6 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
     try {
       await ref.read(billingServiceProvider).confirmSandboxPayment(intentId);
       ref.invalidate(housePassStatusProvider(widget.inspectionId));
-      // A House Pass's allowance makes auto-analysing safe by default —
-      // see `_AutoAnalyseToggle`'s doc comment. The inspector can still
-      // switch it back off from the queue screen at any time.
       await ref
           .read(activeSessionProvider.notifier)
           .applyHousePassToSession(widget.inspectionId, passActive: true);

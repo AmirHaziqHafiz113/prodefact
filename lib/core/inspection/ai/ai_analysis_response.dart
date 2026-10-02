@@ -9,6 +9,7 @@ class AiFindingClassification {
     required this.findingId,
     required this.needsReview,
     this.catalogueEntryId,
+    this.defectTerm,
     this.confidence,
     this.shortReason,
     this.candidateEntryIds = const [],
@@ -22,6 +23,10 @@ class AiFindingClassification {
   /// id — never trusted/used to look up a corrective action until the
   /// gateway/coordinator has independently verified it exists.
   final String? catalogueEntryId;
+
+  /// The ONE concrete defect within [catalogueEntryId]'s wording, when
+  /// that entry lists several — see `defectTermsFor`.
+  final String? defectTerm;
 
   /// 0.0-1.0, if the provider reported one.
   final double? confidence;

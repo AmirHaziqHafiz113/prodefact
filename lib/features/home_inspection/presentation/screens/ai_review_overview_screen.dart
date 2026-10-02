@@ -39,16 +39,28 @@ class AiReviewOverviewScreen extends ConsumerWidget {
 
     final processing = AiProcessingProgress.of(session);
     final review = AiReviewProgress.of(session);
-    final suggestions = session.aiSuggestions;
+    // Only suggestions of findings that still exist — a deleted
+    // finding (or any orphan) never shows here or counts.
+    final suggestions = activeSuggestionsOf(session);
     // Findings AI hasn't produced a suggestion for yet (queued,
     // analysing, failed, or waiting for a note/approval). Previously
     // these were not shown here at all, so a failed or stuck analysis
     // left a page with nothing to tap (QA #33).
     final suggestedIds = {for (final s in suggestions) s.findingId};
-    final withoutSuggestion = session.findings
-        .where((f) => f.isAiEligible && !suggestedIds.contains(f.id))
-        .toList();
-    final pendingNote = _pendingSummary(processing, review, withoutSuggestion);
+    // Ordered by AI progress (analysing, then waiting, then failed),
+    // newest first within each.
+    final withoutSuggestion = [
+      for (final unit in orderFindings(
+        session.findings
+            .where((f) => f.isAiEligible && !suggestedIds.contains(f.id))
+            .toList(),
+      ))
+        ...unit.findings,
+    ];
+    final outstanding = ReportReadiness.of(session).summary;
+    final pendingNote = outstanding == null
+        ? null
+        : '$outstanding. The report can be generated once these are done.';
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Review')),
@@ -127,35 +139,6 @@ class AiReviewOverviewScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Why the report isn't ready yet, in one line, or null when it is.
-String? _pendingSummary(
-  AiProcessingProgress processing,
-  AiReviewProgress review,
-  List<Finding> withoutSuggestion,
-) {
-  final parts = <String>[];
-  if (processing.inFlight > 0) {
-    parts.add(
-      'AI is still working on ${processing.inFlight} '
-      'finding${processing.inFlight == 1 ? '' : 's'}',
-    );
-  }
-  final failed = withoutSuggestion
-      .where((f) => f.aiStatus == AiFindingStatus.failed)
-      .length;
-  if (failed > 0) {
-    parts.add(
-      '$failed need${failed == 1 ? 's' : ''} a retry or manual classification',
-    );
-  }
-  if (review.pending > 0) {
-    parts.add('${review.pending} to review');
-  }
-  if (parts.isEmpty) return null;
-  return '${parts.join(' · ')}. The report can be generated once these are '
-      'done.';
 }
 
 /// A finding with no AI suggestion yet: its photo, note, and live AI
@@ -443,7 +426,9 @@ class _SuggestionCard extends ConsumerWidget {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Finding: ${suggestedEntry.defectDescription}'),
+                        Text(
+                          'Finding: ${concreteDefectText(componentName: suggestedEntry.componentName, defectDescription: suggestedEntry.defectDescription, term: suggestion.suggestedDefectTerm)}',
+                        ),
                         if (suggestedEntry.correctiveAction != null)
                           Text(
                             'Recommendation: '
@@ -465,7 +450,11 @@ class _SuggestionCard extends ConsumerWidget {
                 color: AppColors.success,
                 child: Text(
                   finalEntry != null
-                      ? finalEntry.defectDescription
+                      ? concreteDefectText(
+                          componentName: finalEntry.componentName,
+                          defectDescription: finalEntry.defectDescription,
+                          term: suggestion.finalDefectTerm,
+                        )
                       : 'Unresolved — pending manual classification',
                 ),
               ),

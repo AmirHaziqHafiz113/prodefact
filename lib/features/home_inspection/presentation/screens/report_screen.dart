@@ -157,7 +157,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       ReportGenerationOutcome.physicalInspectionIncomplete =>
         'Physical inspection is not complete yet.',
       ReportGenerationOutcome.aiReviewIncomplete =>
-        'AI review is not complete yet.',
+        result.message ?? 'AI review is not complete yet.',
       ReportGenerationOutcome.missingContactNumber =>
         'Add the client or agent contact number before generating the '
             'final report.',
@@ -185,9 +185,10 @@ class _ReadinessCard extends StatelessWidget {
     final physical = PhysicalProgress.of(session);
     final processing = AiProcessingProgress.of(session);
     final review = AiReviewProgress.of(session);
-    final unresolved = session.aiSuggestions
-        .where((s) => s.status == AiSuggestionStatus.rejected)
-        .length;
+    final readiness = ReportReadiness.of(session);
+    final unresolved = activeSuggestionsOf(
+      session,
+    ).where((s) => s.status == AiSuggestionStatus.rejected).length;
     final metadata =
         session.reportMetadata ??
         ReportMetadata.fromPropertyDetails(session.propertyDetails);
@@ -243,13 +244,26 @@ class _ReadinessCard extends StatelessWidget {
               value:
                   '${processing.processed}/${processing.totalEligible} '
                   'processed',
-              done: processing.inFlight == 0,
+              done: processing.processed == processing.totalEligible,
             ),
             _ReadinessRow(
               label: 'Review',
               value: '${review.resolved}/${review.total} reviewed',
               done: review.pending == 0,
             ),
+            // Exactly what still blocks the report — the same rule the
+            // generator enforces, so this never disagrees with it.
+            if (readiness.summary case final outstanding?) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Outstanding: $outstanding.',
+                key: const ValueKey('report-outstanding'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.warning,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
             if (unresolved > 0)
               _ReadinessRow(
                 label: 'Unresolved',

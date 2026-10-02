@@ -288,7 +288,9 @@ void main() {
       await tester.pumpAndSettle();
 
       final session = container.read(activeSessionProvider)!;
-      expect(session.status, InspectionStatus.physicalInspectionComplete);
+      // The finding's AI result was a valid match, accepted
+      // automatically, so completing the visit also settles AI review.
+      expect(session.status, InspectionStatus.aiReviewComplete);
       expect(
         session.sectionStatuses[queue.first.id],
         SectionStatus.completed,

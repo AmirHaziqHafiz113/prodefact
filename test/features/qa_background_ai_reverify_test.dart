@@ -42,7 +42,6 @@ void main() {
           .read(activeSessionProvider.notifier)
           .startNew(PropertyType.highRise);
     });
-    container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;

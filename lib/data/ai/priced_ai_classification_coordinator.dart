@@ -188,7 +188,28 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     final validCandidates = classification.candidateEntryIds
         .where(catalogue.isValidEntryId)
         .toList();
-    final needsReview = classification.needsReview || validEntryId == null;
+    // ONE concrete defect: an entry that words several defects needs a
+    // valid term too (the backend enforces this; checked again here).
+    final entry = validEntryId == null ? null : catalogue.byId(validEntryId);
+    final defectTerm = entry == null
+        ? null
+        : matchDefectTerm(entry.defectDescription, classification.defectTerm);
+    final missingTerm =
+        entry != null &&
+        defectTermsFor(entry.defectDescription).isNotEmpty &&
+        defectTerm == null;
+    final needsReview =
+        classification.needsReview || validEntryId == null || missingTerm;
+
+    // A finding deleted while its request was in flight must never come
+    // back (as an orphan suggestion) when the answer arrives.
+    final stillExists = (await _local.loadSession(
+      session.id,
+    ))?.findings.any((f) => f.id == finding.id);
+    if (stillExists != true) {
+      AppLogger.info('ai_result_discarded finding=${finding.id} deleted=true');
+      return const AiClassificationResult.findingNotFound();
+    }
 
     // A confident, valid catalogue match is accepted automatically —
     // report-ready without a tap. The inspector can still Change or
@@ -204,6 +225,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         suggestedConfidence: classification.confidence,
         suggestedShortReason: classification.shortReason,
         suggestedCandidateEntryIds: validCandidates,
+        suggestedDefectTerm: defectTerm,
         finalCatalogueEntryId: validEntryId,
         status: needsReview
             ? AiSuggestionStatus.pending
@@ -216,7 +238,8 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       needsReview ? AiFindingStatus.needsReview : AiFindingStatus.completed,
     );
     AppLogger.info(
-      'ai_job_completed finding=${finding.id} needsReview=$needsReview',
+      'result_saved finding=${finding.id} level=${attempt.aiLevel.name} '
+      'needsReview=$needsReview hasTerm=${defectTerm != null}',
     );
 
     return const AiClassificationResult.success();

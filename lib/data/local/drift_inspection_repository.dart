@@ -206,6 +206,7 @@ class DriftInspectionRepository implements InspectionRepository {
         evidence: evidence,
         aiStatus: AiFindingStatus.values.byName(row.aiStatus),
         aiAttempt: _aiAttemptFromRow(row),
+        captureBatchId: row.captureBatchId,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       );
@@ -225,6 +226,7 @@ class DriftInspectionRepository implements InspectionRepository {
             suggestedCandidateEntryIds: _decodeCandidateIds(
               row.suggestedCandidateEntryIds,
             ),
+            suggestedDefectTerm: row.suggestedDefectTerm,
             finalCatalogueEntryId: row.finalCatalogueEntryId,
             status: AiSuggestionStatus.values.byName(row.status),
             reviewedAt: row.reviewedAt,
@@ -268,7 +270,6 @@ class DriftInspectionRepository implements InspectionRepository {
       inspectionNote: sessionRow.inspectionNote,
       commercialMode: _commercialModeFromRow(sessionRow.commercialMode),
       selectedAiLevel: _aiLevelFromRow(sessionRow.selectedAiLevel),
-      autoAnalyseEnabled: sessionRow.autoAnalyseEnabled,
     );
   }
 
@@ -509,6 +510,7 @@ class DriftInspectionRepository implements InspectionRepository {
               notes: Value(finding.notes),
               status: Value(finding.status.name),
               aiStatus: Value(finding.aiStatus.name),
+              captureBatchId: Value(finding.captureBatchId),
               createdAt: finding.createdAt,
               updatedAt: finding.updatedAt,
             ),
@@ -793,6 +795,7 @@ class DriftInspectionRepository implements InspectionRepository {
             suggestedCandidateEntryIds: Value(
               _encodeCandidateIds(suggestion.suggestedCandidateEntryIds),
             ),
+            suggestedDefectTerm: Value(suggestion.suggestedDefectTerm),
             finalCatalogueEntryId: Value(suggestion.finalCatalogueEntryId),
           ),
         );
@@ -865,15 +868,6 @@ class DriftInspectionRepository implements InspectionRepository {
     await (_db.update(_db.inspectionSessionRows)
           ..where((t) => t.id.equals(sessionId)))
         .write(InspectionSessionRowsCompanion(inspectionNote: Value(note)));
-  }
-
-  @override
-  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled) async {
-    await (_db.update(
-      _db.inspectionSessionRows,
-    )..where((t) => t.id.equals(sessionId))).write(
-      InspectionSessionRowsCompanion(autoAnalyseEnabled: Value(enabled)),
-    );
   }
 
   @override

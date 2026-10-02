@@ -53,7 +53,6 @@ Future<ProviderContainer> _analysedSession({BillingService? billing}) async {
   addTearDown(container.dispose);
   final notifier = container.read(activeSessionProvider.notifier);
   await notifier.startNew(PropertyType.highRise);
-  notifier.setAutoAnalyseEnabled(true);
   final photo = await notifier.captureFindingPhoto(
     source: EvidenceSource.camera,
   );

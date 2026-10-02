@@ -1,0 +1,226 @@
+{
+  "door.door_bell_switch.02": [
+    "damaged",
+    "not functioning properly"
+  ],
+  "door.door_frame.01": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "door.door_frame.09": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "door.door_hinge.01": [
+    "poor",
+    "slanted",
+    "gap",
+    "loose"
+  ],
+  "door.door_knob_handle.01": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "door.door_leaf.04": [
+    "cracked",
+    "damaged",
+    "chipped"
+  ],
+  "door.door_leaf.05": [
+    "not aligned",
+    "rattles when closed"
+  ],
+  "door.grill_door.01": [
+    "dented",
+    "chipped",
+    "scratched"
+  ],
+  "door.grill_door.04": [
+    "missing",
+    "misaligned"
+  ],
+  "door.grill_door.06": [
+    "poor",
+    "peeled off"
+  ],
+  "door.sliding_door_frame.02": [
+    "missing",
+    "peeled off"
+  ],
+  "door.sliding_door_frame.05": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "door.sliding_door_glass.02": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "door.sliding_door_panel.03": [
+    "missing",
+    "peeled off"
+  ],
+  "door.sliding_door_panel.05": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "window.window_awning.03": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "window.window_awning.04": [
+    "not aligned",
+    "slanted"
+  ],
+  "window.window_frame.03": [
+    "missing",
+    "peeled off"
+  ],
+  "window.window_frame.09": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "window.window_frame.10": [
+    "not aligned",
+    "slanted"
+  ],
+  "window.window_glass.02": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "window.window_handle.06": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "window.window_hinge.02": [
+    "poor",
+    "loose"
+  ],
+  "window.window_leaf.02": [
+    "missing",
+    "peeled off"
+  ],
+  "window.window_leaf.07": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "wall.concrete_wall.07": [
+    "uneven",
+    "not straight"
+  ],
+  "wall.wall_tile.03": [
+    "contaminated with stain",
+    "scratched"
+  ],
+  "wall.wall_tile.04": [
+    "inconsistent colour tone",
+    "damaged",
+    "chipped",
+    "hollow",
+    "uneven",
+    "not straight"
+  ],
+  "wall.wall_tile.05": [
+    "not aligned",
+    "lippage"
+  ],
+  "floor.timber_floor.03": [
+    "damaged",
+    "chipped",
+    "scratched"
+  ],
+  "floor.timber_floor.04": [
+    "uneven",
+    "lippage"
+  ],
+  "floor.timber_floor.06": [
+    "poor",
+    "faded",
+    "not properly done"
+  ],
+  "floor.wood_skirting.06": [
+    "damaged",
+    "chipped",
+    "cracked"
+  ],
+  "floor.floor_tiles.01": [
+    "contaminated with stain",
+    "scratched"
+  ],
+  "floor.floor_tiles.03": [
+    "chipped",
+    "damaged"
+  ],
+  "floor.floor_tiles.06": [
+    "uneven",
+    "not straight"
+  ],
+  "floor.tiles_skirting.05": [
+    "damaged",
+    "chipped"
+  ],
+  "roof.roof_tiles.01": [
+    "chipped",
+    "damaged"
+  ],
+  "roof.roof_tiles.02": [
+    "not aligned",
+    "not installed properly"
+  ],
+  "ceiling.ceiling.03": [
+    "uneven",
+    "not straight"
+  ],
+  "ceiling.ceiling.07": [
+    "missing",
+    "poor"
+  ],
+  "plumbing.bottle_trap.01": [
+    "clogged",
+    "slow draining"
+  ],
+  "plumbing.discharge_pipe.01": [
+    "clogged",
+    "slow draining"
+  ],
+  "plumbing.discharge_pipe.04": [
+    "slanted",
+    "reversed gradient"
+  ],
+  "sanitary_fitting.shower_head.03": [
+    "chipped",
+    "damaged",
+    "dented"
+  ],
+  "sanitary_fitting.water_tap.03": [
+    "leaking",
+    "dripping"
+  ],
+  "sanitary_fitting.wc_cistern.04": [
+    "rusty",
+    "damaged"
+  ],
+  "sanitary_fitting.wc_cistern.05": [
+    "chipped",
+    "damaged"
+  ],
+  "sanitary_fitting.wc_toilet_bowl.02": [
+    "chipped",
+    "damaged",
+    "crack"
+  ],
+  "sanitary_fitting.wc_toilet_bowl.03": [
+    "clogged",
+    "slow draining"
+  ]
+}

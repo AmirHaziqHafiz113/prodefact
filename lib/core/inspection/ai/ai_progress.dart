@@ -10,27 +10,36 @@ import '../entities/section_status.dart';
 /// reached a terminal state (`completed`, `needsReview`, or `failed`),
 /// regardless of whether the inspector has reviewed the result yet —
 /// see `AiReviewProgress` for the separate review-completion count.
+///
+/// A finding waiting only for its quick defect note (QA #16) is neither
+/// processed nor in flight: AI can't start it, the inspector can —
+/// see [waitingForNote].
 class AiProcessingProgress {
   const AiProcessingProgress({
     required this.totalEligible,
     required this.processed,
     required this.failed,
     required this.needsReview,
+    this.waitingForNote = 0,
   });
 
   /// Findings with at least one photo — the only findings AI can ever
   /// act on at all (a finding with no evidence is never queued).
   final int totalEligible;
 
-  /// Findings whose `aiStatus` is a terminal state (completed,
-  /// needsReview, or failed) — i.e. no longer notQueued/queued/
-  /// uploading/analyzing.
+  /// Findings whose `aiStatus` is terminal (completed, needsReview, or
+  /// failed).
   final int processed;
 
   final int failed;
   final int needsReview;
 
-  int get inFlight => totalEligible - processed;
+  /// Findings AI can't start until the inspector adds a quick note.
+  final int waitingForNote;
+
+  /// Findings the AI pipeline is still working on by itself (queued,
+  /// uploading, analysing — or about to be picked up).
+  int get inFlight => totalEligible - processed - waitingForNote;
 
   double get fraction => totalEligible == 0 ? 0 : processed / totalEligible;
 
@@ -44,19 +53,32 @@ class AiProcessingProgress {
     var processed = 0;
     var failed = 0;
     var needsReview = 0;
+    var waitingForNote = 0;
     for (final finding in eligible) {
-      if (!aiFindingStatusIsInFlight(finding.aiStatus) &&
-          finding.aiStatus != AiFindingStatus.notQueued) {
-        processed++;
+      switch (finding.aiStatus) {
+        case AiFindingStatus.completed:
+          processed++;
+        case AiFindingStatus.needsReview:
+          processed++;
+          needsReview++;
+        case AiFindingStatus.failed:
+          processed++;
+          failed++;
+        case AiFindingStatus.notQueued:
+        case AiFindingStatus.awaitingApproval:
+          if (!finding.hasDefectNote) waitingForNote++;
+        case AiFindingStatus.queued:
+        case AiFindingStatus.uploading:
+        case AiFindingStatus.analyzing:
+          break;
       }
-      if (finding.aiStatus == AiFindingStatus.failed) failed++;
-      if (finding.aiStatus == AiFindingStatus.needsReview) needsReview++;
     }
     return AiProcessingProgress(
       totalEligible: eligible.length,
       processed: processed,
       failed: failed,
       needsReview: needsReview,
+      waitingForNote: waitingForNote,
     );
   }
 }
@@ -65,6 +87,9 @@ class AiProcessingProgress {
 /// suggestions have been resolved (accepted/edited/rejected) versus
 /// still pending review. Distinct from [AiProcessingProgress] — AI can
 /// finish analysing every finding while review is still 0%.
+///
+/// Counts only suggestions of findings that still exist: a deleted
+/// finding's suggestion (or any orphan) never counts.
 class AiReviewProgress {
   const AiReviewProgress({
     required this.total,
@@ -84,7 +109,7 @@ class AiReviewProgress {
   int get percent => (fraction * 100).round();
 
   static AiReviewProgress of(InspectionSession session) =>
-      forSuggestions(session.aiSuggestions);
+      forSuggestions(activeSuggestionsOf(session));
 
   static AiReviewProgress forSuggestions(List<AiSuggestion> suggestions) {
     return AiReviewProgress(
@@ -92,6 +117,109 @@ class AiReviewProgress {
       resolved: suggestions.where((s) => s.isResolved).length,
       autoAccepted: suggestions.where((s) => s.isAutoAccepted).length,
     );
+  }
+}
+
+/// [session]'s suggestions whose finding still exists — the only ones
+/// the workflow (AI Review, readiness, report) may show or count.
+List<AiSuggestion> activeSuggestionsOf(InspectionSession session) {
+  final ids = {for (final f in session.findings) f.id};
+  return [
+    for (final s in session.aiSuggestions)
+      if (ids.contains(s.findingId)) s,
+  ];
+}
+
+/// Whether AI work for [session] is settled enough to generate a
+/// report — the ONE rule the report gate, the Report screen and AI
+/// Review all use, so navigation and generation can never disagree.
+///
+/// Only the session's current findings count (deleted findings, orphan
+/// suggestions and stale queue state never do). Every active finding
+/// with a photo must be in a terminal, resolved state; anything else is
+/// counted under exactly one reason, each with its own way forward:
+///
+/// - [analysing]: AI is still working on it by itself — wait.
+/// - [waitingForNote]: add the quick note (AI then starts).
+/// - [failed]: AI failed and nothing was decided — Retry or Classify
+///   Manually. Never silently included in a report.
+/// - [toReview]: a suggestion still needs the inspector's decision.
+class ReportReadiness {
+  const ReportReadiness({
+    required this.analysing,
+    required this.waitingForNote,
+    required this.failed,
+    required this.toReview,
+  });
+
+  final int analysing;
+  final int waitingForNote;
+  final int failed;
+  final int toReview;
+
+  bool get isReady =>
+      analysing == 0 && waitingForNote == 0 && failed == 0 && toReview == 0;
+
+  static ReportReadiness of(InspectionSession session) {
+    final suggestionByFinding = {
+      for (final s in activeSuggestionsOf(session)) s.findingId: s,
+    };
+    var analysing = 0;
+    var waitingForNote = 0;
+    var failed = 0;
+    var toReview = 0;
+    for (final finding in session.findings) {
+      if (!finding.isAiEligible) continue;
+      final suggestion = suggestionByFinding[finding.id];
+      if (suggestion != null) {
+        // A suggestion exists: its review decides, whatever happened to
+        // the pipeline since (e.g. a manual classification after a
+        // failure).
+        if (!suggestion.isResolved) toReview++;
+        continue;
+      }
+      switch (finding.aiStatus) {
+        case AiFindingStatus.failed:
+        // Finished without a suggestion — nothing to report yet.
+        case AiFindingStatus.completed:
+        case AiFindingStatus.needsReview:
+          failed++;
+        case AiFindingStatus.notQueued:
+        case AiFindingStatus.awaitingApproval:
+          if (finding.hasDefectNote) {
+            analysing++;
+          } else {
+            waitingForNote++;
+          }
+        case AiFindingStatus.queued:
+        case AiFindingStatus.uploading:
+        case AiFindingStatus.analyzing:
+          analysing++;
+      }
+    }
+    return ReportReadiness(
+      analysing: analysing,
+      waitingForNote: waitingForNote,
+      failed: failed,
+      toReview: toReview,
+    );
+  }
+
+  /// What is still outstanding, in one line, or null when ready.
+  String? get summary {
+    String n(int count, String one, String many) =>
+        '$count ${count == 1 ? one : many}';
+    final parts = [
+      if (analysing > 0)
+        'AI is still analysing ${n(analysing, 'finding', 'findings')}',
+      if (waitingForNote > 0)
+        '${n(waitingForNote, 'finding needs', 'findings need')} a quick note',
+      if (failed > 0)
+        '${n(failed, 'finding needs', 'findings need')} Retry or Classify '
+            'Manually',
+      if (toReview > 0) '${n(toReview, 'finding', 'findings')} to review',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 }
 

@@ -13,15 +13,11 @@ enum AiFindingStatus {
   /// e.g. a legacy finding from before progressive AI existed.
   notQueued,
 
-  /// Saved and eligible, but AI has not been queued yet because it
-  /// hasn't been explicitly approved — AI Credits cost money, so
-  /// Save Finding alone never spends any; the inspector must see the
-  /// estimate and approve before analysis runs. Set instead of
-  /// [queued] whenever `InspectionSession.autoAnalyseEnabled` is
-  /// false (the default for Flex Credits) — see
-  /// docs/commercial_model.md ("The estimate -> approval -> reservation
-  /// -> settlement protocol"). Never used when auto-analyse is on,
-  /// where a finding goes straight to [queued] instead.
+  /// Saved and eligible, but AI can't start yet: the finding has no
+  /// quick defect note (QA #16). Analysis is always automatic, so the
+  /// moment a note is added the finding moves to [queued]. A finding
+  /// left here with a note by an older build (when Auto Analyse was an
+  /// opt-in) is picked up by the queue automatically.
   awaitingApproval,
 
   /// Queued for analysis. Also the state shown as "waiting for

@@ -103,6 +103,7 @@ AiFindingClassification parseClassifyFindingResponse(
     findingId: request.findingId,
     needsReview: needsReview || catalogueEntryId == null,
     catalogueEntryId: catalogueEntryId,
+    defectTerm: _asStringOrNull(rawResult['defectTerm']),
     confidence: (rawResult['confidence'] as num?)?.toDouble(),
     shortReason: _asStringOrNull(rawResult['shortReason']),
     candidateEntryIds: rawCandidates is List

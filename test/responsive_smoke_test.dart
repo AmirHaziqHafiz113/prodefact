@@ -165,7 +165,6 @@ void main() {
       screenLabel: 'Inspection Overview',
     );
 
-    container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final section = queue.first;
     await tester.tap(_within(find.text(section.name)));

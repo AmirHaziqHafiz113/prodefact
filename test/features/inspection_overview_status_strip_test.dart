@@ -52,7 +52,6 @@ void main() {
             .read(newInspectionDraftProvider.notifier)
             .startInspection();
         final notifier = container.read(activeSessionProvider.notifier);
-        notifier.setAutoAnalyseEnabled(true);
         final sections = container.read(inspectionQueueProvider);
         final bathroom = sections.first;
 

@@ -33,7 +33,6 @@ void main() {
             .read(newInspectionDraftProvider.notifier)
             .startInspection();
         final notifier = container.read(activeSessionProvider.notifier);
-        notifier.setAutoAnalyseEnabled(true);
         final section = container.read(inspectionQueueProvider).first;
         final photo = await notifier.captureFindingPhoto(
           source: EvidenceSource.camera,

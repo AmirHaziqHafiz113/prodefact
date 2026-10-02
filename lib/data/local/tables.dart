@@ -163,6 +163,11 @@ class FindingRows extends Table {
   TextColumn get aiAttemptLevel => text().nullable()();
   DateTimeColumn get aiAttemptSubmittedAt => dateTime().nullable()();
 
+  /// Shared by findings saved from one multi-photo gallery pick (added
+  /// in schema v14) — a visual grouping only; each finding is still its
+  /// own finding. Null for single captures and every older finding.
+  TextColumn get captureBatchId => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -252,6 +257,10 @@ class AiSuggestionRows extends Table {
   /// empty string (not SQL NULL) means "reviewed, explicitly left
   /// unresolved".
   TextColumn get finalCatalogueEntryId => text().nullable()();
+
+  /// The AI's ONE concrete defect within a multi-defect catalogue
+  /// entry's wording (added in schema v14) — see `defectTermsFor`.
+  TextColumn get suggestedDefectTerm => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

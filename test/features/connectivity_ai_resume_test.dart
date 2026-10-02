@@ -141,7 +141,6 @@ void main() {
       // about offline/reconnect resume, not the separate
       // estimate/approval gate (covered by
       // `ai_gating_regression_test.dart`).
-      notifier.setAutoAnalyseEnabled(true);
       final section = container.read(inspectionQueueProvider).first;
 
       final photo = await notifier.captureFindingPhoto(

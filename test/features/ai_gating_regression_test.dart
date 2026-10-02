@@ -117,9 +117,8 @@ void main() {
     expect(container.read(activeSessionProvider)!.findings, isEmpty);
   });
 
-  test('saving a camera-first finding (default Flex Credits, Auto '
-      'Analyse off) never calls analyseFinding by itself — it waits '
-      'for explicit approval', () async {
+  test('AI is always automatic but waits for the quick note: a finding '
+      'saved without one never calls analyseFinding', () async {
     final spy = _SpyBillingService(FakeBillingService());
     final container = _containerWithSpy(spy);
     addTearDown(container.dispose);
@@ -138,7 +137,6 @@ void main() {
     final finding = notifier.saveCameraFinding(
       sectionId: queue.first.id,
       photo: photo!,
-      note: 'Cracked tile',
     );
     await Future<void>.delayed(Duration.zero);
 
@@ -184,8 +182,8 @@ void main() {
     },
   );
 
-  test('an inspection with Auto Analyse enabled calls analyseFinding '
-      'automatically on save, without any explicit approval step', () async {
+  test('every inspection calls analyseFinding automatically on save, '
+      'without any explicit approval step', () async {
     final spy = _SpyBillingService(FakeBillingService());
     final container = _containerWithSpy(spy);
     addTearDown(container.dispose);
@@ -195,7 +193,6 @@ void main() {
     await container.read(newInspectionDraftProvider.notifier).startInspection();
     final notifier = container.read(activeSessionProvider.notifier);
     final sessionId = container.read(activeSessionProvider)!.id;
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
 
     final photo = await notifier.captureFindingPhoto(
@@ -235,9 +232,8 @@ void main() {
     expect(spy.analyseCallCount, 0);
   });
 
-  test("editing a finding's note after saving does not change its "
-      'awaitingApproval status or call analyseFinding (only new '
-      'evidence, or explicit approval, does)', () async {
+  test("editing an analysed finding's note never re-runs AI (no second "
+      'charge)', () async {
     final spy = _SpyBillingService(FakeBillingService());
     final container = _containerWithSpy(spy);
     addTearDown(container.dispose);
@@ -256,19 +252,18 @@ void main() {
       photo: photo!,
       note: 'Cracked tile',
     );
-    await Future<void>.delayed(Duration.zero);
-    expect(spy.analyseCallCount, 0);
-    expect(finding.aiStatus, AiFindingStatus.awaitingApproval);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(spy.analyseCallCount, 1);
 
     notifier.updateFinding(
       findingId: finding.id,
       description: 'Cracked tile, updated wording only',
       notes: null,
     );
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    expect(spy.analyseCallCount, 0);
+    expect(spy.analyseCallCount, 1);
     final updated = container.read(activeSessionProvider)!.findings.single;
-    expect(updated.aiStatus, AiFindingStatus.awaitingApproval);
+    expect(updated.aiStatus, AiFindingStatus.completed);
   });
 }

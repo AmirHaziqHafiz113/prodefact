@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
@@ -90,6 +90,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   @override
   InspectionSession? build() {
     ref.onDispose(_cancelAiReplayTimers);
+    ref.onDispose(() => _queueWatchdog?.cancel());
     // Auto-resume: the moment real device connectivity transitions to
     // online, recover every interrupted finding — see
     // `processQueuedAiClassifications`, which is idempotent (an
@@ -107,6 +108,15 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         if (!wasOnline && isOnlineNow) {
           unawaited(processQueuedAiClassifications());
           unawaited(flushAreaCandidates());
+        }
+      });
+      // Signing in (including Firebase restoring the user a moment
+      // after a cold start) is a recovery trigger too: work parked as
+      // "signed out" must not wait for a connectivity change that, on
+      // an already-online device, never comes.
+      ref.listen(authStateProvider, (previous, next) {
+        if (previous?.value == null && next.value != null) {
+          unawaited(processQueuedAiClassifications());
         }
       });
     }
@@ -505,10 +515,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
     unawaited(saved);
     ref.invalidate(sessionSummariesProvider);
-    // The quick note was the missing piece (QA #16): with Auto Analyse
-    // on, adding it starts AI straight away.
-    if (session.autoAnalyseEnabled &&
-        finding.hasDefectNote &&
+    // The quick note was the missing piece (QA #16): adding it starts AI
+    // straight away (analysis is always automatic).
+    if (finding.hasDefectNote &&
         finding.isAiEligible &&
         finding.aiStatus == AiFindingStatus.awaitingApproval) {
       _setFindingAiStatusDurable(session.id, findingId, AiFindingStatus.queued);
@@ -518,31 +527,61 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
+  /// Deletes a finding everywhere the workflow can see it: the area
+  /// list, AI Review (its suggestion goes too), the queue (timers and
+  /// backoff are cancelled), readiness counts and the report. A late AI
+  /// answer for it is discarded by the coordinator, never resurrected.
+  /// Its cloud copy is deleted too (best effort), so a stale replay is
+  /// refused by the backend instead of analysed. Billing records stay.
   void removeFinding(String findingId) {
     final session = state;
     if (session == null) return;
     final removedFinding = session.findings.firstWhereOrNull(
       (finding) => finding.id == findingId,
     );
+    _aiReplayTimers.remove(findingId)?.cancel();
+    _parkedTimerFindingIds.remove(findingId);
+    _uploadFailures.remove(findingId);
+    _parkedWaits.remove(findingId);
+    _aiDiagnostics.remove(findingId);
     state = session.copyWith(
       findings: session.findings
           .where((finding) => finding.id != findingId)
           .toList(),
+      aiSuggestions: session.aiSuggestions
+          .where((suggestion) => suggestion.findingId != findingId)
+          .toList(),
       updatedAt: DateTime.now(),
     );
-    unawaited(
-      _persist(
-        () => _repository.deleteFinding(session.id, findingId),
-        previous: session,
-        action: 'delete finding',
-      ),
+    AppLogger.info('finding_deleted finding=$findingId');
+    final deleted = _persist(
+      () => _repository.deleteFinding(session.id, findingId),
+      previous: session,
+      action: 'delete finding',
     );
+    unawaited(deleted);
+    if (ref.read(firebaseReadyProvider)) {
+      unawaited(
+        deleted.then(
+          (_) => ref
+              .read(syncCoordinatorProvider)
+              .deleteRemoteFinding(session.id, findingId),
+        ),
+      );
+    }
     if (removedFinding != null) {
       final fileStore = ref.read(evidenceFileStoreProvider);
       for (final evidence in removedFinding.evidence) {
         unawaited(fileStore.deleteEvidenceFile(evidence.filePath));
+        final annotated = evidence.annotatedFilePath;
+        if (annotated != null) {
+          unawaited(fileStore.deleteEvidenceFile(annotated));
+        }
       }
     }
+    // Removing the last unresolved finding can settle the review.
+    final current = state;
+    if (current != null) state = _completeAiReviewIfSettled(current);
     ref.invalidate(sessionSummariesProvider);
   }
 
@@ -668,27 +707,21 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
     unawaited(evidencePersisted);
 
-    // A new photo can change an already-settled classification — a
-    // finding whose AI processing already finished is re-queued so the
-    // extra evidence actually gets considered, rather than silently
-    // never being looked at by AI at all. Re-queuing never bypasses the
-    // approval gate below: a re-analysis costs Credits exactly like the
-    // first one did, so it defers to the same `autoAnalyseEnabled`
-    // check rather than always auto-running.
+    // A new photo can change an already-settled classification, so a
+    // finding whose AI processing already finished is re-queued
+    // (analysis is always automatic).
     final target = findings.firstWhereOrNull((f) => f.id == findingId);
     if (target != null && !aiFindingStatusIsInFlight(target.aiStatus)) {
-      if (session.autoAnalyseEnabled) {
-        _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
-        // Only once the new evidence is durably saved — the coordinator
-        // reads the finding from storage, not from this in-memory state.
-        unawaited(
-          evidencePersisted.then(
-            (_) => _enqueueAiClassification(session.id, findingId),
-          ),
-        );
-      } else {
-        _setFindingAiStatusLocal(findingId, AiFindingStatus.awaitingApproval);
-      }
+      // Durable: the coordinator reads the stored status and would skip
+      // a finding still recorded as completed.
+      _setFindingAiStatusDurable(session.id, findingId, AiFindingStatus.queued);
+      // Only once the new evidence is durably saved — the coordinator
+      // reads the finding from storage, not from this in-memory state.
+      unawaited(
+        evidencePersisted.then(
+          (_) => _enqueueAiClassification(session.id, findingId),
+        ),
+      );
     }
   }
 
@@ -866,19 +899,17 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// camera-first finding: creates the `Finding` row (no pre-chosen
   /// element/component — see `Finding`'s doc comment), attaches the
   /// photo as its first evidence, and persists both. This is the
-  /// **only** place a camera-first finding is created — but, since the
-  /// commercial pass, saving a finding is purely physical and **never**
-  /// spends Credits: AI is only auto-queued here when
-  /// `InspectionSession.autoAnalyseEnabled` is on (an active House
-  /// Pass's preference); otherwise the finding starts
-  /// `awaitingApproval` and the inspector must explicitly see the
-  /// estimate and approve via [approveAndRunAnalysis] before anything
-  /// runs — see docs/commercial_model.md ("The estimate -> approval ->
-  /// reservation -> settlement protocol").
+  /// **only** place a camera-first finding is created. AI analysis is
+  /// always automatic (tester feedback, 2026-10-02: "the main reason to
+  /// use the app"): a finding with its quick note is queued at once and
+  /// drained in the background; one saved without a note waits as
+  /// `awaitingApproval` ("Add a quick defect note to start AI") until
+  /// the note is added (QA #16).
   Finding saveCameraFinding({
     required String sectionId,
     required CapturedFindingPhoto photo,
     String? note,
+    String? captureBatchId,
   }) {
     final session = state;
     if (session == null) {
@@ -903,9 +934,12 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       createdAt: now,
       updatedAt: now,
       evidence: [evidence],
+      captureBatchId: captureBatchId,
     );
     // AI waits for a quick defect note (QA #16); saving never does.
-    final startsAi = session.autoAnalyseEnabled && draft.hasDefectNote;
+    // AI analysis is always automatic (tester feedback, 2026-10-02);
+    // it only waits for the quick note (QA #16).
+    final startsAi = draft.hasDefectNote;
     final finding = Finding(
       id: draft.id,
       sectionId: draft.sectionId,
@@ -916,6 +950,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       aiStatus: startsAi
           ? AiFindingStatus.queued
           : AiFindingStatus.awaitingApproval,
+      captureBatchId: captureBatchId,
     );
 
     // Recording a defect is what makes a suggested area "started".
@@ -942,8 +977,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         await _repository.saveFinding(session.id, finding);
         await _repository.addEvidence(session.id, evidence);
         AppLogger.info(
-          'finding_saved_local finding=${finding.id} '
-          'ms=${saveTimer.elapsedMilliseconds}',
+          'finding_saved finding=${finding.id} '
+          'ms=${saveTimer.elapsedMilliseconds} queued=$startsAi',
         );
       },
       previous: session,
@@ -953,6 +988,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     ref.invalidate(sessionSummariesProvider);
     _logAnalytics(AnalyticsEvent.findingSaved);
     if (startsAi) {
+      AppLogger.info('ai_queued finding=${finding.id} reason=saved');
+      _ensureQueueWatchdog();
       // Only once the finding is durably saved: the coordinator reads it
       // from storage, and must never race ahead of the save (it would
       // find nothing and silently skip the finding). The caller still
@@ -969,19 +1006,26 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Saves each captured photo as its own independent finding, in
   /// order, with the matching note from [notes] (missing entries mean no
   /// note). Each finding gets its own id, evidence, AI job and review —
-  /// nothing is shared between them.
+  /// nothing is shared between them. Several photos from one pick share
+  /// a `captureBatchId`, used only to show them as one visual group.
   List<Finding> saveCameraFindings({
     required String sectionId,
     required List<CapturedFindingPhoto> photos,
     List<String?> notes = const [],
-  }) => [
-    for (final (i, photo) in photos.indexed)
-      saveCameraFinding(
-        sectionId: sectionId,
-        photo: photo,
-        note: i < notes.length ? notes[i] : null,
-      ),
-  ];
+  }) {
+    final batchId = photos.length > 1
+        ? 'batch_${photos.first.pendingFindingId}'
+        : null;
+    return [
+      for (final (i, photo) in photos.indexed)
+        saveCameraFinding(
+          sectionId: sectionId,
+          photo: photo,
+          note: i < notes.length ? notes[i] : null,
+          captureBatchId: batchId,
+        ),
+    ];
+  }
 
   /// Removes one photo from a finding (QA #20) without touching the
   /// finding or its other photos. A finding's last photo can't be
@@ -1093,6 +1137,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       delay.isNegative ? Duration.zero : delay,
       () {
         _aiReplayTimers.remove(findingId);
+        _parkedTimerFindingIds.remove(findingId);
         if (!ref.mounted || state?.id != sessionId) return;
         unawaited(_enqueueAiClassification(sessionId, findingId));
       },
@@ -1113,16 +1158,170 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Consecutive upload failures per finding in this app session.
   final Map<String, int> _uploadFailures = {};
 
+  // ---- queue guarantee (P0, 2026-10-02) ----
+  //
+  // A finding may never stay queued forever. Before this, a finding
+  // parked as offline/signed-out had no timer of its own: only an
+  // offline->online connectivity event (or reopening the inspection)
+  // woke it. On an already-online device that event never comes — a
+  // one-off "offline" reading from the connectivity check, or Firebase
+  // Auth still restoring the user at cold start, left findings showing
+  // "Queued for AI" indefinitely. Now every parked finding wakes itself
+  // on a bounded backoff, sign-in drains the queue, and a watchdog
+  // re-drains anything not actually being worked on.
+
+  /// How often the watchdog re-drains the queue while any finding is
+  /// still waiting for AI.
+  static const _queueWatchdogInterval = Duration(seconds: 20);
+
+  /// Self-wake delays for a finding that couldn't be sent (offline or
+  /// signed out); the last repeats. Never ends in `failed` — waiting
+  /// for a connection is honest — but always re-checks on its own.
+  static const _parkedRetryDelays = [
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+    Duration(seconds: 40),
+    Duration(seconds: 60),
+  ];
+
+  /// After this many consecutive "offline" readings from the fresh
+  /// connectivity check while the app's own connectivity signal says
+  /// online, the request is attempted anyway: a real network failure is
+  /// then handled (bounded) by the upload/AI failure paths.
+  static const _maxConflictingOfflineReadings = 2;
+
+  /// Upload of one finding's photo is abandoned (and retried on the
+  /// bounded backoff) after this long, so a stalled transfer can never
+  /// hold a finding in `uploading`.
+  static const _evidenceUploadTimeout = Duration(minutes: 3);
+
+  Timer? _queueWatchdog;
+  final Map<String, int> _parkedWaits = {};
+
+  /// Findings whose pending timer is only a parked self-wake (offline /
+  /// signed out). Any real recovery signal (reconnect, sign-in, resume)
+  /// releases them at once; upload backoff and replay windows are
+  /// still respected.
+  final Set<String> _parkedTimerFindingIds = {};
+  final Map<String, AiQueueDiagnostic> _aiDiagnostics = {};
+
+  /// Per-finding queue diagnostics for QA (debug logs only — never
+  /// shown in production UI, never containing notes, images or keys).
+  List<AiQueueDiagnostic> aiQueueDiagnostics() {
+    final session = state;
+    if (session == null) return const [];
+    return [
+      for (final f in session.findings)
+        (_aiDiagnostics[f.id] ?? AiQueueDiagnostic(findingId: f.id)).copyWith(
+          aiStatus: f.aiStatus,
+          uploadStatus: f.evidence.firstOrNull?.syncStatus,
+        ),
+    ];
+  }
+
+  void _noteDiagnostic(
+    String findingId, {
+    AiLevel? level,
+    bool retried = false,
+    String? errorCode,
+  }) {
+    final current =
+        _aiDiagnostics[findingId] ?? AiQueueDiagnostic(findingId: findingId);
+    _aiDiagnostics[findingId] = current.copyWith(
+      aiLevel: level,
+      retryCount: current.retryCount + (retried ? 1 : 0),
+      lastTransitionAt: DateTime.now(),
+      lastErrorCode: errorCode,
+    );
+  }
+
+  /// Stops the watchdog once nothing is waiting on AI — it only exists
+  /// while there is queue work to guarantee.
+  void _stopQueueWatchdogIfIdle() {
+    if (!ref.mounted) return;
+    final waiting = state?.findings.any(_isAwaitingAiWork) ?? false;
+    if (!waiting && _classifyingFindingIds.isEmpty) {
+      _queueWatchdog?.cancel();
+      _queueWatchdog = null;
+    }
+  }
+
+  void _ensureQueueWatchdog() {
+    if (_queueWatchdog?.isActive ?? false) return;
+    _queueWatchdog = Timer.periodic(_queueWatchdogInterval, (_) {
+      if (!ref.mounted) return;
+      final session = state;
+      final waiting =
+          session?.findings.where(_isAwaitingAiWork).toList() ?? const [];
+      if (waiting.isEmpty) {
+        _queueWatchdog?.cancel();
+        _queueWatchdog = null;
+        return;
+      }
+      if (kDebugMode) _logQueueSummary();
+      unawaited(processQueuedAiClassifications());
+    });
+  }
+
+  /// Whether [finding] still needs the AI pipeline to do something
+  /// without any inspector action.
+  bool _isAwaitingAiWork(Finding finding) =>
+      finding.isAiEligible &&
+      (aiFindingStatusIsInFlight(finding.aiStatus) ||
+          (finding.hasDefectNote &&
+              (finding.aiStatus == AiFindingStatus.notQueued ||
+                  finding.aiStatus == AiFindingStatus.awaitingApproval)));
+
+  void _logQueueSummary() {
+    final rows = aiQueueDiagnostics();
+    final counts = <AiFindingStatus, int>{};
+    for (final r in rows) {
+      final status = r.aiStatus;
+      if (status != null) counts[status] = (counts[status] ?? 0) + 1;
+    }
+    AppLogger.info(
+      'ai_queue_summary '
+      '${counts.entries.map((e) => '${e.key.name}=${e.value}').join(' ')}',
+    );
+    for (final r in rows) {
+      final status = r.aiStatus;
+      if (status != null && aiFindingStatusIsInFlight(status)) {
+        AppLogger.info('ai_queue_item ${r.toLogString()}');
+      }
+    }
+  }
+
+  /// Parks [findingId] (offline/signed out) as `queued` with its own
+  /// bounded self-wake — never left waiting on an external event.
+  void _parkAndRetry(String sessionId, String findingId, String reason) {
+    _markWaitingIfInFlight(sessionId, findingId);
+    final waits = _parkedWaits[findingId] ?? 0;
+    _parkedWaits[findingId] = waits + 1;
+    final delay =
+        _parkedRetryDelays[waits.clamp(0, _parkedRetryDelays.length - 1)];
+    _noteDiagnostic(findingId, retried: true, errorCode: reason);
+    AppLogger.info(
+      'job_retried finding=$findingId reason=$reason '
+      'wait=${waits + 1} inSeconds=${delay.inSeconds}',
+    );
+    _scheduleAiReplay(sessionId, findingId, DateTime.now().add(delay));
+    if (_aiReplayTimers[findingId]?.isActive ?? false) {
+      _parkedTimerFindingIds.add(findingId);
+    }
+  }
+
   void _onEvidenceUploadFailed(
     String sessionId,
     String findingId,
     String reason,
   ) {
     final failures = (_uploadFailures[findingId] ?? 0) + 1;
+    _noteDiagnostic(findingId, retried: true, errorCode: 'upload_$reason');
     if (failures > _uploadRetryDelays.length) {
       _uploadFailures.remove(findingId);
       AppLogger.info(
-        'evidence_upload_failed finding=$findingId attempts=$failures',
+        'job_failed finding=$findingId stage=upload attempts=$failures',
       );
       _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
       return;
@@ -1130,7 +1329,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     _uploadFailures[findingId] = failures;
     final delay = _uploadRetryDelays[failures - 1];
     AppLogger.info(
-      'evidence_upload_retry finding=$findingId attempt=$failures '
+      'job_retried finding=$findingId stage=upload attempt=$failures '
       'inSeconds=${delay.inSeconds} reason=$reason',
     );
     _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.queued);
@@ -1155,6 +1354,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     // nothing left to update at that point, and touching a disposed
     // `ref`/`state` throws.
     if (!ref.mounted) return;
+    _noteDiagnostic(findingId);
     final session = state;
     if (session == null) return;
     state = session.copyWith(
@@ -1195,19 +1395,35 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   Future<void> processQueuedAiClassifications() async {
     final session = state;
     if (session == null) return;
+    var anyWaiting = false;
     for (final finding in session.findings) {
       if (!finding.isAiEligible) continue;
-      if (_classifyingFindingIds.contains(finding.id)) continue;
+      if (_classifyingFindingIds.contains(finding.id)) {
+        anyWaiting = true;
+        continue;
+      }
+      // Already scheduled (upload backoff or replay window): the timer
+      // owns it. A parked self-wake is released now instead.
+      if (_aiReplayTimers[finding.id]?.isActive ?? false) {
+        if (_parkedTimerFindingIds.remove(finding.id)) {
+          _aiReplayTimers.remove(finding.id)?.cancel();
+        } else {
+          anyWaiting = true;
+          continue;
+        }
+      }
       switch (finding.aiStatus) {
         case AiFindingStatus.queued:
         case AiFindingStatus.uploading:
+          anyWaiting = true;
           unawaited(_enqueueAiClassification(session.id, finding.id));
         case AiFindingStatus.analyzing:
           if (finding.aiAttempt != null) {
+            anyWaiting = true;
             unawaited(_enqueueAiClassification(session.id, finding.id));
           } else {
             AppLogger.info(
-              'ai_job_orphaned finding=${finding.id} action=markFailed',
+              'job_failed finding=${finding.id} reason=orphanedAnalyzing',
             );
             _setFindingAiStatusDurable(
               session.id,
@@ -1217,11 +1433,48 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           }
         case AiFindingStatus.notQueued:
         case AiFindingStatus.awaitingApproval:
+          // Analysis is always automatic: a finding that has its note
+          // (e.g. saved while Auto Analyse was an opt-in, or an older
+          // record never queued) is analysed now. Without a note it
+          // waits for one, shown as such.
+          if (finding.hasDefectNote) {
+            anyWaiting = true;
+            AppLogger.info('ai_queued finding=${finding.id} reason=drain');
+            _setFindingAiStatusDurable(
+              session.id,
+              finding.id,
+              AiFindingStatus.queued,
+            );
+            unawaited(_enqueueAiClassification(session.id, finding.id));
+          } else if (finding.aiStatus == AiFindingStatus.notQueued) {
+            _setFindingAiStatusDurable(
+              session.id,
+              finding.id,
+              AiFindingStatus.awaitingApproval,
+            );
+          }
         case AiFindingStatus.completed:
         case AiFindingStatus.needsReview:
+          // Finished but its suggestion is missing (e.g. lost by an
+          // older build): offer Retry instead of a silent dead end.
+          if (!session.aiSuggestions.any((x) => x.findingId == finding.id)) {
+            AppLogger.info(
+              'job_failed finding=${finding.id} reason=missingSuggestion',
+            );
+            _setFindingAiStatusDurable(
+              session.id,
+              finding.id,
+              AiFindingStatus.failed,
+            );
+          }
         case AiFindingStatus.failed:
           break;
       }
+    }
+    if (anyWaiting) {
+      _ensureQueueWatchdog();
+    } else {
+      _stopQueueWatchdogIfIdle();
     }
   }
 
@@ -1234,6 +1487,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     if (session == null) return;
     final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
     if (finding == null || finding.aiStatus != AiFindingStatus.failed) return;
+    _noteDiagnostic(findingId, retried: true);
+    AppLogger.info('job_retried finding=$findingId reason=manualRetry');
     _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
     unawaited(_enqueueAiClassification(session.id, findingId));
   }
@@ -1349,6 +1604,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       // The notifier (and its `ref`) may already be disposed by the
       // time this actually runs — it's always kicked off un-awaited.
       if (!ref.mounted) return;
+      _ensureQueueWatchdog();
 
       // AI needs a quick defect note (QA #16). A finding queued without
       // one (e.g. by an older build) waits for the inspector instead.
@@ -1380,9 +1636,10 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       final firebaseReady = ref.read(firebaseReadyProvider);
       if (firebaseReady) {
         if (ref.read(authServiceProvider).currentUser == null) {
-          // Not signed in — nothing can be sent. `queued` is displayed
-          // as "Waiting for connection" while this is the case.
-          _markWaitingIfInFlight(sessionId, findingId);
+          // Not signed in (or Firebase Auth hasn't restored the user
+          // yet) — nothing can be sent. Shown as "Waiting for
+          // connection"; it wakes itself, and sign-in drains it too.
+          _parkAndRetry(sessionId, findingId, 'signedOut');
           return;
         }
         // A fresh check right now, not the (occasionally momentarily
@@ -1394,14 +1651,17 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
             .read(connectivityServiceProvider)
             .checkStatus();
         if (!ref.mounted) return;
-        if (connectivity == ConnectivityStatus.offline) {
-          // Definitively offline (real device connectivity, not just a
-          // proxy) — stays/returns to `queued` without ever showing
-          // `uploading`/`analyzing`. A genuine request failure despite a
-          // "connected"/unknown reading is still handled below by the
-          // sync try/catch and the coordinator — this is only a
-          // fast-path for the common case. Reconnect re-runs recovery.
-          _markWaitingIfInFlight(sessionId, findingId);
+        final conflictingReadings = _parkedWaits[findingId] ?? 0;
+        if (connectivity == ConnectivityStatus.offline &&
+            !(ref.read(isOnlineForAiProvider) &&
+                conflictingReadings >= _maxConflictingOfflineReadings)) {
+          // Offline per the fresh check — stays/returns to `queued`
+          // without showing `uploading`/`analyzing`, and wakes itself
+          // on a bounded backoff (reconnect also drains it). If the
+          // app's own connectivity signal keeps saying online, the
+          // request is tried anyway after a couple of readings; a real
+          // network failure then takes the bounded failure path below.
+          _parkAndRetry(sessionId, findingId, 'offline');
           return;
         }
         _setFindingAiStatusDurable(
@@ -1409,15 +1669,17 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           findingId,
           AiFindingStatus.uploading,
         );
-        AppLogger.info('evidence_upload_started finding=$findingId');
+        AppLogger.info('upload_started finding=$findingId');
         final upload = Stopwatch()..start();
         try {
           // Only this finding's photos, with no session-wide lock: a
           // second or third finding never waits behind (or gets
-          // parked by) another finding's upload (QA #27).
+          // parked by) another finding's upload (QA #27). Bounded, so a
+          // stalled transfer is retried rather than hanging forever.
           final syncResult = await ref
               .read(syncCoordinatorProvider)
-              .syncFindingEvidence(sessionId, findingId);
+              .syncFindingEvidence(sessionId, findingId)
+              .timeout(_evidenceUploadTimeout);
           if (!ref.mounted) return;
           if (!syncResult.isSuccess) {
             // Nothing about the classification was attempted yet: back
@@ -1431,8 +1693,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
             return;
           }
           _uploadFailures.remove(findingId);
+          _parkedWaits.remove(findingId);
           AppLogger.info(
-            'evidence_upload_completed finding=$findingId '
+            'upload_completed finding=$findingId '
             'ms=${upload.elapsedMilliseconds}',
           );
         } catch (error) {
@@ -1441,9 +1704,15 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
             error,
           );
           if (!ref.mounted) return;
-          _onEvidenceUploadFailed(sessionId, findingId, 'exception');
+          _onEvidenceUploadFailed(
+            sessionId,
+            findingId,
+            error is TimeoutException ? 'timeout' : 'exception',
+          );
           return;
         }
+      } else {
+        _parkedWaits.remove(findingId);
       }
 
       // Display only; the coordinator persists `analyzing` together with
@@ -1455,13 +1724,18 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       // job uses the inspector's saved preference.
       final level = aiLevel ?? await _preferredAiLevel();
       if (!ref.mounted) return;
+      _noteDiagnostic(findingId, level: level);
+      AppLogger.info('ai_started finding=$findingId level=${level.name}');
       final result = await ref
           .read(aiClassificationCoordinatorProvider)
           .classifyFinding(sessionId, findingId, aiLevel: level);
       AppLogger.info(
-        'ai_job_client_finished finding=$findingId '
+        'ai_finished finding=$findingId level=${level.name} '
         'outcome=${result.outcome.name} ms=${analysis.elapsedMilliseconds}',
       );
+      if (result.outcome == AiClassificationOutcome.failure) {
+        _noteDiagnostic(findingId, errorCode: 'ai_failure');
+      }
 
       if (!ref.mounted) return;
       // Reload from the durable store rather than patching in-memory
@@ -1470,11 +1744,25 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       // mirror back in sync with it. Only if this is still the active
       // session (the inspector may have navigated away/opened another
       // session while this was in flight).
+      if (result.outcome == AiClassificationOutcome.deferred) {
+        // Nothing was sent (the earlier request may still be running
+        // server-side): show it as waiting, not as a stale "uploading".
+        await _repository.setFindingAiStatus(
+          sessionId,
+          findingId,
+          AiFindingStatus.queued,
+        );
+        if (!ref.mounted) return;
+      }
       if (state?.id == sessionId) {
         final reloaded = await _repository.loadSession(sessionId);
         if (ref.mounted && state?.id == sessionId && reloaded != null) {
           state = _completeAiReviewIfSettled(reloaded);
           ref.invalidate(sessionSummariesProvider);
+          AppLogger.info(
+            'ui_refreshed finding=$findingId status='
+            '${reloaded.findings.firstWhereOrNull((f) => f.id == findingId)?.aiStatus.name ?? 'deleted'}',
+          );
           final attempt = reloaded.findings
               .firstWhereOrNull((f) => f.id == findingId)
               ?.aiAttempt;
@@ -1504,10 +1792,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         stackTrace,
       );
       if (!ref.mounted) return;
+      AppLogger.info('job_failed finding=$findingId reason=unexpected');
+      _noteDiagnostic(findingId, errorCode: 'unexpected');
       // Keeps any outstanding attempt, so a Retry replays its key.
       _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
     } finally {
       _classifyingFindingIds.remove(findingId);
+      _stopQueueWatchdogIfIdle();
     }
   }
 
@@ -1595,8 +1886,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           finding,
     ];
     final suggestions = [...session.aiSuggestions, suggestion];
-    final reviewProgress = AiReviewProgress.forSuggestions(suggestions);
-    final allResolved = reviewProgress.pending == 0;
+    // Settled only when every active finding is (the shared readiness
+    // rule) — not merely when no suggestion is pending.
+    final allResolved = ReportReadiness.of(
+      session.copyWith(aiSuggestions: suggestions),
+    ).isReady;
 
     state = session.copyWith(
       findings: findings,
@@ -1630,9 +1924,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// complete exactly as if the inspector had resolved the last one.
   InspectionSession _completeAiReviewIfSettled(InspectionSession session) {
     if (session.status != InspectionStatus.physicalInspectionComplete ||
-        session.aiSuggestions.isEmpty ||
-        AiReviewProgress.of(session).pending > 0 ||
-        AiProcessingProgress.of(session).inFlight > 0) {
+        activeSuggestionsOf(session).isEmpty ||
+        !ReportReadiness.of(session).isReady) {
       return session;
     }
     unawaited(
@@ -1675,8 +1968,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final finalUpdated = updated;
     if (finalUpdated == null) return;
 
-    final reviewProgress = AiReviewProgress.forSuggestions(suggestions);
-    final allResolved = reviewProgress.pending == 0;
+    // Settled only when every active finding is (the shared readiness
+    // rule) — not merely when no suggestion is pending.
+    final allResolved = ReportReadiness.of(
+      session.copyWith(aiSuggestions: suggestions),
+    ).isReady;
     state = session.copyWith(
       aiSuggestions: suggestions,
       updatedAt: now,
@@ -1749,31 +2045,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     );
   }
 
-  /// Records the Auto Analyse preference for this inspection — never
-  /// inferred from wallet/House Pass state; see
-  /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.
-  void setAutoAnalyseEnabled(bool enabled) {
-    final session = state;
-    if (session == null) return;
-    state = session.copyWith(
-      autoAnalyseEnabled: enabled,
-      updatedAt: DateTime.now(),
-    );
-    unawaited(
-      _persist(
-        () => _repository.setAutoAnalyseEnabled(session.id, enabled),
-        previous: session,
-        action: 'update Auto Analyse preference',
-      ),
-    );
-  }
-
   /// Records that [sessionId] now has a House Pass — used by the House
   /// Pass screen, which can be opened from the Wallet for any open
-  /// inspection, not only the active one. Enables Auto Analyse once the
-  /// pass is confirmed active, since its allowance makes analysing
-  /// without asking safe by default. Updates the in-memory session too
-  /// when it is the active one.
+  /// inspection, not only the active one. (AI analysis is always
+  /// automatic, with or without a pass.) Updates the in-memory session
+  /// too when it is the active one.
   Future<void> applyHousePassToSession(
     String sessionId, {
     required bool passActive,
@@ -1781,14 +2057,10 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final session = state;
     if (session?.id == sessionId) {
       setCommercialMode(CommercialMode.housePass);
-      if (passActive) setAutoAnalyseEnabled(true);
       return;
     }
     try {
       await _repository.setCommercialMode(sessionId, CommercialMode.housePass);
-      if (passActive) {
-        await _repository.setAutoAnalyseEnabled(sessionId, true);
-      }
       if (ref.mounted) ref.invalidate(sessionSummariesProvider);
     } catch (error, stackTrace) {
       AppLogger.error(

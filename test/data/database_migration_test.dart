@@ -553,7 +553,8 @@ void main() {
     // New v9 columns default to null/false.
     expect(sessionRow.commercialMode, isNull);
     expect(sessionRow.selectedAiLevel, isNull);
-    expect(sessionRow.autoAnalyseEnabled, isFalse);
+    // v14 retired the Auto Analyse opt-out: every session is on.
+    expect(sessionRow.autoAnalyseEnabled, isTrue);
 
     final sectionRow = await (db.select(
       db.sectionRows,
@@ -645,7 +646,8 @@ void main() {
     // New v9 columns present with their defaults.
     expect(sessionRow.commercialMode, isNull);
     expect(sessionRow.selectedAiLevel, isNull);
-    expect(sessionRow.autoAnalyseEnabled, isFalse);
+    // v14 retired the Auto Analyse opt-out: every session is on.
+    expect(sessionRow.autoAnalyseEnabled, isTrue);
 
     final walletCaches = await db.select(db.walletCacheRows).get();
     expect(walletCaches, isEmpty);

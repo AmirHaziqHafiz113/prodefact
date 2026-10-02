@@ -35,6 +35,7 @@ class AiSuggestion {
     this.suggestedConfidence,
     this.suggestedShortReason,
     this.suggestedCandidateEntryIds = const [],
+    this.suggestedDefectTerm,
     this.finalCatalogueEntryId,
     this.status = AiSuggestionStatus.pending,
     this.reviewedAt,
@@ -82,6 +83,12 @@ class AiSuggestion {
 
   // ---- inspector-reviewed / final value ----
 
+  /// The AI's ONE concrete defect within [suggestedCatalogueEntryId]'s
+  /// wording, when that entry lists several (e.g. "hollow" for "Wall
+  /// tile ... damaged/chipped/hollow/uneven") — see `defectTermsFor`.
+  /// Applies only while the final entry is still the suggested one.
+  final String? suggestedDefectTerm;
+
   /// The catalogue entry the inspector approved (Accept: same as
   /// `suggestedCatalogueEntryId`) or picked themselves (Change) —
   /// null/empty while still pending. An empty string (rather than
@@ -103,6 +110,14 @@ class AiSuggestion {
   /// [reviewedAt].
   bool get isAutoAccepted =>
       status == AiSuggestionStatus.accepted && reviewedAt == null;
+
+  /// The concrete defect term for the final value: the AI's term while
+  /// the inspector kept the AI's entry, otherwise none (a manually
+  /// chosen entry is reported with its catalogue wording).
+  String? get finalDefectTerm =>
+      hasFinalEntry && finalCatalogueEntryId == suggestedCatalogueEntryId
+      ? suggestedDefectTerm
+      : null;
 
   /// Whether [finalCatalogueEntryId] is a real, chosen entry (as
   /// opposed to null/empty).
@@ -144,6 +159,7 @@ class AiSuggestion {
       suggestedConfidence: suggestedConfidence,
       suggestedShortReason: suggestedShortReason,
       suggestedCandidateEntryIds: suggestedCandidateEntryIds,
+      suggestedDefectTerm: suggestedDefectTerm,
       finalCatalogueEntryId:
           finalCatalogueEntryId ?? this.finalCatalogueEntryId,
       status: status ?? this.status,

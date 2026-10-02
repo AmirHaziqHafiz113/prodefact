@@ -99,7 +99,6 @@ void main() {
           .read(selectedPropertyTypeProvider.notifier)
           .select(PropertyType.highRise);
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final section = queue.first;
       final finding = notifier.addFinding(
@@ -155,7 +154,6 @@ void main() {
           .read(selectedPropertyTypeProvider.notifier)
           .select(PropertyType.highRise);
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
       final section = queue.first;
       final finding = notifier.addFinding(
@@ -203,7 +201,6 @@ void main() {
         .read(selectedPropertyTypeProvider.notifier)
         .select(PropertyType.highRise);
     final notifier = container.read(activeSessionProvider.notifier);
-    notifier.setAutoAnalyseEnabled(true);
     final queue = container.read(inspectionQueueProvider);
     final statusNotifier = container.read(sectionStatusesProvider.notifier);
     for (final s in queue) {

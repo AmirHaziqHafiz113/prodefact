@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
@@ -51,8 +50,7 @@ class _OwnershipCheckingBilling extends FakeBillingService {
   }
 }
 
-Future<(ProviderContainer, String)> _startWithLocalFinding(
-  WidgetTester tester, {
+Future<(ProviderContainer, String)> _startWithLocalFinding({
   required FakeCloudInspectionRepository cloud,
   required BillingService billing,
 }) async {
@@ -66,76 +64,43 @@ Future<(ProviderContainer, String)> _startWithLocalFinding(
   addTearDown(container.dispose);
   final notifier = container.read(activeSessionProvider.notifier);
   await notifier.startNew(PropertyType.highRise);
-  // Auto Analyse off (the Flex default): the finding stays local-only.
+  // Saved without a quick note, so AI (always automatic) hasn't started
+  // and the finding is still local-only.
   final photo = await notifier.captureFindingPhoto(
     source: EvidenceSource.camera,
   );
   final finding = notifier.saveCameraFinding(
     sectionId: container.read(inspectionQueueProvider).first.id,
     photo: photo!,
-    note: 'Tile holo',
   );
-  for (var i = 0; i < 30; i++) {
-    await tester.pump();
-  }
+  await Future<void>.delayed(const Duration(milliseconds: 30));
   expect(cloud.pushedFindings.containsKey(finding.id), isFalse);
   return (container, finding.id);
 }
 
-Future<void> _openDialog(
-  WidgetTester tester,
-  ProviderContainer container,
-  String findingId,
-) async {
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        home: Consumer(
-          builder: (context, ref, _) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showAnalyseApprovalDialog(
-                context: context,
-                ref: ref,
-                findingId: findingId,
-              ),
-              child: const Text('open'),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-  await tester.tap(find.text('open'));
-  for (var i = 0; i < 30; i++) {
-    await tester.pump();
-  }
-  await tester.pumpAndSettle();
-}
-
 void main() {
-  testWidgets('1. a newly saved, local-only finding is registered with the '
-      'backend before pricing, so the estimate succeeds', (tester) async {
+  test('1. a newly saved, local-only finding is registered with the '
+      'backend before pricing, so the estimate succeeds', () async {
     final cloud = FakeCloudInspectionRepository();
     final billing = _OwnershipCheckingBilling(cloud);
     final (container, findingId) = await _startWithLocalFinding(
-      tester,
       cloud: cloud,
       billing: billing,
     );
 
-    await _openDialog(tester, container, findingId);
+    final estimate = await container
+        .read(activeSessionProvider.notifier)
+        .estimateFindingAnalysis(findingId);
 
     expect(cloud.pushedFindings.containsKey(findingId), isTrue);
     expect(billing.estimatedFindings, [findingId]);
-    expect(find.text('Smart AI'), findsOneWidget);
-    expect(find.text('Could not check pricing'), findsNothing);
+    expect(estimate!.aiLevel, AiLevel.smart);
     // Only the finding document; no photo upload is needed for pricing.
     expect(cloud.uploadEvidenceCalls, 0);
   });
 
-  testWidgets('3. a permission-denied answer is explained, not hidden '
-      'behind "check your connection"', (tester) async {
+  test('3. a permission-denied answer keeps its code and reason, '
+      'and is explained, not hidden behind "check your connection"', () async {
     final cloud = FakeCloudInspectionRepository();
     final billing = _OwnershipCheckingBilling(
       cloud,
@@ -144,39 +109,47 @@ void main() {
       }),
     );
     final (container, findingId) = await _startWithLocalFinding(
-      tester,
       cloud: cloud,
       billing: billing,
     );
 
-    await _openDialog(tester, container, findingId);
-
-    expect(find.text('Could not check pricing'), findsOneWidget);
+    Object? error;
+    try {
+      await container
+          .read(activeSessionProvider.notifier)
+          .estimateFindingAnalysis(findingId);
+    } catch (e) {
+      error = e;
+    }
+    expect((error as BillingCallException).reason, 'findingNotSynced');
     expect(
-      find.text(
-        "We couldn't verify this finding. Please save/sync the finding and "
-        'try again.',
-      ),
-      findsOneWidget,
+      pricingErrorMessage(error),
+      "We couldn't verify this finding. Please save/sync the finding and "
+      'try again.',
     );
   });
 
-  testWidgets('a finding that cannot be registered (offline) says the '
-      'pricing service is unavailable', (tester) async {
+  test('a finding that cannot be registered (offline) is reported '
+      'as the pricing service being unavailable, without pricing', () async {
     final cloud = FakeCloudInspectionRepository();
     final billing = _OwnershipCheckingBilling(cloud);
     final (container, findingId) = await _startWithLocalFinding(
-      tester,
       cloud: cloud,
       billing: billing,
     );
     cloud.failEveryCallWith = Exception('no network');
 
-    await _openDialog(tester, container, findingId);
-
+    Object? error;
+    try {
+      await container
+          .read(activeSessionProvider.notifier)
+          .estimateFindingAnalysis(findingId);
+    } catch (e) {
+      error = e;
+    }
     expect(
-      find.text('Pricing service is temporarily unavailable. Try again.'),
-      findsOneWidget,
+      pricingErrorMessage(error),
+      'Pricing service is temporarily unavailable. Try again.',
     );
     expect(billing.estimatedFindings, isEmpty);
   });

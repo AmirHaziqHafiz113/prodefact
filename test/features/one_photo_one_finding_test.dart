@@ -41,7 +41,6 @@ class _RecordingBilling extends FakeBillingService {
 Future<(ProviderContainer, FakeEvidenceCaptureService)> _start({
   int galleryPickCount = 1,
   BillingService? billing,
-  bool autoAnalyse = false,
 }) async {
   final capture = FakeEvidenceCaptureService()
     ..galleryPickCount = galleryPickCount;
@@ -51,7 +50,6 @@ Future<(ProviderContainer, FakeEvidenceCaptureService)> _start({
   addTearDown(container.dispose);
   final notifier = container.read(activeSessionProvider.notifier);
   await notifier.startNew(PropertyType.highRise);
-  if (autoAnalyse) notifier.setAutoAnalyseEnabled(true);
   return (container, capture);
 }
 
@@ -142,7 +140,6 @@ void main() {
     final (container, _) = await _start(
       galleryPickCount: 3,
       billing: billing,
-      autoAnalyse: true,
     );
     final saved = await _pickAndSave(container, ['Crack', 'Stain', 'Gap']);
     await _settle();
@@ -169,7 +166,6 @@ void main() {
     final (container, _) = await _start(
       galleryPickCount: 2,
       billing: _RecordingBilling(),
-      autoAnalyse: true,
     );
     final saved = await _pickAndSave(container, ['Hollow tile', 'Hollow tile']);
     await _settle();
@@ -289,7 +285,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final findings = container.read(activeSessionProvider)!.findings;
-    expect(findings.map((f) => f.description), ['Front view', 'Close-up']);
+    expect(
+      findings.map((f) => f.description).toSet(),
+      {'Front view', 'Close-up'},
+    );
     expect(findings.every((f) => f.evidence.length == 1), isTrue);
     expect(find.text('✓ 2 findings saved'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));

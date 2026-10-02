@@ -36,8 +36,10 @@ class ReportGenerationResult {
     : this._(ReportGenerationOutcome.success, report, null);
   const ReportGenerationResult.physicalInspectionIncomplete()
     : this._(ReportGenerationOutcome.physicalInspectionIncomplete, null, null);
-  const ReportGenerationResult.aiReviewIncomplete()
-    : this._(ReportGenerationOutcome.aiReviewIncomplete, null, null);
+  /// [message] says exactly what is outstanding (see
+  /// `ReportReadiness.summary`).
+  const ReportGenerationResult.aiReviewIncomplete([String? message])
+    : this._(ReportGenerationOutcome.aiReviewIncomplete, null, message);
   const ReportGenerationResult.missingContactNumber()
     : this._(ReportGenerationOutcome.missingContactNumber, null, null);
   const ReportGenerationResult.sessionNotFound()

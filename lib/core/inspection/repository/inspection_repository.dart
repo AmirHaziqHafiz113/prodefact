@@ -180,9 +180,6 @@ abstract class InspectionRepository {
   /// it.
   Future<void> saveInspectionNote(String sessionId, String? note);
 
-  /// Records the Auto Analyse preference for one inspection — see
-  /// `InspectionSession.autoAnalyseEnabled`, docs/commercial_model.md.
-  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled);
 
   /// Records the inspector's post-setup commercial choice for one
   /// inspection — House Pass purchase is no longer offered during New

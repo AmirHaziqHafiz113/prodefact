@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 import '../../core/inspection/inspection_domain.dart';
+import '../../core/logging/app_logger.dart';
 
 /// Pushes one local session (sections, findings, evidence metadata and
 /// files) to [CloudInspectionRepository]. Local data is always read
@@ -32,6 +33,20 @@ class DefaultSyncCoordinator implements SyncCoordinator {
   @override
   Future<SyncResult> registerFinding(String sessionId, String findingId) =>
       _syncFinding(sessionId, findingId, uploadEvidence: false);
+
+  @override
+  Future<void> deleteRemoteFinding(String sessionId, String findingId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await _cloud.deleteFinding(user.uid, sessionId, findingId);
+    } catch (error) {
+      // Never pushed, offline, or already gone — the local delete is
+      // what the workflow relies on; a stale cloud copy is never pulled
+      // back (sync is push-only).
+      AppLogger.warning('Could not delete finding $findingId remotely', error);
+    }
+  }
 
   @override
   Future<SyncResult> syncFindingEvidence(String sessionId, String findingId) =>

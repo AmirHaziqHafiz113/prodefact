@@ -21,4 +21,8 @@ abstract class SyncCoordinator {
   /// backend recognises the finding as the caller's own. Pricing needs
   /// this before it can answer; it is fast because nothing is uploaded.
   Future<SyncResult> registerFinding(String sessionId, String findingId);
+
+  /// Deletes a finding (and its evidence documents) from the cloud copy
+  /// after it was deleted locally. Best effort: never throws.
+  Future<void> deleteRemoteFinding(String sessionId, String findingId);
 }

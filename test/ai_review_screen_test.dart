@@ -51,7 +51,6 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
   // Auto Analyse on so saving a finding queues AI immediately — this
   // suite is about AI review, not the separate estimate/approval gate
   // (covered by `ai_gating_regression_test.dart`).
-  container.read(activeSessionProvider.notifier).setAutoAnalyseEnabled(true);
 
   // Add one camera-first finding (with a photo) so there's something
   // for progressive AI to classify.
@@ -117,7 +116,10 @@ void main() {
         _within(find.widgetWithText(FilledButton, 'Continue to Report')),
       );
       expect(continueButton.onPressed, isNotNull);
-      expect(_within(find.textContaining('1 to review')), findsOneWidget);
+      expect(
+        _within(find.textContaining('1 finding to review')),
+        findsOneWidget,
+      );
 
       // Navigate away (back to the inspection queue) and forward again
       // — review state (the generated suggestion) must persist rather

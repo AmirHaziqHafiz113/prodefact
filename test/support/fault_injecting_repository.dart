@@ -234,12 +234,6 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
-  Future<void> setAutoAnalyseEnabled(String sessionId, bool enabled) {
-    _maybeFail('setAutoAnalyseEnabled');
-    return _inner.setAutoAnalyseEnabled(sessionId, enabled);
-  }
-
-  @override
   Future<void> setCommercialMode(String sessionId, CommercialMode mode) {
     _maybeFail('setCommercialMode');
     return _inner.setCommercialMode(sessionId, mode);

@@ -416,8 +416,6 @@ void main() {
       );
       expect(created.commercialMode, CommercialMode.housePass);
       expect(created.selectedAiLevel, AiLevel.expert);
-      // Auto Analyse always starts off for a brand-new session.
-      expect(created.autoAnalyseEnabled, isFalse);
 
       final reloaded = await repository.loadSession(created.id);
       expect(reloaded!.commercialMode, CommercialMode.housePass);
@@ -436,20 +434,6 @@ void main() {
 
       final reloaded = await repository.loadSession(created.id);
       expect(reloaded!.commercialMode, isNull);
-    });
-
-    test('setAutoAnalyseEnabled persists and survives a reload', () async {
-      final session = await repository.createSession(
-        industry: Industry.homeInspection,
-        assetTypeId: 'highRise',
-        initialSections: [_bathroomSection()],
-        commercialMode: CommercialMode.housePass,
-      );
-
-      await repository.setAutoAnalyseEnabled(session.id, true);
-
-      final reloaded = await repository.loadSession(session.id);
-      expect(reloaded!.autoAnalyseEnabled, isTrue);
     });
 
     test(

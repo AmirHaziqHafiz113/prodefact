@@ -147,6 +147,8 @@ export interface AnalyseFindingResult {
   classification: {
     findingId: string;
     catalogueEntryId?: string;
+    /** The ONE concrete defect within a multi-defect entry's wording. */
+    defectTerm?: string;
     confidence?: number;
     shortReason?: string;
     candidateEntryIds: string[];

@@ -69,6 +69,10 @@ export interface ClassificationResult {
   /** Ranked alternative catalogue entry ids, when more than one match
    * was plausible. */
   candidateEntryIds?: string[];
+  /** The ONE concrete defect within the chosen entry's wording, when
+   * that wording lists several (e.g. "hollow" for "... damaged/chipped/
+   * hollow/uneven"). Always one of `defectTermsFor(description)`. */
+  defectTerm?: string;
   /** True when the provider could not confidently classify this
    * finding at all. Always true if `catalogueEntryId` is absent. */
   needsReview: boolean;

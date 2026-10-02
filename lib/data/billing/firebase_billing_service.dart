@@ -279,6 +279,7 @@ AnalyseFindingResult parseAnalyseFindingResult(
       findingId: expectedFindingId,
       needsReview: needsReview || catalogueEntryId == null,
       catalogueEntryId: catalogueEntryId,
+      defectTerm: _asStringOrNull(classificationRaw['defectTerm']),
       confidence: (classificationRaw['confidence'] as num?)?.toDouble(),
       shortReason: _asStringOrNull(classificationRaw['shortReason']),
       candidateEntryIds: rawCandidates is List

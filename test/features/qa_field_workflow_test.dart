@@ -133,7 +133,6 @@ void main() {
       final container = await _startedContainer(billing: billing);
       addTearDown(container.dispose);
       final notifier = container.read(activeSessionProvider.notifier);
-      notifier.setAutoAnalyseEnabled(true);
       final queue = container.read(inspectionQueueProvider);
 
       final finding = await _saveFinding(container, queue.first.id);
@@ -228,14 +227,12 @@ void main() {
 
       final active = container.read(activeSessionProvider)!;
       expect(active.commercialMode, isNot(CommercialMode.housePass));
-      expect(active.autoAnalyseEnabled, isFalse);
       final stored = await container
           .read(activeSessionProvider.notifier)
           .resume(firstId);
       expect(stored, isTrue);
       final first = container.read(activeSessionProvider)!;
       expect(first.commercialMode, CommercialMode.housePass);
-      expect(first.autoAnalyseEnabled, isTrue);
     });
   });
 

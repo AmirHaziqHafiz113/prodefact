@@ -13,6 +13,11 @@ import '../../../../data/billing/billing_providers.dart';
 import '../../providers/active_session_providers.dart';
 import 'top_up_screen.dart';
 
+/// Not opened from the field workflow since AI analysis became always
+/// automatic (2026-10-02): saved findings are analysed without an
+/// estimate/approve step. Kept, with its pricing helpers, for a future
+/// explicit re-analysis action.
+///
 /// The "Analyse" action on an `awaitingApproval` finding: shows the
 /// real, server-computed AI cost estimate ("Up to N Credits") and asks
 /// the inspector to explicitly approve before anything runs — this is

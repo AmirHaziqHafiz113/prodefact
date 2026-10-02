@@ -11,20 +11,24 @@ import 'package:prodefact/features/home_inspection/providers/physical_inspection
 import '../support/test_repository.dart';
 
 /// A zero-balance, Flex-only finding must never block physical
-/// inspection: it's still saved, but the card proactively shows it's
-/// waiting for Credits rather than the generic "Ready to analyse" —
+/// inspection: it's still saved, and since analysis is automatic the
+/// card says it's waiting for Credits (with Top Up) —
 /// see docs/commercial_model.md ("Physical inspection is never blocked
 /// by commercial state").
 void main() {
-  testWidgets('a saved finding on a zero-balance Flex Credits inspection shows '
-      '"AI: Waiting for Credits" and a Top Up action, not "Ready to '
-      'analyse"', (tester) async {
+  testWidgets('a saved finding on a zero-balance Flex Credits inspection: '
+      'its automatic analysis cannot run, so the card shows "AI: Waiting '
+      'for Credits" with Top Up (and Retry), never a bare failure', (
+    tester,
+  ) async {
     final billing = FakeBillingService(initialBalanceCredits: 0);
     final container = ProviderContainer(
       overrides: testOverrides(billingService: billing),
     );
     addTearDown(container.dispose);
-    await container.read(activeSessionProvider.notifier).startNew(
+    await container
+        .read(activeSessionProvider.notifier)
+        .startNew(
           PropertyType.highRise,
           commercialMode: CommercialMode.flexCredits,
           selectedAiLevel: AiLevel.smart,
@@ -53,21 +57,21 @@ void main() {
 
     expect(find.text('AI: Waiting for Credits'), findsOneWidget);
     expect(find.text('Top Up'), findsOneWidget);
-    expect(find.text('Ready to analyse'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('AI analysis failed'), findsNothing);
   });
 
-  testWidgets('a saved finding on a zero-allowance-remaining House Pass '
-      'inspection still shows the normal "Ready to analyse" prompt, not '
-      'the zero-Credits card — its allowance may still cover the finding '
-      'for 0 Credits, which only the real estimate call knows for sure', (
-    tester,
-  ) async {
+  testWidgets('a zero Credit balance never blocks a House Pass inspection: '
+      'the finding is analysed under the pass and never shows the '
+      'zero-Credits card', (tester) async {
     final billing = FakeBillingService(initialBalanceCredits: 0);
     final container = ProviderContainer(
       overrides: testOverrides(billingService: billing),
     );
     addTearDown(container.dispose);
-    await container.read(activeSessionProvider.notifier).startNew(
+    await container
+        .read(activeSessionProvider.notifier)
+        .startNew(
           PropertyType.highRise,
           commercialMode: CommercialMode.housePass,
           selectedAiLevel: AiLevel.smart,
@@ -97,7 +101,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Ready to analyse'), findsOneWidget);
     expect(find.text('AI: Waiting for Credits'), findsNothing);
+    expect(
+      container.read(activeSessionProvider)!.findings.single.aiStatus,
+      AiFindingStatus.completed,
+    );
   });
 }

@@ -42,6 +42,7 @@ class Finding {
     this.evidence = const [],
     this.aiStatus = AiFindingStatus.notQueued,
     this.aiAttempt,
+    this.captureBatchId,
   });
 
   final String id;
@@ -77,6 +78,12 @@ class Finding {
   /// dedicated attempt methods, never through `saveFinding`, so an
   /// unrelated edit (e.g. the side note) can never erase it.
   final AiAnalysisAttempt? aiAttempt;
+
+  /// Shared by the findings saved from one multi-photo gallery pick, so
+  /// the app can show them inside one bordered group. Visual only: each
+  /// finding keeps its own id, note, AI job, review and report entry.
+  /// Null for a single capture (and every finding before schema v14).
+  final String? captureBatchId;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -118,6 +125,7 @@ class Finding {
       evidence: evidence ?? this.evidence,
       aiStatus: aiStatus ?? this.aiStatus,
       aiAttempt: aiAttempt,
+      captureBatchId: captureBatchId,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
