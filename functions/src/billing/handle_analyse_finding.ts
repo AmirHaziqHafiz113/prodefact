@@ -11,8 +11,8 @@ import {
   SupportedProviderId,
   validateAndNormalize,
 } from "../ai/gateway";
-import {loadPricingConfig} from "./pricing_config";
-import {actualCreditsForUsage} from "./pricing";
+import {AiLevelConfig, loadPricingConfig} from "./pricing_config";
+import {actualCreditsForUsage, providerCostForTokensUsd} from "./pricing";
 import {
   getWalletBalance,
   InsufficientCreditsError,
@@ -156,6 +156,16 @@ interface AiJobRecord {
   /** The usage-based charge, fixed once the provider has answered. */
   actualCredits?: number;
   providerCompletedAt?: number;
+  // Per-finding AI usage for analytics (never shown to inspectors).
+  // Token fields are absent when the provider reported no usage.
+  model?: string;
+  usageAvailable?: boolean;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  /** Raw provider cost from the same pricing config billing uses. */
+  providerCostUsd?: number;
+  providerDurationMs?: number;
   settledAt?: number;
   housePassUsageRecorded?: boolean;
   creditsCharged: number;
@@ -522,6 +532,49 @@ export async function handleAnalyseFinding(params: {
 }
 
 /**
+ * The per-request usage facts logged and stored on the job. Cost comes
+ * from the same pricing config (and `providerCostForTokensUsd`) as the
+ * Credits charge, never from separate hard-coded prices. Without a
+ * provider usage report nothing is invented: only `usageAvailable:
+ * false` is recorded.
+ * @param {object} params the provider's usage, the level's pricing, and
+ *   the request duration.
+ * @return {object} the fields to log and store.
+ */
+export function providerUsageRecord(params: {
+  usage: {inputTokens: number; outputTokens: number} | undefined;
+  levelConfig: AiLevelConfig;
+  providerDurationMs: number;
+}): {
+  model: string;
+  usageAvailable: boolean;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  providerCostUsd?: number;
+  providerDurationMs: number;
+} {
+  const {usage, levelConfig, providerDurationMs} = params;
+  if (!usage) {
+    return {model: levelConfig.model, usageAvailable: false,
+      providerDurationMs};
+  }
+  return {
+    model: levelConfig.model,
+    usageAvailable: true,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.inputTokens + usage.outputTokens,
+    providerCostUsd: providerCostForTokensUsd(
+      usage.inputTokens,
+      usage.outputTokens,
+      levelConfig
+    ),
+    providerDurationMs,
+  };
+}
+
+/**
  * The response for a provider failure. The job is already recorded as
  * failed and its Credits released, so the outcome is definite: every
  * code used here is one the app treats as final (it shows "failed" with
@@ -686,10 +739,11 @@ async function runClaimedJob(params: {
 
     let result: ClassificationResult;
     let usage: {inputTokens: number; outputTokens: number} | undefined;
+    const providerStartedAt = Date.now();
+    let providerDurationMs = 0;
     try {
       // Safe facts only (no note text, image bytes or keys), so Fast,
       // Smart and Expert runs can be compared in the logs.
-      const providerStartedAt = Date.now();
       console.info("provider_started", {
         idempotencyKey,
         provider: provider.id,
@@ -702,11 +756,12 @@ async function runClaimedJob(params: {
       const classification = await provider.classifyFinding(input, images);
       result = classification.result;
       usage = classification.usage;
+      providerDurationMs = Date.now() - providerStartedAt;
       console.info("provider_completed", {
         idempotencyKey,
         model: levelConfig.model,
         aiLevel,
-        ms: Date.now() - providerStartedAt,
+        ms: providerDurationMs,
         needsReview: result.needsReview,
         hasEntry: Boolean(result.catalogueEntryId),
         hasTerm: Boolean(result.defectTerm),
@@ -740,6 +795,21 @@ async function runClaimedJob(params: {
       throw providerFailureError(error);
     }
 
+    const usageRecord = providerUsageRecord({
+      usage,
+      levelConfig,
+      providerDurationMs,
+    });
+    // One photo = one finding = one request, so this is the exact AI
+    // usage and raw provider cost of one image. Safe IDs and numbers
+    // only — never the prompt, note, image, key or any personal data.
+    console.info("provider_usage", {
+      idempotencyKey,
+      findingId: input.findingId,
+      aiLevel,
+      ...usageRecord,
+    });
+
     const normalized = validateAndNormalize(input, result);
     const reservationAmount = job.reservationAmount ?? 0;
     const actualCredits = usage ?
@@ -761,6 +831,7 @@ async function runClaimedJob(params: {
       classification: normalized,
       actualCredits,
       providerCompletedAt: Date.now(),
+      ...usageRecord,
     });
   }
 
