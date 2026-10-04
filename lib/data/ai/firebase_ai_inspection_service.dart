@@ -114,6 +114,10 @@ AiFindingClassification parseClassifyFindingResponse(
       for (final issue in (rawResult['qualityIssues'] as List?) ?? const [])
         if (issue is String) issue,
     ],
+    detectedElement: _asStringOrNull(rawResult['detectedElement']),
+    detectedComponent: _asStringOrNull(rawResult['detectedComponent']),
+    noteImageAgreement: _asStringOrNull(rawResult['noteImageAgreement']),
+    needsReviewReason: _asStringOrNull(rawResult['needsReviewReason']),
     confidence: (rawResult['confidence'] as num?)?.toDouble(),
     shortReason: _asStringOrNull(rawResult['shortReason']),
     candidateEntryIds: rawCandidates is List

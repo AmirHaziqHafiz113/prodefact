@@ -13,6 +13,7 @@ class AiFindingClassificationRequest {
     this.note,
     this.evidenceFilePaths = const [],
     this.evidenceIds = const [],
+    this.reanalysisAttempt = 0,
   });
 
   final String sessionId;
@@ -36,4 +37,8 @@ class AiFindingClassificationRequest {
   /// data a real backend actually receives; never a path, a URL, or
   /// bytes.
   final List<String> evidenceIds;
+
+  /// Which explicit inspector "Reanalyse" this is (0 = first analysis).
+  /// Sent for analytics/logging only — billing is per request key.
+  final int reanalysisAttempt;
 }

@@ -255,6 +255,17 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
       'suggestedCandidateEntryIds': suggestion.suggestedCandidateEntryIds,
       'finalCatalogueEntryId': suggestion.finalCatalogueEntryId,
       'status': suggestion.status.name,
+      // Evaluation data (no prompt, note or image): lets accuracy,
+      // corrections, confusion pairs and reanalysis success be measured
+      // later; `aiJobKey` joins to the aiJobs record (model, shortlist).
+      'suggestedDefectTerm': suggestion.suggestedDefectTerm,
+      'needsReviewReason': suggestion.needsReviewReason,
+      'noteImageAgreement': suggestion.noteImageAgreement,
+      'detectedComponent': suggestion.detectedComponent,
+      'aiLevel': suggestion.aiLevel,
+      'aiJobKey': suggestion.aiJobKey,
+      'reanalysisCount': suggestion.reanalysisCount,
+      'history': suggestion.history,
       'reviewedAt': suggestion.reviewedAt == null
           ? null
           : fs.Timestamp.fromDate(suggestion.reviewedAt!),

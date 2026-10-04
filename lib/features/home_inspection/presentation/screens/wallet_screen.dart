@@ -239,7 +239,7 @@ class _BalanceCard extends StatelessWidget {
                 const Text(
                   'AI CREDITS',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.onHeroSecondary,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -258,14 +258,14 @@ class _BalanceCard extends StatelessWidget {
                 else if (balanceAsync.hasError && resolvedBalance == null)
                   const Text(
                     'Could not load your balance.',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.onHero),
                   )
                 else
                   AppAnimatedNumber(
                     value: resolvedBalance!,
                     suffix: ' credits',
                     style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      color: Colors.white,
+                      color: AppColors.onHero,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -277,7 +277,7 @@ class _BalanceCard extends StatelessWidget {
                     '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)} '
                     '· RM${(1 / creditsPerMyr!).toStringAsFixed(2)} / credit',
                     style: const TextStyle(
-                      color: Colors.white70,
+                      color: AppColors.onHeroSecondary,
                       fontSize: 12.5,
                     ),
                   ),
@@ -287,7 +287,10 @@ class _BalanceCard extends StatelessWidget {
                     padding: EdgeInsets.only(top: 4),
                     child: Text(
                       'Last known balance — refreshing…',
-                      style: TextStyle(color: Colors.white70, fontSize: 12.5),
+                      style: TextStyle(
+                        color: AppColors.onHeroSecondary,
+                        fontSize: 12.5,
+                      ),
                     ),
                   ),
                 const SizedBox(height: AppSpacing.md),

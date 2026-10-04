@@ -173,7 +173,11 @@ test("needs_review behavior: a provider that can't confidently " +
 
   assert.equal(result.needsReview, true);
   assert.equal(result.catalogueEntryId, undefined);
-  assert.deepEqual(result.candidateEntryIds, [VALID_ID]);
+  // The model's own candidate ranks first; the rest of the (up to 4)
+  // options come from the note's shortlist ranking.
+  assert.equal(result.candidateEntryIds?.[0], VALID_ID);
+  assert.ok((result.candidateEntryIds?.length ?? 0) <= 4);
+  assert.equal(result.needsReviewReason, "ambiguous_candidates");
 });
 
 test("a provider timeout maps to deadline-exceeded, never a raw " +

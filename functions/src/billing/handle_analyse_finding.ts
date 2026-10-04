@@ -109,7 +109,17 @@ export function parseAnalyseFindingInput(
   if (d.idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
     throw new HttpsError("invalid-argument", "idempotencyKey is too long.");
   }
-  return {input, aiLevel: d.aiLevel, idempotencyKey: d.idempotencyKey};
+  const attempt = d.reanalysisAttempt;
+  const reanalysisAttempt =
+    typeof attempt === "number" && Number.isInteger(attempt) &&
+    attempt >= 0 && attempt <= 1000 ?
+      attempt :
+      0;
+  return {
+    input: {...input, reanalysisAttempt},
+    aiLevel: d.aiLevel,
+    idempotencyKey: d.idempotencyKey,
+  };
 }
 
 /** The backend-owned lifecycle of one analysis job. */
@@ -170,6 +180,9 @@ interface AiJobRecord {
   /** How many catalogue entries the request offered, and how chosen. */
   shortlistSize?: number;
   shortlistStrategy?: string;
+  normalizationStrategy?: string;
+  /** Which explicit Reanalyse this job was (0 = first analysis). */
+  reanalysisAttempt?: number;
   settledAt?: number;
   housePassUsageRecorded?: boolean;
   creditsCharged: number;
@@ -286,6 +299,10 @@ function toResult(
         job.classification.isRelevantInspectionImage,
       imageUsable: job.classification.imageUsable,
       qualityIssues: job.classification.qualityIssues ?? [],
+      detectedElement: job.classification.detectedElement,
+      detectedComponent: job.classification.detectedComponent,
+      noteImageAgreement: job.classification.noteImageAgreement,
+      needsReviewReason: job.classification.needsReviewReason,
       confidence: job.classification.confidence,
       shortReason: job.classification.shortReason,
       candidateEntryIds: job.classification.candidateEntryIds ?? [],
@@ -752,6 +769,7 @@ async function runClaimedJob(params: {
     const shortlistedInput = {
       ...input,
       shortlistEntryIds: shortlist.entryIds,
+      shortlistStrategy: shortlist.strategy,
     };
 
     let result: ClassificationResult;
@@ -820,6 +838,8 @@ async function runClaimedJob(params: {
       ...providerUsageRecord({usage, levelConfig, providerDurationMs}),
       shortlistSize: shortlist.entryIds.length,
       shortlistStrategy: shortlist.strategy,
+      normalizationStrategy: shortlist.normalizationStrategy,
+      reanalysisAttempt: input.reanalysisAttempt ?? 0,
     };
     // One photo = one finding = one request, so this is the exact AI
     // usage and raw provider cost of one image. Safe IDs, counts and
@@ -833,7 +853,13 @@ async function runClaimedJob(params: {
       isRelevantInspectionImage: normalized.isRelevantInspectionImage,
       imageUsable: normalized.imageUsable,
       qualityIssues: normalized.qualityIssues ?? [],
+      detectedElement: normalized.detectedElement,
+      detectedComponent: normalized.detectedComponent,
+      noteImageAgreement: normalized.noteImageAgreement,
+      confidence: normalized.confidence,
+      candidateCount: normalized.candidateEntryIds?.length ?? 0,
       needsReview: normalized.needsReview,
+      needsReviewReason: normalized.needsReviewReason,
     });
 
     const reservationAmount = job.reservationAmount ?? 0;

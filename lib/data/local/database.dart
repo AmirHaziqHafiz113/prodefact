@@ -101,6 +101,10 @@ part 'database.g.dart';
 ///   `AiSuggestionRows.suggestedDefectTerm` (both nullable, additive),
 ///   and set every session's `autoAnalyseEnabled` to true — AI analysis
 ///   is now always automatic, so an old opt-out is retired, not kept.
+/// - v16: (AI accuracy pass) added AI-suggestion evaluation columns —
+///   `needsReviewReason`, `noteImageAgreement`, `detectedComponent`,
+///   `aiLevel`, `aiJobKey`, `reanalysisCount` (default 0) and
+///   `historyJson` (earlier results kept on Reanalyse). Additive only.
 /// - v15: (photo guidance pass) added `AiSuggestionRows.imageRelevant`,
 ///   `imageUsable` and `imageQualityIssues` (all nullable, additive).
 @DriftDatabase(
@@ -124,7 +128,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -303,6 +307,19 @@ class AppDatabase extends _$AppDatabase {
           aiSuggestionRows.imageRelevant,
           aiSuggestionRows.imageUsable,
           aiSuggestionRows.imageQualityIssues,
+        ]) {
+          await _addColumnIfMissing(migrator, aiSuggestionRows, column);
+        }
+      }
+      if (from < 16) {
+        for (final column in [
+          aiSuggestionRows.needsReviewReason,
+          aiSuggestionRows.noteImageAgreement,
+          aiSuggestionRows.detectedComponent,
+          aiSuggestionRows.aiLevel,
+          aiSuggestionRows.aiJobKey,
+          aiSuggestionRows.reanalysisCount,
+          aiSuggestionRows.historyJson,
         ]) {
           await _addColumnIfMissing(migrator, aiSuggestionRows, column);
         }

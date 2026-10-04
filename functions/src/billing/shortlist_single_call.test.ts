@@ -70,12 +70,12 @@ function stub(
   return {bodies, lines};
 }
 
-const analyse = (firestore: Firestore, key: string) =>
+const analyse = (firestore: Firestore, key: string, reanalysisAttempt = 0) =>
   handleAnalyseFinding({
     auth: {uid: UID},
     data: {inspectionId: "inspection_1", findingId: "finding_1",
       area: "Master Bathroom", isPlumbingArea: true, aiLevel: "smart",
-      note: NOTE, idempotencyKey: key},
+      note: NOTE, idempotencyKey: key, reanalysisAttempt},
     firestore,
     storage: {} as unknown as Storage,
     apiKeys: {openai: API_KEY},
@@ -204,4 +204,42 @@ test("13. no key, note text, prompt or image data is logged", async (t) => {
     "wall.wall_tile.04 |"]) {
     assert.equal(all.includes(secret), false, `logged: ${secret}`);
   }
+});
+
+test("reanalysis: a fresh key is a genuinely new (charged) request; the " +
+  "same key never calls the provider twice; logs carry the reasoning " +
+  "fields and attempt number but no note", async (t) => {
+  const {bodies, lines} = stub(t, {
+    isRelevantInspectionImage: true,
+    detectedElement: "Wall",
+    detectedComponent: "Wall Tile",
+    noteImageAgreement: "neutral",
+    catalogueEntryId: "wall.wall_tile.04",
+    defectTerm: "hollow",
+    confidence: 0.85,
+    needsReview: false,
+  });
+  const {db} = seeded();
+  const first = await analyse(db, "key_first");
+  await analyse(db, "key_first"); // a double tap / replay
+  assert.equal(bodies.length, 1);
+
+  const again = await analyse(db, "key_reanalyse_1", 1);
+  assert.equal(bodies.length, 2, "intentional reanalysis is not blocked");
+  assert.ok(again.creditsCharged > 0);
+  assert.equal(first.classification.detectedComponent, "Wall Tile");
+  assert.equal(again.classification.noteImageAgreement, "neutral");
+
+  const usage = lines.filter((l) => l.startsWith("provider_usage "))
+    .map((l) => JSON.parse(l.slice("provider_usage ".length)));
+  assert.equal(usage.length, 2);
+  assert.equal(usage[1].reanalysisAttempt, 1);
+  assert.equal(usage[0].reanalysisAttempt, 0);
+  assert.equal(usage[1].detectedComponent, "Wall Tile");
+  assert.equal(usage[1].noteImageAgreement, "neutral");
+  assert.equal(usage[1].normalizationStrategy, "alias");
+  assert.equal(usage[1].confidence, 0.85);
+  assert.equal(usage[1].candidateCount, 0);
+  assert.equal(usage[1].needsReviewReason, undefined);
+  assert.equal(lines.join("\n").includes("PRIVATE-NOTE-MARKER"), false);
 });

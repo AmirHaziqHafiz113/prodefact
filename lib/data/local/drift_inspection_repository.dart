@@ -230,6 +230,13 @@ class DriftInspectionRepository implements InspectionRepository {
             isRelevantInspectionImage: row.imageRelevant,
             imageUsable: row.imageUsable,
             qualityIssues: _decodeQualityIssues(row.imageQualityIssues),
+            needsReviewReason: row.needsReviewReason,
+            noteImageAgreement: row.noteImageAgreement,
+            detectedComponent: row.detectedComponent,
+            aiLevel: row.aiLevel,
+            aiJobKey: row.aiJobKey,
+            reanalysisCount: row.reanalysisCount,
+            history: _decodeHistory(row.historyJson),
             finalCatalogueEntryId: row.finalCatalogueEntryId,
             status: AiSuggestionStatus.values.byName(row.status),
             reviewedAt: row.reviewedAt,
@@ -806,6 +813,17 @@ class DriftInspectionRepository implements InspectionRepository {
                   ? null
                   : suggestion.qualityIssues.join(','),
             ),
+            needsReviewReason: Value(suggestion.needsReviewReason),
+            noteImageAgreement: Value(suggestion.noteImageAgreement),
+            detectedComponent: Value(suggestion.detectedComponent),
+            aiLevel: Value(suggestion.aiLevel),
+            aiJobKey: Value(suggestion.aiJobKey),
+            reanalysisCount: Value(suggestion.reanalysisCount),
+            historyJson: Value(
+              suggestion.history.isEmpty
+                  ? null
+                  : jsonEncode(suggestion.history),
+            ),
             finalCatalogueEntryId: Value(suggestion.finalCatalogueEntryId),
           ),
         );
@@ -924,6 +942,18 @@ class DriftInspectionRepository implements InspectionRepository {
 
   @override
   Future<void> close() => _db.close();
+
+  static List<Map<String, Object?>> _decodeHistory(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      return [
+        for (final item in jsonDecode(raw) as List)
+          Map<String, Object?>.from(item as Map),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
 
   static List<String> _decodeQualityIssues(String? raw) =>
       raw == null || raw.isEmpty ? const [] : raw.split(',');

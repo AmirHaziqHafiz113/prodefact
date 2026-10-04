@@ -35,6 +35,12 @@ export interface ClassifyFindingInput {
    * is called; validation rejects any id outside it.
    */
   shortlistEntryIds?: string[];
+  /** Which explicit inspector "Reanalyse" this request is (0 for the
+   * first analysis). Analytics/logging only — never affects billing. */
+  reanalysisAttempt?: number;
+  /** Server-side only: how the shortlist was built (its order is only a
+   * meaningful ranking for `noteMatch`). */
+  shortlistStrategy?: string;
 }
 
 /** One evidence image, already downloaded, validated, and normalized
@@ -92,6 +98,17 @@ export interface ClassificationResult {
   imageUsable?: boolean;
   /** Controlled values only — see `QUALITY_ISSUES` in gateway.ts. */
   qualityIssues?: string[];
+  /** What the model saw in the photo (catalogue element/component name
+   * where possible) — used for the consistency check, never shown in a
+   * report. Bounded length. */
+  detectedElement?: string;
+  detectedComponent?: string;
+  /** Whether the photo supports the note: supports | neutral |
+   * contradicts | unclear. */
+  noteImageAgreement?: string;
+  /** Why a result needs the inspector (controlled — see
+   * `NEEDS_REVIEW_REASONS` in gateway.ts). Set by the server only. */
+  needsReviewReason?: string;
   /** True when the provider could not confidently classify this
    * finding at all. Always true if `catalogueEntryId` is absent. */
   needsReview: boolean;

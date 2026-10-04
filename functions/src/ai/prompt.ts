@@ -69,6 +69,10 @@ export function promptCatalogueFor(
 export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
   const jsonShape = "{\"isRelevantInspectionImage\": boolean, " +
     "\"imageUsable\": boolean, \"qualityIssues\": string[], " +
+    "\"detectedElement\": string | null, " +
+    "\"detectedComponent\": string | null, " +
+    "\"noteImageAgreement\": \"supports\" | \"neutral\" | " +
+    "\"contradicts\" | \"unclear\", " +
     "\"catalogueEntryId\": string | null, " +
     "\"defectTerm\": string | null, " +
     "\"confidence\": number, \"shortReason\": string, " +
@@ -91,6 +95,24 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "4. If the note is plausible but the defect is subtle or not",
     "   visible in the photo, prefer the note.",
     "5. With no note, classify from the photo and area alone.",
+    "6. A vague note never cancels an obvious photo: if the photo",
+    "   clearly shows the component (e.g. a sliding door), use it.",
+    "",
+    "WORK THROUGH THESE STEPS (silently, in this one answer):",
+    "a. Which component and defect does the NOTE mention?",
+    "b. Which element and component are visible in the PHOTO? Put them",
+    "   in detectedElement / detectedComponent, using the catalogue's",
+    "   own element/component names where possible.",
+    "c. What defect evidence does the photo show, if any?",
+    "d. noteImageAgreement: supports (the photo backs the note),",
+    "   neutral (the photo shows the right component but cannot prove",
+    "   the defect, e.g. a hollow tile), contradicts (the photo plainly",
+    "   shows something else), or unclear.",
+    "e. Which listed entries fit BOTH the note and the photo? Pick the",
+    "   most likely as catalogueEntryId; its component must be the one",
+    "   you put in detectedComponent.",
+    "f. Is it reliable enough to accept? If not, set needsReview to",
+    "   true — but still give your best entry and the next best ones.",
     "",
     "IS THIS AN INSPECTION PHOTO?",
     "First decide whether the photo is meaningfully related to a",
@@ -147,13 +169,12 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "authority and reviews every classification — never state or",
     "imply otherwise.",
     "",
-    "In shortReason, say briefly what the note says and what the photo",
-    "shows. If the photo is unclear or irrelevant and the note does",
-    "not identify the defect, or if no entry fits, set needsReview to",
-    "true and catalogueEntryId to null — do NOT guess an entry just to",
-    "have an answer. You may still list up to 3 plausible",
-    "catalogueEntryIds in candidateEntryIds even when needsReview is",
-    "true, so the inspector has a shortlist.",
+    "shortReason: at most 20 words — what the note says and what the",
+    "photo shows. If no listed entry fits at all, set needsReview to",
+    "true and catalogueEntryId to null — never force an entry. When",
+    "needsReview is true but some entries are plausible, list up to 4",
+    "of them in candidateEntryIds, most likely first, so the inspector",
+    "can pick one; an empty list only when nothing fits.",
     "",
     "confidence is your probability (0 to 1) that catalogueEntryId",
     "and defectTerm are both correct.",
@@ -263,6 +284,14 @@ export function parseClassificationPayload(
         undefined,
     imageUsable:
       typeof r.imageUsable === "boolean" ? r.imageUsable : undefined,
+    detectedElement:
+      typeof r.detectedElement === "string" ? r.detectedElement : undefined,
+    detectedComponent:
+      typeof r.detectedComponent === "string" ? r.detectedComponent :
+        undefined,
+    noteImageAgreement:
+      typeof r.noteImageAgreement === "string" ? r.noteImageAgreement :
+        undefined,
     qualityIssues: Array.isArray(r.qualityIssues) ?
       r.qualityIssues.filter((x): x is string => typeof x === "string") :
       undefined,

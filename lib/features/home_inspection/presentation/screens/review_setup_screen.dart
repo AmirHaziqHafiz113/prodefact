@@ -59,12 +59,18 @@ class ReviewSetupScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             _SummaryCard(
               rows: [
-                ('Unit', details.unitNumber?.isNotEmpty == true
-                    ? details.unitNumber!
-                    : 'Not set'),
+                (
+                  'Unit',
+                  details.unitNumber?.isNotEmpty == true
+                      ? details.unitNumber!
+                      : 'Not set',
+                ),
                 if (details.address != null) ('Address', details.address!),
                 if (details.resolvedProjectDeveloperName != null)
-                  ('Project / Developer', details.resolvedProjectDeveloperName!),
+                  (
+                    'Project / Developer',
+                    details.resolvedProjectDeveloperName!,
+                  ),
                 if (details.blockTower != null)
                   ('Block / Tower', details.blockTower!),
                 if (details.clientName != null) ('Client', details.clientName!),

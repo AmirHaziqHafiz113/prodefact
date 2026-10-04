@@ -1,6 +1,9 @@
 import {DefectCatalogueEntry, defectCatalogue} from "./defect_catalogue";
 import {defectTermsFor} from "./defect_terms";
-import {normalizeInspectorNote} from "./inspector_note";
+import {
+  NormalizationStrategy,
+  normalizeInspectorNote,
+} from "./inspector_note";
 
 /**
  * Deterministic, server-side catalogue shortlisting (2026-10-04).
@@ -22,6 +25,9 @@ export const SHORTLIST_BROAD_MAX = 60;
 export type ShortlistStrategy =
   /** The note matched catalogue components/elements/defects. */
   | "noteMatch"
+  /** The note gave only a weak signal (defect words, no component): its
+   * matches first, then a broader spread over the area's elements. */
+  | "noteWeak"
   /** The note was absent or too vague; the area guided the list. */
   | "areaContext"
   /** Neither helped: an even spread across every component. */
@@ -32,6 +38,8 @@ export interface CatalogueShortlist {
   entries: DefectCatalogueEntry[];
   entryIds: string[];
   strategy: ShortlistStrategy;
+  /** How the note was read (see `normalizeInspectorNote`). */
+  normalizationStrategy: NormalizationStrategy;
   totalCatalogueSize: number;
 }
 
@@ -64,6 +72,9 @@ const SYNONYMS: Record<string, string[]> = {
   "skim": ["concrete wall", "ceiling"],
   "lippage": ["floor tiles", "wall tile"],
   "glass": ["window glass", "sliding door glass"],
+  // Sliding doors route to their own components, never generic doors.
+  "sliding": ["sliding door frame", "sliding door panel",
+    "sliding door glass"],
   "awning": ["window awning"],
   "grille": ["grill door"],
   "gate": ["grill door"],
@@ -155,7 +166,8 @@ export function buildCatalogueShortlist(input: {
 }): CatalogueShortlist {
   const all = defectCatalogue.entries;
   const note = input.note?.trim() ?? "";
-  const normalized = note ? normalizeInspectorNote(note).normalized : "";
+  const reading = note ? normalizeInspectorNote(note) : undefined;
+  const normalized = reading?.normalized ?? "";
   const noteWords = Array.from(new Set(words(`${note} ${normalized}`)));
 
   const areaLower = input.area.toLowerCase();
@@ -168,6 +180,7 @@ export function buildCatalogueShortlist(input: {
     hintedElements.add("sanitary_fitting");
   }
 
+  const slidingNote = noteWords.includes("slid");
   const synonymComponents = new Set<string>();
   for (const w of noteWords) {
     for (const [key, components] of Object.entries(SYNONYMS)) {
@@ -197,7 +210,10 @@ export function buildCatalogueShortlist(input: {
       noteWords,
       defectTermsFor(entry.defectDescription).flatMap(words)
     ) * 2;
-    const noteScore = score;
+    // A note that says "sliding" is about a sliding door: generic doors
+    // and windows (which share words like "glass" or "frame") yield.
+    if (slidingNote && !componentWords.includes("slid")) score -= 6;
+    const noteScore = Math.max(0, score);
     // Worth one defect-word match, so the area's usual elements win ties
     // against incidental wording elsewhere in the catalogue.
     if (hintedElements.has(entry.mainElementId)) score += 3;
@@ -211,7 +227,25 @@ export function buildCatalogueShortlist(input: {
   let chosen: typeof scored;
   let strategy: ShortlistStrategy;
 
-  if (byScore[0]?.noteScore > 0) {
+  // A component, element or synonym match is a strong reading of the
+  // note; defect wording alone (e.g. "gap", "loose") is weak.
+  const STRONG_NOTE_SCORE = 8;
+  const topNote = Math.max(0, ...scored.map((s) => s.noteScore));
+
+  if (topNote > 0 && topNote < STRONG_NOTE_SCORE) {
+    // Weak reading: the note's matches first, then an even spread over
+    // the area's elements (or every component), so a vague or
+    // misspelt note never narrows the list to the wrong family.
+    strategy = "noteWeak";
+    const matched = byScore.filter((s) => s.noteScore > 0)
+      .slice(0, SHORTLIST_MAX);
+    const pool = scored.filter((s) => !matched.includes(s) &&
+      (hintedElements.size === 0 || hintedElements.has(s.entry.mainElementId)));
+    chosen = [
+      ...matched,
+      ...roundRobinByComponent(pool, SHORTLIST_BROAD_MAX - matched.length),
+    ];
+  } else if (topNote > 0) {
     // Every entry of the best-matching components (so the model can
     // choose the right defect), then the next-strongest matches across
     // the catalogue, so one keyword never excludes all alternatives.
@@ -252,6 +286,7 @@ export function buildCatalogueShortlist(input: {
     entries,
     entryIds: entries.map((e) => e.id),
     strategy,
+    normalizationStrategy: reading?.strategy ?? "none",
     totalCatalogueSize: all.length,
   };
 }

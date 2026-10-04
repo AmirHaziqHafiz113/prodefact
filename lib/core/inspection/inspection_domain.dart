@@ -13,6 +13,7 @@ export 'ai/ai_progress.dart';
 export 'ai/ai_queue_diagnostic.dart';
 export 'ai/finding_order.dart';
 export 'ai/image_quality_note.dart';
+export 'ai/needs_review_reason.dart';
 export 'ai/ai_review_coordinator.dart';
 export 'areas/area_candidate.dart';
 export 'areas/area_candidate_service.dart';

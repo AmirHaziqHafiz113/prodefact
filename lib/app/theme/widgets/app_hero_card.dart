@@ -59,9 +59,9 @@ class AppHeroCard extends StatelessWidget {
           Padding(
             padding: padding ?? const EdgeInsets.all(AppSpacing.lg),
             child: DefaultTextStyle.merge(
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.onHero),
               child: IconTheme.merge(
-                data: const IconThemeData(color: Colors.white),
+                data: const IconThemeData(color: AppColors.onHero),
                 child: child,
               ),
             ),

@@ -44,9 +44,11 @@ export async function handleClassifyFinding(params: {
   // The model only ever sees (and may only choose from) a shortlist of
   // the controlled catalogue — see `ai/catalogue_shortlist.ts`.
   const parsed = parseClassifyFindingInput(data);
+  const shortlist = buildCatalogueShortlist(parsed);
   const input = {
     ...parsed,
-    shortlistEntryIds: buildCatalogueShortlist(parsed).entryIds,
+    shortlistEntryIds: shortlist.entryIds,
+    shortlistStrategy: shortlist.strategy,
   };
 
   const images = provider.supportsImages ?

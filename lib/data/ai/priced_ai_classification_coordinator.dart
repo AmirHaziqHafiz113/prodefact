@@ -46,13 +46,14 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     String sessionId,
     String findingId, {
     AiLevel? aiLevel,
+    bool reanalyse = false,
   }) async {
     final key = '$sessionId/$findingId';
     if (!_inFlight.add(key)) {
       return const AiClassificationResult.alreadyInFlight();
     }
     try {
-      return await _classifyFinding(sessionId, findingId, aiLevel);
+      return await _classifyFinding(sessionId, findingId, aiLevel, reanalyse);
     } finally {
       _inFlight.remove(key);
     }
@@ -62,6 +63,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     String sessionId,
     String findingId,
     AiLevel? requestedLevel,
+    bool reanalyse,
   ) async {
     final session = await _local.loadSession(sessionId);
     if (session == null) return const AiClassificationResult.sessionNotFound();
@@ -70,10 +72,19 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     if (finding == null) return const AiClassificationResult.findingNotFound();
     if (!finding.isAiEligible) return const AiClassificationResult.noEvidence();
 
-    if (finding.aiStatus == AiFindingStatus.completed ||
-        finding.aiStatus == AiFindingStatus.needsReview) {
+    // A finished finding is only analysed again on an explicit
+    // inspector Reanalyse.
+    if (!reanalyse &&
+        (finding.aiStatus == AiFindingStatus.completed ||
+            finding.aiStatus == AiFindingStatus.needsReview)) {
       return const AiClassificationResult.alreadyInFlight();
     }
+    final previous = session.aiSuggestions.firstWhereOrNull(
+      (s) => s.findingId == finding.id,
+    );
+    final reanalysisCount = reanalyse
+        ? (previous?.reanalysisCount ?? 0) + 1
+        : previous?.reanalysisCount ?? 0;
 
     final section = session.sections.firstWhereOrNull(
       (s) => s.id == finding.sectionId,
@@ -89,6 +100,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       note: finding.defectNote,
       evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
+      reanalysisAttempt: reanalysisCount,
     );
 
     // Billing identity. An outstanding attempt (persisted before an
@@ -229,6 +241,21 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         isRelevantInspectionImage: classification.isRelevantInspectionImage,
         imageUsable: classification.imageUsable,
         qualityIssues: classification.qualityIssues,
+        needsReviewReason: needsReview
+            ? classification.needsReviewReason ??
+                  (missingTerm ? 'ambiguous_candidates' : null)
+            : null,
+        noteImageAgreement: classification.noteImageAgreement,
+        detectedComponent: classification.detectedComponent,
+        aiLevel: attempt.aiLevel.name,
+        aiJobKey: attempt.idempotencyKey,
+        reanalysisCount: reanalysisCount,
+        // The result being replaced is kept, so corrections and
+        // reanalysis can be evaluated later.
+        history: [
+          ...?previous?.history,
+          if (previous != null) previous.toHistoryEntry(),
+        ],
         finalCatalogueEntryId: validEntryId,
         status: needsReview
             ? AiSuggestionStatus.pending
@@ -242,6 +269,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
     );
     AppLogger.info(
       'result_saved finding=${finding.id} level=${attempt.aiLevel.name} '
+      'reanalysis=$reanalysisCount '
       'needsReview=$needsReview hasTerm=${defectTerm != null}',
     );
 

@@ -39,6 +39,13 @@ class AiSuggestion {
     this.isRelevantInspectionImage,
     this.imageUsable,
     this.qualityIssues = const [],
+    this.needsReviewReason,
+    this.noteImageAgreement,
+    this.detectedComponent,
+    this.aiLevel,
+    this.aiJobKey,
+    this.reanalysisCount = 0,
+    this.history = const [],
     this.finalCatalogueEntryId,
     this.status = AiSuggestionStatus.pending,
     this.reviewedAt,
@@ -98,6 +105,46 @@ class AiSuggestion {
   final bool? isRelevantInspectionImage;
   final bool? imageUsable;
   final List<String> qualityIssues;
+
+  // ---- evaluation data (safe, structured; never prompt/note/image) ----
+
+  /// Why the AI sent this to the inspector (controlled; see
+  /// [AiFindingClassification.needsReviewReason]).
+  final String? needsReviewReason;
+  final String? noteImageAgreement;
+  final String? detectedComponent;
+
+  /// The level (fast/smart/expert) the analysis ran at, and its backend
+  /// job key — which joins to the aiJobs record holding model, shortlist
+  /// strategy/size, tokens and cost.
+  final String? aiLevel;
+  final String? aiJobKey;
+
+  /// How many explicit inspector "Reanalyse" runs produced this result
+  /// (0 = the first analysis).
+  final int reanalysisCount;
+
+  /// Earlier results for this finding, oldest first — each a compact
+  /// summary (AI pick, final pick, status, confidence, level, job key,
+  /// reason, times). Kept when the finding is reanalysed.
+  final List<Map<String, Object?>> history;
+
+  /// A compact, storage-safe summary of this result for [history].
+  Map<String, Object?> toHistoryEntry() => {
+    'suggestedCatalogueEntryId': suggestedCatalogueEntryId,
+    'suggestedDefectTerm': suggestedDefectTerm,
+    'finalCatalogueEntryId': finalCatalogueEntryId,
+    'status': status.name,
+    'confidence': suggestedConfidence,
+    'candidateEntryIds': suggestedCandidateEntryIds,
+    'needsReviewReason': needsReviewReason,
+    'noteImageAgreement': noteImageAgreement,
+    'aiLevel': aiLevel,
+    'aiJobKey': aiJobKey,
+    'reanalysisCount': reanalysisCount,
+    'generatedAt': generatedAt.toIso8601String(),
+    'reviewedAt': reviewedAt?.toIso8601String(),
+  };
 
   /// The catalogue entry the inspector approved (Accept: same as
   /// `suggestedCatalogueEntryId`) or picked themselves (Change) —
@@ -173,6 +220,13 @@ class AiSuggestion {
       isRelevantInspectionImage: isRelevantInspectionImage,
       imageUsable: imageUsable,
       qualityIssues: qualityIssues,
+      needsReviewReason: needsReviewReason,
+      noteImageAgreement: noteImageAgreement,
+      detectedComponent: detectedComponent,
+      aiLevel: aiLevel,
+      aiJobKey: aiJobKey,
+      reanalysisCount: reanalysisCount,
+      history: history,
       finalCatalogueEntryId:
           finalCatalogueEntryId ?? this.finalCatalogueEntryId,
       status: status ?? this.status,

@@ -18,11 +18,11 @@ export const DEFAULT_PROVIDER_ID: SupportedProviderId = "deepseek";
 /** Maximum ranked alternative catalogue entries kept from a provider's
  * response — bounds the response size regardless of what a provider
  * sends. */
-export const MAX_CANDIDATE_ENTRIES = 5;
+export const MAX_CANDIDATE_ENTRIES = 4;
 
 /** Below this confidence a match is never auto-accepted: it goes to the
  * inspector as needsReview, with the entry kept as a candidate. */
-export const MIN_CONFIDENT_CONFIDENCE = 0.5;
+export const MIN_CONFIDENT_CONFIDENCE = 0.6;
 
 /** The only image-quality values a result may carry. */
 export const QUALITY_ISSUES = [
@@ -49,6 +49,63 @@ function controlledQualityIssues(value: unknown): string[] {
       .map((v) => v.trim().toLowerCase())
       .filter((v) => allowed.has(v))
   );
+}
+
+/** Whether the photo supports the note (controlled). */
+export const NOTE_IMAGE_AGREEMENT = [
+  "supports",
+  "neutral",
+  "contradicts",
+  "unclear",
+] as const;
+
+/** Why a result needs the inspector (controlled; set server-side). */
+export const NEEDS_REVIEW_REASONS = [
+  "unrelated_image",
+  "image_quality",
+  "note_image_contradiction",
+  "component_mismatch",
+  "no_catalogue_match",
+  "low_confidence",
+  "ambiguous_candidates",
+] as const;
+export type NeedsReviewReason = typeof NEEDS_REVIEW_REASONS[number];
+
+/** Model-written strings are bounded so they can't bloat storage, logs
+ * or output tokens. */
+const MAX_SHORT_REASON = 200;
+const MAX_DETECTED = 60;
+
+/**
+ * @param {string} text a name.
+ * @return {string[]} its significant, lightly stemmed words.
+ */
+function nameWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((w) => w.length >= 2 && !["the", "of", "and", "a"].includes(w))
+    .map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
+}
+
+/**
+ * Whether what the model saw (a component or element name) is
+ * consistent with the entry it chose: one name's words must be
+ * contained in the other's ("Door" fits "Sliding Door Panel"; "Wall
+ * Tile" does not fit "Window Frame", nor "Sliding Door Panel" fit
+ * "Door Stopper").
+ * @param {string} detected the model's detected component/element.
+ * @param {string[]} names the chosen entry's component/element names.
+ * @return {boolean} whether they agree.
+ */
+export function detectedMatches(detected: string, names: string[]): boolean {
+  const seen = nameWords(detected);
+  if (seen.length === 0) return true;
+  return names.some((name) => {
+    const target = nameWords(name);
+    return seen.every((w) => target.includes(w)) ||
+      target.every((w) => seen.includes(w));
+  });
 }
 
 /** Splits an answer that names several ids at once ("a/b", "a or b"). */
@@ -160,10 +217,11 @@ export function validateAndNormalize(
       qualityIssues: dedupe(["unrelated", ...qualityIssues]),
       confidence: clampConfidence(result.confidence),
       shortReason:
-        asOptionalString(result.shortReason) ??
+        bounded(result.shortReason, MAX_SHORT_REASON) ??
         "Image does not appear related to home inspection.",
       candidateEntryIds: [],
       needsReview: true,
+      needsReviewReason: "unrelated_image",
     };
   }
 
@@ -207,20 +265,54 @@ export function validateAndNormalize(
   // interpret at all sends the finding to the inspector.
   const imageUsable = result.imageUsable !== false;
 
-  const needsReview =
-    result.needsReview === true ||
-    !imageUsable ||
-    validId === undefined ||
-    missingTerm ||
-    lowConfidence;
+  const detectedComponent = bounded(result.detectedComponent, MAX_DETECTED);
+  const detectedElement = bounded(result.detectedElement, MAX_DETECTED);
+  const noteImageAgreement = (NOTE_IMAGE_AGREEMENT as readonly string[])
+    .includes(String(result.noteImageAgreement)) ?
+    String(result.noteImageAgreement) :
+    undefined;
+  const contradicts = noteImageAgreement === "contradicts";
+  // The chosen entry must be consistent with what the model itself
+  // says the photo shows; a mismatch is never auto-accepted.
+  const componentMismatch = entry !== undefined && (
+    // A component is compared with the entry's component (a generic
+    // "Door" still fits "Sliding Door Frame"); an element with its
+    // element — never across, or "Door" would excuse any door part.
+    (detectedComponent !== undefined &&
+      !detectedMatches(detectedComponent, [entry.componentName])) ||
+    (detectedComponent === undefined && detectedElement !== undefined &&
+      !detectedMatches(detectedElement, [entry.mainElementName]))
+  );
 
+  const reason: NeedsReviewReason | undefined =
+    !imageUsable ? "image_quality" :
+      contradicts ? "note_image_contradiction" :
+        componentMismatch ? "component_mismatch" :
+          lowConfidence ? "low_confidence" :
+            validId === undefined && combinedIds.length === 0 &&
+              !hasValidCandidate(result, isAllowed) ? "no_catalogue_match" :
+              validId === undefined || missingTerm ||
+                result.needsReview === true ? "ambiguous_candidates" :
+                undefined;
+  const needsReview = reason !== undefined;
+
+  // Uncertain should still be useful: up to 4 ranked catalogue options,
+  // best first — the model's own pick, then its alternatives, then
+  // (for a note that clearly pointed somewhere) the deterministic
+  // shortlist ranking. Never invented text: only shortlisted ids.
+  const modelCandidates = Array.isArray(result.candidateEntryIds) ?
+    result.candidateEntryIds.filter(
+      (id): id is string => typeof id === "string" && isAllowed(id)
+    ) :
+    [];
+  const fallback = needsReview && input.shortlistStrategy === "noteMatch" ?
+    (input.shortlistEntryIds ?? []) :
+    [];
   const candidateEntryIds = dedupe([
+    ...(needsReview && validId ? [validId] : []),
     ...combinedIds,
-    ...(Array.isArray(result.candidateEntryIds) ?
-      result.candidateEntryIds.filter(
-        (id): id is string => typeof id === "string" && isAllowed(id)
-      ) :
-      []),
+    ...modelCandidates,
+    ...fallback,
   ]).slice(0, MAX_CANDIDATE_ENTRIES);
 
   return {
@@ -228,16 +320,44 @@ export function validateAndNormalize(
     isRelevantInspectionImage: true,
     imageUsable,
     qualityIssues,
+    detectedElement,
+    detectedComponent,
+    noteImageAgreement,
     // An uncertain pick is still returned as the AI's best guess (the
     // inspector can Accept it in one tap); needsReview is what keeps it
     // from being accepted automatically.
     catalogueEntryId: validId,
     defectTerm,
     confidence,
-    shortReason: asOptionalString(result.shortReason),
+    shortReason: bounded(result.shortReason, MAX_SHORT_REASON),
     candidateEntryIds,
     needsReview,
+    needsReviewReason: reason,
   };
+}
+
+/**
+ * @param {ClassificationResult} result the model's answer.
+ * @param {Function} isAllowed whether an id may be used.
+ * @return {boolean} whether any candidate it named is usable.
+ */
+function hasValidCandidate(
+  result: ClassificationResult,
+  isAllowed: (id: string) => boolean
+): boolean {
+  return Array.isArray(result.candidateEntryIds) &&
+    result.candidateEntryIds.some((id) =>
+      typeof id === "string" && isAllowed(id));
+}
+
+/**
+ * @param {unknown} value a model-written string.
+ * @param {number} max the length cap.
+ * @return {string | undefined} it trimmed and capped, if non-empty.
+ */
+function bounded(value: unknown, max: number): string | undefined {
+  const text = asOptionalString(value);
+  return text === undefined ? undefined : text.slice(0, max);
 }
 
 /**

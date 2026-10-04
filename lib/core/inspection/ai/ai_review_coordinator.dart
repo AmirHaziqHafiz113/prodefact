@@ -21,9 +21,14 @@ import 'ai_analysis_result.dart';
 /// happened (see `ActiveInspectionSession.approveAndRunAnalysis`),
 /// never merely from saving a finding.
 abstract class AiClassificationCoordinator {
+  /// [reanalyse]: the inspector explicitly asked for a NEW analysis of
+  /// a finding that already has a result (or failed) — run it even
+  /// though the finding is completed/needs review, under a new request
+  /// key, keeping the previous result in the suggestion's history.
   Future<AiClassificationResult> classifyFinding(
     String sessionId,
     String findingId, {
     AiLevel? aiLevel,
+    bool reanalyse = false,
   });
 }

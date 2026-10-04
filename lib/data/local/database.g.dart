@@ -4013,6 +4013,86 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _needsReviewReasonMeta = const VerificationMeta(
+    'needsReviewReason',
+  );
+  @override
+  late final GeneratedColumn<String> needsReviewReason =
+      GeneratedColumn<String>(
+        'needs_review_reason',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _noteImageAgreementMeta =
+      const VerificationMeta('noteImageAgreement');
+  @override
+  late final GeneratedColumn<String> noteImageAgreement =
+      GeneratedColumn<String>(
+        'note_image_agreement',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _detectedComponentMeta = const VerificationMeta(
+    'detectedComponent',
+  );
+  @override
+  late final GeneratedColumn<String> detectedComponent =
+      GeneratedColumn<String>(
+        'detected_component',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _aiLevelMeta = const VerificationMeta(
+    'aiLevel',
+  );
+  @override
+  late final GeneratedColumn<String> aiLevel = GeneratedColumn<String>(
+    'ai_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aiJobKeyMeta = const VerificationMeta(
+    'aiJobKey',
+  );
+  @override
+  late final GeneratedColumn<String> aiJobKey = GeneratedColumn<String>(
+    'ai_job_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reanalysisCountMeta = const VerificationMeta(
+    'reanalysisCount',
+  );
+  @override
+  late final GeneratedColumn<int> reanalysisCount = GeneratedColumn<int>(
+    'reanalysis_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _historyJsonMeta = const VerificationMeta(
+    'historyJson',
+  );
+  @override
+  late final GeneratedColumn<String> historyJson = GeneratedColumn<String>(
+    'history_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4041,6 +4121,13 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
     imageRelevant,
     imageUsable,
     imageQualityIssues,
+    needsReviewReason,
+    noteImageAgreement,
+    detectedComponent,
+    aiLevel,
+    aiJobKey,
+    reanalysisCount,
+    historyJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4274,6 +4361,63 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         ),
       );
     }
+    if (data.containsKey('needs_review_reason')) {
+      context.handle(
+        _needsReviewReasonMeta,
+        needsReviewReason.isAcceptableOrUnknown(
+          data['needs_review_reason']!,
+          _needsReviewReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note_image_agreement')) {
+      context.handle(
+        _noteImageAgreementMeta,
+        noteImageAgreement.isAcceptableOrUnknown(
+          data['note_image_agreement']!,
+          _noteImageAgreementMeta,
+        ),
+      );
+    }
+    if (data.containsKey('detected_component')) {
+      context.handle(
+        _detectedComponentMeta,
+        detectedComponent.isAcceptableOrUnknown(
+          data['detected_component']!,
+          _detectedComponentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ai_level')) {
+      context.handle(
+        _aiLevelMeta,
+        aiLevel.isAcceptableOrUnknown(data['ai_level']!, _aiLevelMeta),
+      );
+    }
+    if (data.containsKey('ai_job_key')) {
+      context.handle(
+        _aiJobKeyMeta,
+        aiJobKey.isAcceptableOrUnknown(data['ai_job_key']!, _aiJobKeyMeta),
+      );
+    }
+    if (data.containsKey('reanalysis_count')) {
+      context.handle(
+        _reanalysisCountMeta,
+        reanalysisCount.isAcceptableOrUnknown(
+          data['reanalysis_count']!,
+          _reanalysisCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('history_json')) {
+      context.handle(
+        _historyJsonMeta,
+        historyJson.isAcceptableOrUnknown(
+          data['history_json']!,
+          _historyJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4387,6 +4531,34 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         DriftSqlType.string,
         data['${effectivePrefix}image_quality_issues'],
       ),
+      needsReviewReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}needs_review_reason'],
+      ),
+      noteImageAgreement: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_image_agreement'],
+      ),
+      detectedComponent: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}detected_component'],
+      ),
+      aiLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_level'],
+      ),
+      aiJobKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_job_key'],
+      ),
+      reanalysisCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reanalysis_count'],
+      )!,
+      historyJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}history_json'],
+      ),
     );
   }
 
@@ -4442,6 +4614,15 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
   final bool? imageRelevant;
   final bool? imageUsable;
   final String? imageQualityIssues;
+
+  /// Evaluation data (added in schema v16) — see `AiSuggestion`.
+  final String? needsReviewReason;
+  final String? noteImageAgreement;
+  final String? detectedComponent;
+  final String? aiLevel;
+  final String? aiJobKey;
+  final int reanalysisCount;
+  final String? historyJson;
   const AiSuggestionRow({
     required this.id,
     required this.sessionId,
@@ -4469,6 +4650,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     this.imageRelevant,
     this.imageUsable,
     this.imageQualityIssues,
+    this.needsReviewReason,
+    this.noteImageAgreement,
+    this.detectedComponent,
+    this.aiLevel,
+    this.aiJobKey,
+    required this.reanalysisCount,
+    this.historyJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4545,6 +4733,25 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     if (!nullToAbsent || imageQualityIssues != null) {
       map['image_quality_issues'] = Variable<String>(imageQualityIssues);
     }
+    if (!nullToAbsent || needsReviewReason != null) {
+      map['needs_review_reason'] = Variable<String>(needsReviewReason);
+    }
+    if (!nullToAbsent || noteImageAgreement != null) {
+      map['note_image_agreement'] = Variable<String>(noteImageAgreement);
+    }
+    if (!nullToAbsent || detectedComponent != null) {
+      map['detected_component'] = Variable<String>(detectedComponent);
+    }
+    if (!nullToAbsent || aiLevel != null) {
+      map['ai_level'] = Variable<String>(aiLevel);
+    }
+    if (!nullToAbsent || aiJobKey != null) {
+      map['ai_job_key'] = Variable<String>(aiJobKey);
+    }
+    map['reanalysis_count'] = Variable<int>(reanalysisCount);
+    if (!nullToAbsent || historyJson != null) {
+      map['history_json'] = Variable<String>(historyJson);
+    }
     return map;
   }
 
@@ -4618,6 +4825,25 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       imageQualityIssues: imageQualityIssues == null && nullToAbsent
           ? const Value.absent()
           : Value(imageQualityIssues),
+      needsReviewReason: needsReviewReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(needsReviewReason),
+      noteImageAgreement: noteImageAgreement == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteImageAgreement),
+      detectedComponent: detectedComponent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detectedComponent),
+      aiLevel: aiLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiLevel),
+      aiJobKey: aiJobKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiJobKey),
+      reanalysisCount: Value(reanalysisCount),
+      historyJson: historyJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(historyJson),
     );
   }
 
@@ -4677,6 +4903,19 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       imageQualityIssues: serializer.fromJson<String?>(
         json['imageQualityIssues'],
       ),
+      needsReviewReason: serializer.fromJson<String?>(
+        json['needsReviewReason'],
+      ),
+      noteImageAgreement: serializer.fromJson<String?>(
+        json['noteImageAgreement'],
+      ),
+      detectedComponent: serializer.fromJson<String?>(
+        json['detectedComponent'],
+      ),
+      aiLevel: serializer.fromJson<String?>(json['aiLevel']),
+      aiJobKey: serializer.fromJson<String?>(json['aiJobKey']),
+      reanalysisCount: serializer.fromJson<int>(json['reanalysisCount']),
+      historyJson: serializer.fromJson<String?>(json['historyJson']),
     );
   }
   @override
@@ -4717,6 +4956,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       'imageRelevant': serializer.toJson<bool?>(imageRelevant),
       'imageUsable': serializer.toJson<bool?>(imageUsable),
       'imageQualityIssues': serializer.toJson<String?>(imageQualityIssues),
+      'needsReviewReason': serializer.toJson<String?>(needsReviewReason),
+      'noteImageAgreement': serializer.toJson<String?>(noteImageAgreement),
+      'detectedComponent': serializer.toJson<String?>(detectedComponent),
+      'aiLevel': serializer.toJson<String?>(aiLevel),
+      'aiJobKey': serializer.toJson<String?>(aiJobKey),
+      'reanalysisCount': serializer.toJson<int>(reanalysisCount),
+      'historyJson': serializer.toJson<String?>(historyJson),
     };
   }
 
@@ -4747,6 +4993,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     Value<bool?> imageRelevant = const Value.absent(),
     Value<bool?> imageUsable = const Value.absent(),
     Value<String?> imageQualityIssues = const Value.absent(),
+    Value<String?> needsReviewReason = const Value.absent(),
+    Value<String?> noteImageAgreement = const Value.absent(),
+    Value<String?> detectedComponent = const Value.absent(),
+    Value<String?> aiLevel = const Value.absent(),
+    Value<String?> aiJobKey = const Value.absent(),
+    int? reanalysisCount,
+    Value<String?> historyJson = const Value.absent(),
   }) => AiSuggestionRow(
     id: id ?? this.id,
     sessionId: sessionId ?? this.sessionId,
@@ -4808,6 +5061,19 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     imageQualityIssues: imageQualityIssues.present
         ? imageQualityIssues.value
         : this.imageQualityIssues,
+    needsReviewReason: needsReviewReason.present
+        ? needsReviewReason.value
+        : this.needsReviewReason,
+    noteImageAgreement: noteImageAgreement.present
+        ? noteImageAgreement.value
+        : this.noteImageAgreement,
+    detectedComponent: detectedComponent.present
+        ? detectedComponent.value
+        : this.detectedComponent,
+    aiLevel: aiLevel.present ? aiLevel.value : this.aiLevel,
+    aiJobKey: aiJobKey.present ? aiJobKey.value : this.aiJobKey,
+    reanalysisCount: reanalysisCount ?? this.reanalysisCount,
+    historyJson: historyJson.present ? historyJson.value : this.historyJson,
   );
   AiSuggestionRow copyWithCompanion(AiSuggestionRowsCompanion data) {
     return AiSuggestionRow(
@@ -4881,6 +5147,23 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       imageQualityIssues: data.imageQualityIssues.present
           ? data.imageQualityIssues.value
           : this.imageQualityIssues,
+      needsReviewReason: data.needsReviewReason.present
+          ? data.needsReviewReason.value
+          : this.needsReviewReason,
+      noteImageAgreement: data.noteImageAgreement.present
+          ? data.noteImageAgreement.value
+          : this.noteImageAgreement,
+      detectedComponent: data.detectedComponent.present
+          ? data.detectedComponent.value
+          : this.detectedComponent,
+      aiLevel: data.aiLevel.present ? data.aiLevel.value : this.aiLevel,
+      aiJobKey: data.aiJobKey.present ? data.aiJobKey.value : this.aiJobKey,
+      reanalysisCount: data.reanalysisCount.present
+          ? data.reanalysisCount.value
+          : this.reanalysisCount,
+      historyJson: data.historyJson.present
+          ? data.historyJson.value
+          : this.historyJson,
     );
   }
 
@@ -4912,7 +5195,14 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           ..write('suggestedDefectTerm: $suggestedDefectTerm, ')
           ..write('imageRelevant: $imageRelevant, ')
           ..write('imageUsable: $imageUsable, ')
-          ..write('imageQualityIssues: $imageQualityIssues')
+          ..write('imageQualityIssues: $imageQualityIssues, ')
+          ..write('needsReviewReason: $needsReviewReason, ')
+          ..write('noteImageAgreement: $noteImageAgreement, ')
+          ..write('detectedComponent: $detectedComponent, ')
+          ..write('aiLevel: $aiLevel, ')
+          ..write('aiJobKey: $aiJobKey, ')
+          ..write('reanalysisCount: $reanalysisCount, ')
+          ..write('historyJson: $historyJson')
           ..write(')'))
         .toString();
   }
@@ -4945,6 +5235,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     imageRelevant,
     imageUsable,
     imageQualityIssues,
+    needsReviewReason,
+    noteImageAgreement,
+    detectedComponent,
+    aiLevel,
+    aiJobKey,
+    reanalysisCount,
+    historyJson,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4975,7 +5272,14 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           other.suggestedDefectTerm == this.suggestedDefectTerm &&
           other.imageRelevant == this.imageRelevant &&
           other.imageUsable == this.imageUsable &&
-          other.imageQualityIssues == this.imageQualityIssues);
+          other.imageQualityIssues == this.imageQualityIssues &&
+          other.needsReviewReason == this.needsReviewReason &&
+          other.noteImageAgreement == this.noteImageAgreement &&
+          other.detectedComponent == this.detectedComponent &&
+          other.aiLevel == this.aiLevel &&
+          other.aiJobKey == this.aiJobKey &&
+          other.reanalysisCount == this.reanalysisCount &&
+          other.historyJson == this.historyJson);
 }
 
 class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
@@ -5005,6 +5309,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
   final Value<bool?> imageRelevant;
   final Value<bool?> imageUsable;
   final Value<String?> imageQualityIssues;
+  final Value<String?> needsReviewReason;
+  final Value<String?> noteImageAgreement;
+  final Value<String?> detectedComponent;
+  final Value<String?> aiLevel;
+  final Value<String?> aiJobKey;
+  final Value<int> reanalysisCount;
+  final Value<String?> historyJson;
   final Value<int> rowid;
   const AiSuggestionRowsCompanion({
     this.id = const Value.absent(),
@@ -5033,6 +5344,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.imageRelevant = const Value.absent(),
     this.imageUsable = const Value.absent(),
     this.imageQualityIssues = const Value.absent(),
+    this.needsReviewReason = const Value.absent(),
+    this.noteImageAgreement = const Value.absent(),
+    this.detectedComponent = const Value.absent(),
+    this.aiLevel = const Value.absent(),
+    this.aiJobKey = const Value.absent(),
+    this.reanalysisCount = const Value.absent(),
+    this.historyJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AiSuggestionRowsCompanion.insert({
@@ -5062,6 +5380,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.imageRelevant = const Value.absent(),
     this.imageUsable = const Value.absent(),
     this.imageQualityIssues = const Value.absent(),
+    this.needsReviewReason = const Value.absent(),
+    this.noteImageAgreement = const Value.absent(),
+    this.detectedComponent = const Value.absent(),
+    this.aiLevel = const Value.absent(),
+    this.aiJobKey = const Value.absent(),
+    this.reanalysisCount = const Value.absent(),
+    this.historyJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sessionId = Value(sessionId),
@@ -5095,6 +5420,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Expression<bool>? imageRelevant,
     Expression<bool>? imageUsable,
     Expression<String>? imageQualityIssues,
+    Expression<String>? needsReviewReason,
+    Expression<String>? noteImageAgreement,
+    Expression<String>? detectedComponent,
+    Expression<String>? aiLevel,
+    Expression<String>? aiJobKey,
+    Expression<int>? reanalysisCount,
+    Expression<String>? historyJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5136,6 +5468,14 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
       if (imageUsable != null) 'image_usable': imageUsable,
       if (imageQualityIssues != null)
         'image_quality_issues': imageQualityIssues,
+      if (needsReviewReason != null) 'needs_review_reason': needsReviewReason,
+      if (noteImageAgreement != null)
+        'note_image_agreement': noteImageAgreement,
+      if (detectedComponent != null) 'detected_component': detectedComponent,
+      if (aiLevel != null) 'ai_level': aiLevel,
+      if (aiJobKey != null) 'ai_job_key': aiJobKey,
+      if (reanalysisCount != null) 'reanalysis_count': reanalysisCount,
+      if (historyJson != null) 'history_json': historyJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5167,6 +5507,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Value<bool?>? imageRelevant,
     Value<bool?>? imageUsable,
     Value<String?>? imageQualityIssues,
+    Value<String?>? needsReviewReason,
+    Value<String?>? noteImageAgreement,
+    Value<String?>? detectedComponent,
+    Value<String?>? aiLevel,
+    Value<String?>? aiJobKey,
+    Value<int>? reanalysisCount,
+    Value<String?>? historyJson,
     Value<int>? rowid,
   }) {
     return AiSuggestionRowsCompanion(
@@ -5200,6 +5547,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
       imageRelevant: imageRelevant ?? this.imageRelevant,
       imageUsable: imageUsable ?? this.imageUsable,
       imageQualityIssues: imageQualityIssues ?? this.imageQualityIssues,
+      needsReviewReason: needsReviewReason ?? this.needsReviewReason,
+      noteImageAgreement: noteImageAgreement ?? this.noteImageAgreement,
+      detectedComponent: detectedComponent ?? this.detectedComponent,
+      aiLevel: aiLevel ?? this.aiLevel,
+      aiJobKey: aiJobKey ?? this.aiJobKey,
+      reanalysisCount: reanalysisCount ?? this.reanalysisCount,
+      historyJson: historyJson ?? this.historyJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5301,6 +5655,27 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     if (imageQualityIssues.present) {
       map['image_quality_issues'] = Variable<String>(imageQualityIssues.value);
     }
+    if (needsReviewReason.present) {
+      map['needs_review_reason'] = Variable<String>(needsReviewReason.value);
+    }
+    if (noteImageAgreement.present) {
+      map['note_image_agreement'] = Variable<String>(noteImageAgreement.value);
+    }
+    if (detectedComponent.present) {
+      map['detected_component'] = Variable<String>(detectedComponent.value);
+    }
+    if (aiLevel.present) {
+      map['ai_level'] = Variable<String>(aiLevel.value);
+    }
+    if (aiJobKey.present) {
+      map['ai_job_key'] = Variable<String>(aiJobKey.value);
+    }
+    if (reanalysisCount.present) {
+      map['reanalysis_count'] = Variable<int>(reanalysisCount.value);
+    }
+    if (historyJson.present) {
+      map['history_json'] = Variable<String>(historyJson.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5336,6 +5711,13 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
           ..write('imageRelevant: $imageRelevant, ')
           ..write('imageUsable: $imageUsable, ')
           ..write('imageQualityIssues: $imageQualityIssues, ')
+          ..write('needsReviewReason: $needsReviewReason, ')
+          ..write('noteImageAgreement: $noteImageAgreement, ')
+          ..write('detectedComponent: $detectedComponent, ')
+          ..write('aiLevel: $aiLevel, ')
+          ..write('aiJobKey: $aiJobKey, ')
+          ..write('reanalysisCount: $reanalysisCount, ')
+          ..write('historyJson: $historyJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9683,6 +10065,13 @@ typedef $$AiSuggestionRowsTableCreateCompanionBuilder =
       Value<bool?> imageRelevant,
       Value<bool?> imageUsable,
       Value<String?> imageQualityIssues,
+      Value<String?> needsReviewReason,
+      Value<String?> noteImageAgreement,
+      Value<String?> detectedComponent,
+      Value<String?> aiLevel,
+      Value<String?> aiJobKey,
+      Value<int> reanalysisCount,
+      Value<String?> historyJson,
       Value<int> rowid,
     });
 typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
@@ -9713,6 +10102,13 @@ typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
       Value<bool?> imageRelevant,
       Value<bool?> imageUsable,
       Value<String?> imageQualityIssues,
+      Value<String?> needsReviewReason,
+      Value<String?> noteImageAgreement,
+      Value<String?> detectedComponent,
+      Value<String?> aiLevel,
+      Value<String?> aiJobKey,
+      Value<int> reanalysisCount,
+      Value<String?> historyJson,
       Value<int> rowid,
     });
 
@@ -9888,6 +10284,41 @@ class $$AiSuggestionRowsTableFilterComposer
 
   ColumnFilters<String> get imageQualityIssues => $composableBuilder(
     column: $table.imageQualityIssues,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get needsReviewReason => $composableBuilder(
+    column: $table.needsReviewReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteImageAgreement => $composableBuilder(
+    column: $table.noteImageAgreement,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get detectedComponent => $composableBuilder(
+    column: $table.detectedComponent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiLevel => $composableBuilder(
+    column: $table.aiLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiJobKey => $composableBuilder(
+    column: $table.aiJobKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reanalysisCount => $composableBuilder(
+    column: $table.reanalysisCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get historyJson => $composableBuilder(
+    column: $table.historyJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10068,6 +10499,41 @@ class $$AiSuggestionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get needsReviewReason => $composableBuilder(
+    column: $table.needsReviewReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteImageAgreement => $composableBuilder(
+    column: $table.noteImageAgreement,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get detectedComponent => $composableBuilder(
+    column: $table.detectedComponent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get aiLevel => $composableBuilder(
+    column: $table.aiLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get aiJobKey => $composableBuilder(
+    column: $table.aiJobKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reanalysisCount => $composableBuilder(
+    column: $table.reanalysisCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get historyJson => $composableBuilder(
+    column: $table.historyJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$InspectionSessionRowsTableOrderingComposer get sessionId {
     final $$InspectionSessionRowsTableOrderingComposer composer =
         $composerBuilder(
@@ -10241,6 +10707,37 @@ class $$AiSuggestionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get needsReviewReason => $composableBuilder(
+    column: $table.needsReviewReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get noteImageAgreement => $composableBuilder(
+    column: $table.noteImageAgreement,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get detectedComponent => $composableBuilder(
+    column: $table.detectedComponent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get aiLevel =>
+      $composableBuilder(column: $table.aiLevel, builder: (column) => column);
+
+  GeneratedColumn<String> get aiJobKey =>
+      $composableBuilder(column: $table.aiJobKey, builder: (column) => column);
+
+  GeneratedColumn<int> get reanalysisCount => $composableBuilder(
+    column: $table.reanalysisCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get historyJson => $composableBuilder(
+    column: $table.historyJson,
+    builder: (column) => column,
+  );
+
   $$InspectionSessionRowsTableAnnotationComposer get sessionId {
     final $$InspectionSessionRowsTableAnnotationComposer composer =
         $composerBuilder(
@@ -10346,6 +10843,13 @@ class $$AiSuggestionRowsTableTableManager
                 Value<bool?> imageRelevant = const Value.absent(),
                 Value<bool?> imageUsable = const Value.absent(),
                 Value<String?> imageQualityIssues = const Value.absent(),
+                Value<String?> needsReviewReason = const Value.absent(),
+                Value<String?> noteImageAgreement = const Value.absent(),
+                Value<String?> detectedComponent = const Value.absent(),
+                Value<String?> aiLevel = const Value.absent(),
+                Value<String?> aiJobKey = const Value.absent(),
+                Value<int> reanalysisCount = const Value.absent(),
+                Value<String?> historyJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion(
                 id: id,
@@ -10374,6 +10878,13 @@ class $$AiSuggestionRowsTableTableManager
                 imageRelevant: imageRelevant,
                 imageUsable: imageUsable,
                 imageQualityIssues: imageQualityIssues,
+                needsReviewReason: needsReviewReason,
+                noteImageAgreement: noteImageAgreement,
+                detectedComponent: detectedComponent,
+                aiLevel: aiLevel,
+                aiJobKey: aiJobKey,
+                reanalysisCount: reanalysisCount,
+                historyJson: historyJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10405,6 +10916,13 @@ class $$AiSuggestionRowsTableTableManager
                 Value<bool?> imageRelevant = const Value.absent(),
                 Value<bool?> imageUsable = const Value.absent(),
                 Value<String?> imageQualityIssues = const Value.absent(),
+                Value<String?> needsReviewReason = const Value.absent(),
+                Value<String?> noteImageAgreement = const Value.absent(),
+                Value<String?> detectedComponent = const Value.absent(),
+                Value<String?> aiLevel = const Value.absent(),
+                Value<String?> aiJobKey = const Value.absent(),
+                Value<int> reanalysisCount = const Value.absent(),
+                Value<String?> historyJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion.insert(
                 id: id,
@@ -10433,6 +10951,13 @@ class $$AiSuggestionRowsTableTableManager
                 imageRelevant: imageRelevant,
                 imageUsable: imageUsable,
                 imageQualityIssues: imageQualityIssues,
+                needsReviewReason: needsReviewReason,
+                noteImageAgreement: noteImageAgreement,
+                detectedComponent: detectedComponent,
+                aiLevel: aiLevel,
+                aiJobKey: aiJobKey,
+                reanalysisCount: reanalysisCount,
+                historyJson: historyJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

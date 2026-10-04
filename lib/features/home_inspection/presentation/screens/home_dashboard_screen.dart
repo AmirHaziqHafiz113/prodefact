@@ -350,7 +350,7 @@ class _ActiveInspectionHero extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(color: Colors.white),
+                            ?.copyWith(color: AppColors.onHero),
                       ),
                       Text(
                         [
@@ -360,7 +360,7 @@ class _ActiveInspectionHero extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white70,
+                          color: AppColors.onHeroSecondary,
                           fontSize: 12.5,
                         ),
                       ),
@@ -369,7 +369,7 @@ class _ActiveInspectionHero extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: AppColors.onHeroMuted,
                           fontSize: 11,
                         ),
                       ),

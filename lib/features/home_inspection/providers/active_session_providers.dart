@@ -1478,6 +1478,75 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     }
   }
 
+  /// Findings with a Reanalyse request being set up right now — a guard
+  /// so a double tap can never start two analyses.
+  final Set<String> _reanalysing = {};
+
+  /// The inspector's explicit "Reanalyse" — available for ANY finding
+  /// with a photo (passed, needs review, failed, manually corrected,
+  /// accepted), never run automatically. It is a NEW analysis: a fresh
+  /// request key (so the backend's idempotency never hands back the old
+  /// answer) and normal AI usage. A failed request whose outcome is
+  /// unknown is instead replayed under its own key, so it can't be
+  /// charged twice. The previous result is kept in the suggestion's
+  /// history; the new one becomes current (and is what the report
+  /// uses). [newNote] ("Edit Note & Reanalyse") replaces the quick note
+  /// first; otherwise the note is untouched.
+  ///
+  /// Returns false (and does nothing) when the finding has no photo or
+  /// note, or is already being analysed.
+  Future<bool> reanalyseFinding(String findingId, {String? newNote}) async {
+    final session = state;
+    if (session == null) return false;
+    var finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null || !finding.isAiEligible) return false;
+    if (_reanalysing.contains(findingId) ||
+        _classifyingFindingIds.contains(findingId) ||
+        aiFindingStatusIsInFlight(finding.aiStatus)) {
+      return false;
+    }
+    _reanalysing.add(findingId);
+    try {
+      if (newNote != null) {
+        final now = DateTime.now();
+        final edited = finding.copyWith(
+          description: _orNull(newNote) ?? '',
+          updatedAt: now,
+        );
+        finding = edited;
+        state = session.copyWith(
+          findings: [
+            for (final f in session.findings)
+              if (f.id == findingId) edited else f,
+          ],
+          updatedAt: now,
+        );
+        // Saved before anything is sent: the request reads the note
+        // from storage.
+        await _persist(
+          () => _repository.saveFinding(session.id, edited),
+          previous: session,
+          action: 'save finding',
+        );
+        if (!ref.mounted) return false;
+        ref.invalidate(sessionSummariesProvider);
+      }
+      if (!finding.hasDefectNote) return false;
+      _aiReplayTimers.remove(findingId)?.cancel();
+      _parkedTimerFindingIds.remove(findingId);
+      _uploadFailures.remove(findingId);
+      _noteDiagnostic(findingId, retried: true);
+      AppLogger.info('job_retried finding=$findingId reason=reanalyse');
+      _setFindingAiStatusDurable(session.id, findingId, AiFindingStatus.queued);
+      unawaited(
+        _enqueueAiClassification(session.id, findingId, reanalyse: true),
+      );
+      return true;
+    } finally {
+      _reanalysing.remove(findingId);
+    }
+  }
+
   /// Manually retries a finding whose AI classification previously
   /// failed. A no-op for any other status (in particular, this never
   /// re-runs a finding that's already `completed`/`needsReview` — use
@@ -1598,6 +1667,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     String sessionId,
     String findingId, {
     AiLevel? aiLevel,
+    bool reanalyse = false,
   }) async {
     if (!_classifyingFindingIds.add(findingId)) return;
     try {
@@ -1728,7 +1798,12 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       AppLogger.info('ai_started finding=$findingId level=${level.name}');
       final result = await ref
           .read(aiClassificationCoordinatorProvider)
-          .classifyFinding(sessionId, findingId, aiLevel: level);
+          .classifyFinding(
+            sessionId,
+            findingId,
+            aiLevel: level,
+            reanalyse: reanalyse,
+          );
       AppLogger.info(
         'ai_finished finding=$findingId level=${level.name} '
         'outcome=${result.outcome.name} ms=${analysis.elapsedMilliseconds}',

@@ -269,6 +269,15 @@ class AiSuggestionRows extends Table {
   BoolColumn get imageUsable => boolean().nullable()();
   TextColumn get imageQualityIssues => text().nullable()();
 
+  /// Evaluation data (added in schema v16) — see `AiSuggestion`.
+  TextColumn get needsReviewReason => text().nullable()();
+  TextColumn get noteImageAgreement => text().nullable()();
+  TextColumn get detectedComponent => text().nullable()();
+  TextColumn get aiLevel => text().nullable()();
+  TextColumn get aiJobKey => text().nullable()();
+  IntColumn get reanalysisCount => integer().withDefault(const Constant(0))();
+  TextColumn get historyJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

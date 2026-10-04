@@ -186,9 +186,9 @@ class _ReadinessCard extends StatelessWidget {
     final processing = AiProcessingProgress.of(session);
     final review = AiReviewProgress.of(session);
     final readiness = ReportReadiness.of(session);
-    final unresolved = activeSuggestionsOf(
-      session,
-    ).where((s) => s.status == AiSuggestionStatus.rejected).length;
+    final unresolved = activeSuggestionsOf(session)
+        .where((s) => s.status == AiSuggestionStatus.rejected)
+        .length;
     final metadata =
         session.reportMetadata ??
         ReportMetadata.fromPropertyDetails(session.propertyDetails);
@@ -258,9 +258,8 @@ class _ReadinessCard extends StatelessWidget {
               Text(
                 'Outstanding: $outstanding.',
                 key: const ValueKey('report-outstanding'),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.warning,
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: AppColors.warning),
               ),
               const SizedBox(height: AppSpacing.xs),
             ],
@@ -281,8 +280,7 @@ class _ReadinessCard extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  onPressed: () =>
-                      context.push(ReportDetailsScreen.routePath),
+                  onPressed: () => context.push(ReportDetailsScreen.routePath),
                   child: const Text('Add contact number'),
                 ),
               ),

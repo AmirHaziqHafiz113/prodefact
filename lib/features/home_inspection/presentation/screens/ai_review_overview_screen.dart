@@ -9,6 +9,7 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
+import '../widgets/reanalyse_and_candidates.dart';
 import 'area_inspection_screen.dart'
     show AiImageQualityNote, FindingAiStatusLine;
 import 'report_screen.dart';
@@ -477,6 +478,16 @@ class _SuggestionCard extends ConsumerWidget {
                     ),
                     child: const Text('Change'),
                   ),
+                  if (finding != null)
+                    TextButton(
+                      key: ValueKey('reanalyse-${suggestion.id}'),
+                      onPressed: () => showReanalyseDialog(
+                        context: context,
+                        ref: ref,
+                        finding: finding,
+                      ),
+                      child: const Text('Reanalyse'),
+                    ),
                   if (suggestion.status != AiSuggestionStatus.rejected)
                     TextButton(
                       key: ValueKey('reject-${suggestion.id}'),
@@ -492,6 +503,21 @@ class _SuggestionCard extends ConsumerWidget {
               ),
             ],
             if (!suggestion.isResolved) ...[
+              if (needsReviewReasonText(suggestion.needsReviewReason)
+                  case final reason?)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text(
+                    reason,
+                    key: ValueKey('review-reason-${suggestion.id}'),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.warning),
+                  ),
+                ),
+              PossibleDefectsList(
+                suggestion: suggestion,
+                excludeEntryId: suggestedEntry?.id,
+              ),
               const SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: AppSpacing.sm,
@@ -524,6 +550,16 @@ class _SuggestionCard extends ConsumerWidget {
                     ),
                     child: const Text('Reject / Unresolved'),
                   ),
+                  if (finding != null)
+                    TextButton(
+                      key: ValueKey('reanalyse-${suggestion.id}'),
+                      onPressed: () => showReanalyseDialog(
+                        context: context,
+                        ref: ref,
+                        finding: finding,
+                      ),
+                      child: const Text('Reanalyse'),
+                    ),
                 ],
               ),
             ],

@@ -11,6 +11,14 @@ abstract final class AppColors {
   static const primaryLight = Color(0xFF3D8F89);
   static const accent = Color(0xFFDB8B2A); // warm amber — CTAs, highlights
 
+  // Text on the dark-green hero (`AppHeroCard`). Brand-tinted mints
+  // rather than translucent white, which read as a flat grey on green.
+  // Each keeps at least 4.5:1 contrast on [primary], the hero's main
+  // tone (see app_colors_test.dart).
+  static const onHero = Color(0xFFFFFFFF); // titles, key values
+  static const onHeroSecondary = Color(0xFFD4EBE7); // supporting lines
+  static const onHeroMuted = Color(0xFFB5D8D2); // timestamps, captions
+
   // Neutral surfaces.
   static const surface = Color(0xFFFFFFFF);
   static const surfaceAlt = Color(0xFFF4F6F6);

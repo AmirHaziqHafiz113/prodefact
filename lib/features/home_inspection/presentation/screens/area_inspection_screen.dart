@@ -22,6 +22,7 @@ import 'photo_annotation_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'top_up_screen.dart';
 import 'photo_guide_screen.dart';
+import '../widgets/reanalyse_and_candidates.dart';
 
 /// Lets the inspector pick where a piece of evidence comes from —
 /// Camera or Gallery/Photos — before it enters the *exact same*
@@ -971,7 +972,7 @@ class AiImageQualityNote extends StatelessWidget {
   }
 }
 
-enum _FindingAction { editNote, remove }
+enum _FindingAction { editNote, reanalyse, remove }
 
 class _FindingCard extends ConsumerWidget {
   const _FindingCard({required this.finding, required this.onCaptureAnother});
@@ -1032,13 +1033,18 @@ class _FindingCard extends ConsumerWidget {
               icon: const Icon(Icons.more_vert),
               onSelected: (action) => switch (action) {
                 _FindingAction.editNote => _editNote(context, ref),
+                _FindingAction.reanalyse => showReanalyseDialog(
+                  context: context,
+                  ref: ref,
+                  finding: finding,
+                ),
                 _FindingAction.remove =>
                   ref
                       .read(inspectionFindingsProvider.notifier)
                       .removeFinding(finding.id),
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
                   value: _FindingAction.editNote,
                   child: ListTile(
                     leading: Icon(Icons.edit_outlined),
@@ -1046,7 +1052,21 @@ class _FindingCard extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
+                // Any finding with a photo can be analysed again on
+                // request — passed, needs review, failed or corrected —
+                // except while AI is already working on it.
                 PopupMenuItem(
+                  value: _FindingAction.reanalyse,
+                  enabled:
+                      finding.isAiEligible &&
+                      !aiFindingStatusIsInFlight(finding.aiStatus),
+                  child: const ListTile(
+                    leading: Icon(Icons.refresh),
+                    title: Text('Reanalyse'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuItem(
                   value: _FindingAction.remove,
                   child: ListTile(
                     leading: Icon(Icons.delete_outline),

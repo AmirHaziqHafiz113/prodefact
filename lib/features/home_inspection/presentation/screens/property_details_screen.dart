@@ -101,11 +101,7 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _field(
-                          _unitNumber,
-                          'Unit No.',
-                          required: true,
-                        ),
+                        child: _field(_unitNumber, 'Unit No.', required: true),
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(child: _field(_blockTower, 'Block / Tower')),

@@ -171,7 +171,7 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: AppColors.onHero,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -186,7 +186,7 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                      color: Colors.white70,
+                                      color: AppColors.onHeroSecondary,
                                       fontSize: 12.5,
                                     ),
                                   ),

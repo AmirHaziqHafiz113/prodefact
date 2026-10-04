@@ -167,6 +167,8 @@ Map<String, dynamic> buildAnalyseFindingPayload({
     if (request.evidenceIds.isNotEmpty) 'evidenceIds': request.evidenceIds,
     'aiLevel': aiLevel.name,
     'idempotencyKey': idempotencyKey,
+    if (request.reanalysisAttempt > 0)
+      'reanalysisAttempt': request.reanalysisAttempt,
   };
 }
 
@@ -290,6 +292,10 @@ AnalyseFindingResult parseAnalyseFindingResult(
         for (final issue in (classificationRaw['qualityIssues'] as List?) ?? const [])
           if (issue is String) issue,
       ],
+      detectedElement: _asStringOrNull(classificationRaw['detectedElement']),
+      detectedComponent: _asStringOrNull(classificationRaw['detectedComponent']),
+      noteImageAgreement: _asStringOrNull(classificationRaw['noteImageAgreement']),
+      needsReviewReason: _asStringOrNull(classificationRaw['needsReviewReason']),
       confidence: (classificationRaw['confidence'] as num?)?.toDouble(),
       shortReason: _asStringOrNull(classificationRaw['shortReason']),
       candidateEntryIds: rawCandidates is List

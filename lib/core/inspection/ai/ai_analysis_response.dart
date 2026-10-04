@@ -13,6 +13,10 @@ class AiFindingClassification {
     this.isRelevantInspectionImage,
     this.imageUsable,
     this.qualityIssues = const [],
+    this.detectedElement,
+    this.detectedComponent,
+    this.noteImageAgreement,
+    this.needsReviewReason,
     this.confidence,
     this.shortReason,
     this.candidateEntryIds = const [],
@@ -40,6 +44,19 @@ class AiFindingClassification {
   /// Controlled values (blur, too_dark, overexposed, subject_too_small,
   /// obstructed, insufficient_context, unclear, unrelated).
   final List<String> qualityIssues;
+
+  /// What the AI saw in the photo (never shown in a report).
+  final String? detectedElement;
+  final String? detectedComponent;
+
+  /// supports | neutral | contradicts | unclear.
+  final String? noteImageAgreement;
+
+  /// Why the inspector must review (controlled, server-set):
+  /// unrelated_image, image_quality, note_image_contradiction,
+  /// component_mismatch, no_catalogue_match, low_confidence,
+  /// ambiguous_candidates.
+  final String? needsReviewReason;
 
   /// 0.0-1.0, if the provider reported one.
   final double? confidence;

@@ -155,6 +155,13 @@ export interface AnalyseFindingResult {
     imageUsable?: boolean;
     /** Controlled image-quality values (see gateway.ts). */
     qualityIssues?: string[];
+    /** What the model saw in the photo (bounded; never in reports). */
+    detectedElement?: string;
+    detectedComponent?: string;
+    /** supports | neutral | contradicts | unclear. */
+    noteImageAgreement?: string;
+    /** Why the inspector must review (controlled; see gateway.ts). */
+    needsReviewReason?: string;
     confidence?: number;
     shortReason?: string;
     candidateEntryIds: string[];

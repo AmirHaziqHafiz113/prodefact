@@ -45,13 +45,14 @@ class DefaultAiClassificationCoordinator
     String sessionId,
     String findingId, {
     AiLevel? aiLevel,
+    bool reanalyse = false,
   }) async {
     final key = '$sessionId/$findingId';
     if (!_inFlight.add(key)) {
       return const AiClassificationResult.alreadyInFlight();
     }
     try {
-      return await _classifyFinding(sessionId, findingId);
+      return await _classifyFinding(sessionId, findingId, reanalyse);
     } finally {
       _inFlight.remove(key);
     }
@@ -60,6 +61,7 @@ class DefaultAiClassificationCoordinator
   Future<AiClassificationResult> _classifyFinding(
     String sessionId,
     String findingId,
+    bool reanalyse,
   ) async {
     final session = await _local.loadSession(sessionId);
     if (session == null) return const AiClassificationResult.sessionNotFound();
@@ -73,8 +75,9 @@ class DefaultAiClassificationCoordinator
     // `failed` should still reach here (failed is not terminal-safe in
     // the sense of blocking retry) — only completed/needsReview (which
     // already has a suggestion row for the inspector to act on) block.
-    if (finding.aiStatus == AiFindingStatus.completed ||
-        finding.aiStatus == AiFindingStatus.needsReview) {
+    if (!reanalyse &&
+        (finding.aiStatus == AiFindingStatus.completed ||
+            finding.aiStatus == AiFindingStatus.needsReview)) {
       return const AiClassificationResult.alreadyInFlight();
     }
 
