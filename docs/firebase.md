@@ -102,6 +102,14 @@ users/{uid}/inspections/{inspectionId}
 
     /evidence/{evidenceId}
       mediaType, source, caption, storagePath, createdAt
+
+  /aiSuggestions/{suggestionId}
+    providerId, generatedAt, suggested*/final* catalogue fields,
+    status, reviewedAt, reanalysisCount, history
+
+  report: {id, fileName, generatedAt, sourceUpdatedAt}  // a field on
+    // the inspection document itself, not a subcollection — the PDF
+    // bytes are never uploaded (see docs/report.md)
 ```
 
 Notes:
@@ -143,9 +151,12 @@ the app keeps working from the local file regardless of network state.
 4. Claim the session if it was still unowned.
 5. Push the session document, then all sections (full replace — mirrors
    how the local repository already treats configured areas), then
-   each finding, then each finding's not-yet-synced evidence: upload
+   each finding, then each finding's not-yet-synced evidence (upload
    the file to Storage, then write its metadata with the resulting
-   `storagePath`, then mark it `synced` locally.
+   `storagePath`, then mark it `synced` locally), then each AI
+   suggestion (every evaluation/history field included — see
+   `FirestoreCloudInspectionRepository.pushAiSuggestion`), then the
+   report metadata field if one exists.
 6. On success, mark the session `synced` locally.
 7. On **any** exception, mark the session `pendingUpdate` locally and
    return `failure(message)` — local data (sections, findings,
@@ -159,6 +170,23 @@ write-through path Phase 4 established. The coordinator only ever
 *reads* local state to push it, and only ever *marks* sync status
 locally — it never rewrites section/finding/evidence content based on
 what it pushed or what the network returned.
+
+### Keeping the sync-status badge honest
+
+Every local write that `syncSession` would need to re-push — a new/
+edited finding, its evidence, an AI suggestion (including a manual
+Accept/Change/Reject, a reanalysis, or a manual catalogue pick),
+a section status change, the report, or inspection-note/commercial-mode
+edits — goes through `DriftInspectionRepository._touchSession`, which
+demotes a session already marked `synced` back to `pendingUpdate`.
+This closes a persistence-safety gap fixed 2026-10-07: several of
+these mutations (chiefly `saveAiSuggestion`, which every AI result and
+every manual correction routes through) previously never called
+`_touchSession` at all, so the sync badge could claim "Synced"
+indefinitely while real local changes sat un-pushed. A session that
+isn't `synced` yet (`localOnly`/`pendingCreate`/`pendingDelete`) is
+never "promoted" by this — it only ever demotes. See
+`test/data/sync_status_demotion_test.dart`.
 
 ### Idempotency & duplicate-record prevention
 
@@ -244,6 +272,79 @@ firebase deploy --only firestore:rules,storage:rules
 
 This repository does **not** deploy rules automatically — that's a
 manual, explicit step for whoever owns the Firebase project.
+
+## Data ownership (which system is authoritative for what)
+
+| Data | Authoritative system | Notes |
+|---|---|---|
+| Auth identity/credentials | Firebase Authentication | Never touched by anything in this app beyond sign-in/sign-up/sign-out; no app code ever deletes or mutates the account itself. |
+| User profile (display name, default AI level) | **Local Drift only** | `UserProfile`'s own doc comment: "not synced to Firebase, not part of any `InspectionSession` — purely local prefill data." Deliberately not cloud-backed (low-stakes, two text fields + a preference) — a documented, intentional limitation, not a bug. |
+| Inspection (session, sections) | Local Drift (durable) + Firestore (push-only mirror) | Local is authoritative for active work; Firestore is a one-directional mirror — see "Conflict policy" above. |
+| Finding | Local Drift + Firestore mirror | Same as inspection. |
+| AI suggestion (incl. manual corrections/history) | Local Drift + Firestore mirror | Every evaluation field (confidence, quality issues, reanalysis history, etc.) is pushed — see `pushAiSuggestion`. |
+| Evidence image | Local file (durable) + Cloud Storage mirror | The local file is never deleted by a sync; `storagePath` is only set once upload succeeds. |
+| Report | Local Drift (PDF file + metadata) + Firestore (metadata field only) | The PDF bytes themselves are never uploaded — see `docs/report.md`. |
+| Wallet balance / wallet transactions | **Firestore, backend-authoritative** | `billing/wallet.ts` calls this ledger "authoritative, auditable" — Flutter only ever reads a cached balance; all mutation happens server-side in Cloud Functions. |
+| House Pass / payment intents | **Firestore, backend-authoritative** | Created/confirmed only by Cloud Functions (`handle_purchase_house_pass.ts`, `handle_confirm_sandbox_payment.ts`); Flutter never writes these directly. |
+
+Two deliberate, documented limitations (not addressed by the
+persistence-hardening pass of 2026-10-07, since each is an existing,
+explicitly-scoped-out feature boundary rather than a bug):
+
+- **No cloud → local (pull) sync.** A second device signed into the
+  same account cannot currently retrieve an inspection pushed from a
+  different device — see "Deferred to later phases" below. Building
+  this is a separate, larger feature.
+- **No cross-device profile sync.** `UserProfile` is local-only by
+  design (see the table above).
+
+## QA reset (DEV/QA-only backend data reset)
+
+`qaReset` (`functions/src/qa_reset.ts`) lets an authenticated user
+erase their own accumulated **operational/test** data without touching
+their account, identity, or any system configuration. It is disabled
+unless the function's own `QA_RESET_ENABLED` environment variable is
+exactly `"true"` (mirroring `billing/payments_mode.ts`'s
+`PAYMENTS_MODE=sandbox` boundary — a real deployment must never set
+it), and additionally requires the caller to echo back the exact
+confirmation phrase `"DELETE MY INSPECTION DATA"` in the request.
+
+**Deletes** (scoped strictly to the caller's own uid — never another
+user's data, never a cross-user parameter):
+
+- `users/{uid}/inspections/**` — every inspection and everything nested
+  under it (sections, findings, each finding's evidence metadata,
+  aiSuggestions).
+- `users/{uid}/aiJobs/**`.
+- `users/{uid}/housePasses/**` (and each pass's `usages` subcollection)
+  — judged in-scope as House Pass is "associated with exactly one
+  inspection" (`house_pass.ts`), so it's inspection-operational data.
+- The caller's own Cloud Storage evidence files, via
+  `bucket.deleteFiles({prefix: "users/{uid}/inspections/"})` — never a
+  bucket-wide wipe.
+
+**Never deletes:**
+
+- The Firebase Auth account or any login credential.
+- `users/{uid}/wallet/main` or `users/{uid}/walletTransactions/**` —
+  judged *not* "safely scoped" per the task's own hedge, since the
+  ledger is `wallet.ts`'s documented "authoritative, auditable source
+  of truth"; reconciling a balance after deleting its transaction
+  history was judged too risky for an automated reset.
+- `users/{uid}/paymentIntents/**` — financial/payment audit records,
+  only partially inspection-scoped (also covers generic top-ups).
+- The local-only `UserProfile` (never in Firestore to begin with).
+- Global/system documents: pricing config, the defect catalogue, AI
+  model configuration, Firebase secrets/API keys.
+- Any other user's data (enforced structurally — the handler only ever
+  operates on `auth.uid`, never a client-supplied uid).
+
+**Safety properties:** server-side authorization (`onCall`'s
+`request.auth`) is required; every individual delete is wrapped in its
+own try/catch, so one failure never aborts the rest and a retry is
+always safe; repeating the whole reset is idempotent (a second run
+simply finds nothing left); only counts are logged/returned, never
+document ids or content. See `functions/src/qa_reset.test.ts`.
 
 ## Setup instructions (manual — required before cloud sync works)
 

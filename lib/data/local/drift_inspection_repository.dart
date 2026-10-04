@@ -756,11 +756,9 @@ class DriftInspectionRepository implements InspectionRepository {
     await (_db.update(
       _db.inspectionSessionRows,
     )..where((t) => t.id.equals(sessionId))).write(
-      InspectionSessionRowsCompanion(
-        status: Value(status.name),
-        updatedAt: Value(now),
-      ),
+      InspectionSessionRowsCompanion(status: Value(status.name)),
     );
+    await _touchSession(sessionId, now);
   }
 
   @override
@@ -782,6 +780,7 @@ class DriftInspectionRepository implements InspectionRepository {
     )..where((t) => t.id.equals(sessionId))).write(
       InspectionSessionRowsCompanion(aiReviewState: Value(state.name)),
     );
+    await _touchSession(sessionId, DateTime.now());
   }
 
   @override
@@ -827,6 +826,7 @@ class DriftInspectionRepository implements InspectionRepository {
             finalCatalogueEntryId: Value(suggestion.finalCatalogueEntryId),
           ),
         );
+    await _touchSession(suggestion.sessionId, DateTime.now());
   }
 
   @override
@@ -845,6 +845,7 @@ class DriftInspectionRepository implements InspectionRepository {
             version: Value(report.version),
           ),
         );
+    await _touchSession(report.sessionId, DateTime.now());
   }
 
   @override
@@ -889,6 +890,7 @@ class DriftInspectionRepository implements InspectionRepository {
         reportMetadataJson: Value(_reportMetadataToJson(metadata)),
       ),
     );
+    await _touchSession(sessionId, DateTime.now());
   }
 
   @override
@@ -896,6 +898,7 @@ class DriftInspectionRepository implements InspectionRepository {
     await (_db.update(_db.inspectionSessionRows)
           ..where((t) => t.id.equals(sessionId)))
         .write(InspectionSessionRowsCompanion(inspectionNote: Value(note)));
+    await _touchSession(sessionId, DateTime.now());
   }
 
   @override
@@ -905,6 +908,7 @@ class DriftInspectionRepository implements InspectionRepository {
     )..where((t) => t.id.equals(sessionId))).write(
       InspectionSessionRowsCompanion(commercialMode: Value(mode.name)),
     );
+    await _touchSession(sessionId, DateTime.now());
   }
 
   @override
@@ -934,10 +938,34 @@ class DriftInspectionRepository implements InspectionRepository {
 
   static const _localWalletCacheId = 'local';
 
-  Future<void> _touchSession(String sessionId, DateTime timestamp) {
-    return (_db.update(_db.inspectionSessionRows)
+  /// Call after ANY local write that `SyncCoordinator` would need to
+  /// re-push (a finding, its evidence, an AI suggestion, a section, or
+  /// the session's own fields). Bumps `updatedAt` and — this is the
+  /// part that matters for persistence safety — demotes a session
+  /// already marked `synced` back to `pendingUpdate`, so the
+  /// sync-status badge can never keep claiming "Synced" once new local
+  /// data exists that the cloud hasn't seen yet (previously only a
+  /// handful of mutations did this; most silently left a stale
+  /// `synced` in place). `localOnly`/`pendingCreate`/`pendingDelete`
+  /// are left alone — each already means "not yet synced" for its own
+  /// reason, and this only ever needs to *demote*, never promote, a
+  /// status. A plain `Value`-based write (not raw SQL) so this never
+  /// depends on how Drift happens to encode `DateTime` internally.
+  Future<void> _touchSession(String sessionId, DateTime timestamp) async {
+    final row = await (_db.select(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).getSingleOrNull();
+    final demote = row?.syncStatus == SyncStatus.synced.name;
+    await (_db.update(_db.inspectionSessionRows)
           ..where((t) => t.id.equals(sessionId)))
-        .write(InspectionSessionRowsCompanion(updatedAt: Value(timestamp)));
+        .write(
+          InspectionSessionRowsCompanion(
+            updatedAt: Value(timestamp),
+            syncStatus: demote
+                ? Value(SyncStatus.pendingUpdate.name)
+                : const Value.absent(),
+          ),
+        );
   }
 
   @override

@@ -58,6 +58,7 @@ interface FakeDocRef {
   path: string;
   get: () => Promise<{exists: boolean; data: () => DocData | undefined}>;
   set: (data: DocData) => Promise<void>;
+  delete: () => Promise<void>;
   collection: (name: string) => FakeCollectionRef;
 }
 
@@ -68,6 +69,12 @@ interface FakeCollectionRef {
     op: "==",
     value: unknown
   ) => {limit: (n: number) => {get: () => Promise<FakeQuerySnapshot>}};
+  /** Every direct-child document currently in this collection — the
+   * fake's equivalent of the real Admin SDK's
+   * `CollectionReference.listDocuments()`, which QA reset (and only QA
+   * reset, so far) needs to enumerate an arbitrary user's inspections/
+   * AI jobs/House Passes without knowing their ids ahead of time. */
+  listDocuments: () => Promise<FakeDocRef[]>;
 }
 
 interface FakeQuerySnapshot {
@@ -115,8 +122,26 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
         assertNoUndefinedValues(data);
         store.set(path, data);
       },
+      delete: async () => {
+        store.delete(path);
+      },
       collection: (name: string) => collectionRef(`${path}/${name}`),
     };
+  }
+
+  /**
+   * Direct (one level deep) child document paths of [path] currently in
+   * the store — shared by `where().get()` and `listDocuments()`.
+   * @param {string} path the collection's full path.
+   * @return {string[]} the matching full document paths.
+   */
+  function directChildPaths(path: string): string[] {
+    const prefix = `${path}/`;
+    return Array.from(store.keys()).filter((p) => {
+      if (!p.startsWith(prefix)) return false;
+      // Only direct children — not deeper nested paths.
+      return !p.slice(prefix.length).includes("/");
+    });
   }
 
   /**
@@ -129,23 +154,18 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
       where: (field: string, op: "==", value: unknown) => ({
         limit: (n: number) => ({
           get: async () => {
-            const prefix = `${path}/`;
-            const docs = Array.from(store.entries())
-              .filter(([p, d]) => {
-                if (!p.startsWith(prefix)) return false;
-                // Only direct children — not deeper nested paths.
-                if (p.slice(prefix.length).includes("/")) return false;
-                return op === "==" && d[field] === value;
-              })
+            const docs = directChildPaths(path)
+              .filter((p) => op === "==" && store.get(p)?.[field] === value)
               .slice(0, n)
-              .map(([p, d]) => ({
+              .map((p) => ({
                 id: p.split("/").pop() as string,
-                data: () => d,
+                data: () => store.get(p) as DocData,
               }));
             return {empty: docs.length === 0, docs};
           },
         }),
       }),
+      listDocuments: async () => directChildPaths(path).map(docRef),
     };
   }
 
@@ -167,4 +187,39 @@ export function fakeFirestore(seed: Record<string, DocData> = {}) {
     },
   };
   return {db, store};
+}
+
+export interface FakeStorage {
+  bucket: () => {
+    getFiles: (options: {prefix: string}) => Promise<[{name: string}[]]>;
+    deleteFiles: (options: {prefix: string}) => Promise<void>;
+  };
+}
+
+/**
+ * A minimal in-memory Cloud Storage double — only the surface
+ * `qa_reset.ts` uses (`bucket().getFiles({prefix})` /
+ * `bucket().deleteFiles({prefix})`), so its test can assert exactly
+ * which files a reset removed without a real bucket.
+ * @param {Set<string>} [seed] initial object paths.
+ * @return {{storage: FakeStorage, files: Set<string>}} the fake Storage
+ *   client, and the live backing set (for test assertions/seeding).
+ */
+export function fakeStorage(seed: Set<string> = new Set()) {
+  const files = new Set(seed);
+  const storage: FakeStorage = {
+    bucket: () => ({
+      getFiles: async ({prefix}: {prefix: string}) => [
+        Array.from(files)
+          .filter((name) => name.startsWith(prefix))
+          .map((name) => ({name})),
+      ],
+      deleteFiles: async ({prefix}: {prefix: string}) => {
+        for (const name of Array.from(files)) {
+          if (name.startsWith(prefix)) files.delete(name);
+        }
+      },
+    }),
+  };
+  return {storage, files};
 }

@@ -401,6 +401,98 @@ void main() {
           expect(reloaded.findings.single.description, 'Cracked tile');
         },
       );
+
+      test(
+        'an AI suggestion survives restart, and a manual correction '
+        '(editing its final catalogue entry) survives restart too',
+        () async {
+          driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+          addTearDown(
+            () => driftRuntimeOptions.dontWarnAboutMultipleDatabases = false,
+          );
+
+          final tempDir = await Directory.systemTemp.createTemp(
+            'prodefact_repo_test',
+          );
+          final dbFile = File(p.join(tempDir.path, 'test.sqlite'));
+          addTearDown(() => tempDir.delete(recursive: true));
+
+          final firstRepository = DriftInspectionRepository(
+            AppDatabase(NativeDatabase(dbFile)),
+          );
+          final session = await firstRepository.createSession(
+            industry: Industry.homeInspection,
+            assetTypeId: 'highRise',
+            initialSections: [_bathroomSection()],
+          );
+          final now = DateTime.now();
+          await firstRepository.saveFinding(
+            session.id,
+            Finding(
+              id: 'finding_1',
+              sectionId: 'master_bathroom',
+              elementId: 'floor',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+          // The AI result, as the provider would have produced it.
+          await firstRepository.saveAiSuggestion(
+            AiSuggestion(
+              id: 'suggestion_1',
+              sessionId: session.id,
+              findingId: 'finding_1',
+              providerId: 'ai',
+              generatedAt: now,
+              suggestedCatalogueEntryId: 'floor.floor_tile.01',
+              suggestedConfidence: 0.9,
+            ),
+          );
+          await firstRepository.close();
+
+          final secondRepository = DriftInspectionRepository(
+            AppDatabase(NativeDatabase(dbFile)),
+          );
+
+          final afterAi = await secondRepository.loadSession(session.id);
+          final aiSuggestion = afterAi!.aiSuggestions.single;
+          expect(aiSuggestion.suggestedCatalogueEntryId, 'floor.floor_tile.01');
+          expect(aiSuggestion.status, AiSuggestionStatus.pending);
+
+          // The inspector manually corrects it — a different final
+          // catalogue entry than what the AI suggested.
+          await secondRepository.saveAiSuggestion(
+            AiSuggestion(
+              id: 'suggestion_1',
+              sessionId: session.id,
+              findingId: 'finding_1',
+              providerId: 'ai',
+              generatedAt: now,
+              suggestedCatalogueEntryId: 'floor.floor_tile.01',
+              suggestedConfidence: 0.9,
+              finalCatalogueEntryId: 'floor.floor_tile.02',
+              status: AiSuggestionStatus.edited,
+              reviewedAt: now,
+            ),
+          );
+          await secondRepository.close();
+
+          final thirdRepository = DriftInspectionRepository(
+            AppDatabase(NativeDatabase(dbFile)),
+          );
+          addTearDown(thirdRepository.close);
+
+          final afterCorrection = await thirdRepository.loadSession(
+            session.id,
+          );
+          final corrected = afterCorrection!.aiSuggestions.single;
+          expect(corrected.finalCatalogueEntryId, 'floor.floor_tile.02');
+          expect(corrected.status, AiSuggestionStatus.edited);
+          // The original AI output is preserved alongside the
+          // correction, never overwritten by it.
+          expect(corrected.suggestedCatalogueEntryId, 'floor.floor_tile.01');
+        },
+      );
     },
   );
 

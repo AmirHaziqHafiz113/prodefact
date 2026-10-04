@@ -22,6 +22,7 @@ import {handlePurchaseHousePass} from "./billing/handle_purchase_house_pass";
 import {
   handleConfirmSandboxPayment,
 } from "./billing/handle_confirm_sandbox_payment";
+import {handleQaReset} from "./qa_reset";
 
 initializeApp();
 
@@ -224,5 +225,26 @@ export const getAreaSuggestions = onCall(
       auth: request.auth,
       data: request.data,
       firestore: getFirestore(),
+    })
+);
+
+/**
+ * `qaReset` — DEV/QA-ONLY: erases the signed-in caller's own
+ * operational data (inspections and everything nested under one, plus
+ * their `aiJobs`/`housePasses`) and the matching Cloud Storage
+ * evidence files. Disabled unless this function's own
+ * `QA_RESET_ENABLED` environment variable is exactly `"true"` — a real
+ * deployment must never set it. See `qa_reset.ts` for exactly what is
+ * and is not deleted.
+ */
+export const qaReset = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 180},
+  async (request) =>
+    handleQaReset({
+      auth: request.auth,
+      data: request.data,
+      firestore: getFirestore(),
+      storage: getStorage(),
+      env: process.env,
     })
 );
