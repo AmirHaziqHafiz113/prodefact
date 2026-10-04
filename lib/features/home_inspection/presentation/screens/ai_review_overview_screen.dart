@@ -10,6 +10,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
 import '../widgets/reanalyse_and_candidates.dart';
+import '../widgets/related_defect_selector.dart';
 import 'area_inspection_screen.dart'
     show AiImageQualityNote, FindingAiStatusLine;
 import 'report_screen.dart';
@@ -145,14 +146,14 @@ class AiReviewOverviewScreen extends ConsumerWidget {
 
 /// A finding with no AI suggestion yet: its photo, note, and live AI
 /// status with the action that moves it on.
-class _PendingFindingCard extends StatelessWidget {
+class _PendingFindingCard extends ConsumerWidget {
   const _PendingFindingCard({required this.session, required this.finding});
 
   final InspectionSession session;
   final Finding finding;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final area = session.sections
         .firstWhereOrNull((s) => s.id == finding.sectionId)
         ?.name;
@@ -161,42 +162,63 @@ class _PendingFindingCard extends StatelessWidget {
       key: ValueKey('pending-finding-${finding.id}'),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (photo != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                child: SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: Image.file(
-                    File(photo.displayFilePath),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const ColoredBox(color: AppColors.surfaceAlt),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (photo != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: Image.file(
+                        File(photo.displayFilePath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const ColoredBox(color: AppColors.surfaceAlt),
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (area != null)
+                        Text(
+                          area,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                      if (finding.defectNote != null)
+                        Text(
+                          finding.defectNote!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      const SizedBox(height: 4),
+                      FindingAiStatusLine(finding: finding, suggestion: null),
+                    ],
                   ),
                 ),
-              ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (area != null)
-                    Text(area, style: Theme.of(context).textTheme.labelLarge),
-                  if (finding.defectNote != null)
-                    Text(
-                      finding.defectNote!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  const SizedBox(height: 4),
-                  FindingAiStatusLine(finding: finding, suggestion: null),
-                ],
-              ),
+              ],
             ),
+            // A failed finding has no AiSuggestion yet (the attempt
+            // errored before AI answered) — still manually classifiable
+            // straight from here, no AI call involved.
+            if (finding.aiStatus == AiFindingStatus.failed) ...[
+              const SizedBox(height: AppSpacing.sm),
+              RelatedDefectSelector(
+                keyId: finding.id,
+                relatedContext: RelatedDefectContext(note: finding.defectNote),
+                onSelected: (entry) => ref
+                    .read(activeSessionProvider.notifier)
+                    .manuallyClassifyFinding(finding.id, entry.id),
+              ),
+            ],
           ],
         ),
       ),
@@ -443,6 +465,22 @@ class _SuggestionCard extends ConsumerWidget {
                           _AiDetailsToggle(suggestion: suggestion),
                       ],
                     ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // Always available — passed, needs review, or already
+            // manually corrected — never only while unresolved: the
+            // inspector's own search, never another AI call.
+            RelatedDefectSelector(
+              keyId: suggestion.id,
+              relatedContext: RelatedDefectContext(
+                note: finding?.defectNote,
+                detectedComponent: suggestion.detectedComponent,
+                candidateEntryIds: suggestion.suggestedCandidateEntryIds,
+                excludeEntryId: finalEntry?.id ?? suggestedEntry?.id,
+              ),
+              onSelected: (entry) => ref
+                  .read(activeSessionProvider.notifier)
+                  .changeSuggestion(suggestion.id, entry.id),
             ),
             if (suggestion.isResolved) ...[
               const SizedBox(height: AppSpacing.sm),

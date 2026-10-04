@@ -39,6 +39,8 @@ export 'entities/commercial_mode.dart';
 export 'entities/component.dart';
 export 'entities/defect_catalogue.dart';
 export 'entities/defect_terms.dart';
+export 'entities/note_aliases.dart';
+export 'entities/related_defect_search.dart';
 export 'entities/element.dart';
 export 'entities/evidence.dart';
 export 'entities/finding.dart';
