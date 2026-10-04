@@ -13,6 +13,7 @@ import '../../providers/physical_inspection_providers.dart';
 import '../widgets/discovered_area_dialog.dart';
 import '../widgets/session_status_presentation.dart';
 import 'ai_review_overview_screen.dart';
+import 'photo_guide_screen.dart';
 
 /// Which areas the area list shows — real [AreaVisitState]s, so each
 /// chip filters actual data and shows a true count.
@@ -107,6 +108,7 @@ class _InspectionQueueScreenState extends ConsumerState<InspectionQueueScreen> {
                 ),
               ),
             ),
+          const PhotoGuideAction(),
           // No billing controls here (QA #23): the backend applies an
           // active House Pass automatically, otherwise Flex Credits.
           // House Pass is bought from the Wallet, outside field work.

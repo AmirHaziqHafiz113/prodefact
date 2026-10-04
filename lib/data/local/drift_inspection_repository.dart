@@ -227,6 +227,9 @@ class DriftInspectionRepository implements InspectionRepository {
               row.suggestedCandidateEntryIds,
             ),
             suggestedDefectTerm: row.suggestedDefectTerm,
+            isRelevantInspectionImage: row.imageRelevant,
+            imageUsable: row.imageUsable,
+            qualityIssues: _decodeQualityIssues(row.imageQualityIssues),
             finalCatalogueEntryId: row.finalCatalogueEntryId,
             status: AiSuggestionStatus.values.byName(row.status),
             reviewedAt: row.reviewedAt,
@@ -796,6 +799,13 @@ class DriftInspectionRepository implements InspectionRepository {
               _encodeCandidateIds(suggestion.suggestedCandidateEntryIds),
             ),
             suggestedDefectTerm: Value(suggestion.suggestedDefectTerm),
+            imageRelevant: Value(suggestion.isRelevantInspectionImage),
+            imageUsable: Value(suggestion.imageUsable),
+            imageQualityIssues: Value(
+              suggestion.qualityIssues.isEmpty
+                  ? null
+                  : suggestion.qualityIssues.join(','),
+            ),
             finalCatalogueEntryId: Value(suggestion.finalCatalogueEntryId),
           ),
         );
@@ -914,4 +924,7 @@ class DriftInspectionRepository implements InspectionRepository {
 
   @override
   Future<void> close() => _db.close();
+
+  static List<String> _decodeQualityIssues(String? raw) =>
+      raw == null || raw.isEmpty ? const [] : raw.split(',');
 }

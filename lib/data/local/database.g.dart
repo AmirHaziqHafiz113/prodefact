@@ -3974,6 +3974,45 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _imageRelevantMeta = const VerificationMeta(
+    'imageRelevant',
+  );
+  @override
+  late final GeneratedColumn<bool> imageRelevant = GeneratedColumn<bool>(
+    'image_relevant',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("image_relevant" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _imageUsableMeta = const VerificationMeta(
+    'imageUsable',
+  );
+  @override
+  late final GeneratedColumn<bool> imageUsable = GeneratedColumn<bool>(
+    'image_usable',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("image_usable" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _imageQualityIssuesMeta =
+      const VerificationMeta('imageQualityIssues');
+  @override
+  late final GeneratedColumn<String> imageQualityIssues =
+      GeneratedColumn<String>(
+        'image_quality_issues',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3999,6 +4038,9 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
     suggestedCandidateEntryIds,
     finalCatalogueEntryId,
     suggestedDefectTerm,
+    imageRelevant,
+    imageUsable,
+    imageQualityIssues,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4205,6 +4247,33 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         ),
       );
     }
+    if (data.containsKey('image_relevant')) {
+      context.handle(
+        _imageRelevantMeta,
+        imageRelevant.isAcceptableOrUnknown(
+          data['image_relevant']!,
+          _imageRelevantMeta,
+        ),
+      );
+    }
+    if (data.containsKey('image_usable')) {
+      context.handle(
+        _imageUsableMeta,
+        imageUsable.isAcceptableOrUnknown(
+          data['image_usable']!,
+          _imageUsableMeta,
+        ),
+      );
+    }
+    if (data.containsKey('image_quality_issues')) {
+      context.handle(
+        _imageQualityIssuesMeta,
+        imageQualityIssues.isAcceptableOrUnknown(
+          data['image_quality_issues']!,
+          _imageQualityIssuesMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4306,6 +4375,18 @@ class $AiSuggestionRowsTable extends AiSuggestionRows
         DriftSqlType.string,
         data['${effectivePrefix}suggested_defect_term'],
       ),
+      imageRelevant: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}image_relevant'],
+      ),
+      imageUsable: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}image_usable'],
+      ),
+      imageQualityIssues: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_quality_issues'],
+      ),
     );
   }
 
@@ -4354,6 +4435,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
   /// The AI's ONE concrete defect within a multi-defect catalogue
   /// entry's wording (added in schema v14) — see `defectTermsFor`.
   final String? suggestedDefectTerm;
+
+  /// What the AI said about the photo (added in schema v15): relevant
+  /// to inspection, usable, and comma-separated controlled quality
+  /// issues. Null for older suggestions.
+  final bool? imageRelevant;
+  final bool? imageUsable;
+  final String? imageQualityIssues;
   const AiSuggestionRow({
     required this.id,
     required this.sessionId,
@@ -4378,6 +4466,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     this.suggestedCandidateEntryIds,
     this.finalCatalogueEntryId,
     this.suggestedDefectTerm,
+    this.imageRelevant,
+    this.imageUsable,
+    this.imageQualityIssues,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4445,6 +4536,15 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     if (!nullToAbsent || suggestedDefectTerm != null) {
       map['suggested_defect_term'] = Variable<String>(suggestedDefectTerm);
     }
+    if (!nullToAbsent || imageRelevant != null) {
+      map['image_relevant'] = Variable<bool>(imageRelevant);
+    }
+    if (!nullToAbsent || imageUsable != null) {
+      map['image_usable'] = Variable<bool>(imageUsable);
+    }
+    if (!nullToAbsent || imageQualityIssues != null) {
+      map['image_quality_issues'] = Variable<String>(imageQualityIssues);
+    }
     return map;
   }
 
@@ -4509,6 +4609,15 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       suggestedDefectTerm: suggestedDefectTerm == null && nullToAbsent
           ? const Value.absent()
           : Value(suggestedDefectTerm),
+      imageRelevant: imageRelevant == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageRelevant),
+      imageUsable: imageUsable == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUsable),
+      imageQualityIssues: imageQualityIssues == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageQualityIssues),
     );
   }
 
@@ -4563,6 +4672,11 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       suggestedDefectTerm: serializer.fromJson<String?>(
         json['suggestedDefectTerm'],
       ),
+      imageRelevant: serializer.fromJson<bool?>(json['imageRelevant']),
+      imageUsable: serializer.fromJson<bool?>(json['imageUsable']),
+      imageQualityIssues: serializer.fromJson<String?>(
+        json['imageQualityIssues'],
+      ),
     );
   }
   @override
@@ -4600,6 +4714,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
         finalCatalogueEntryId,
       ),
       'suggestedDefectTerm': serializer.toJson<String?>(suggestedDefectTerm),
+      'imageRelevant': serializer.toJson<bool?>(imageRelevant),
+      'imageUsable': serializer.toJson<bool?>(imageUsable),
+      'imageQualityIssues': serializer.toJson<String?>(imageQualityIssues),
     };
   }
 
@@ -4627,6 +4744,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     Value<String?> suggestedCandidateEntryIds = const Value.absent(),
     Value<String?> finalCatalogueEntryId = const Value.absent(),
     Value<String?> suggestedDefectTerm = const Value.absent(),
+    Value<bool?> imageRelevant = const Value.absent(),
+    Value<bool?> imageUsable = const Value.absent(),
+    Value<String?> imageQualityIssues = const Value.absent(),
   }) => AiSuggestionRow(
     id: id ?? this.id,
     sessionId: sessionId ?? this.sessionId,
@@ -4681,6 +4801,13 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     suggestedDefectTerm: suggestedDefectTerm.present
         ? suggestedDefectTerm.value
         : this.suggestedDefectTerm,
+    imageRelevant: imageRelevant.present
+        ? imageRelevant.value
+        : this.imageRelevant,
+    imageUsable: imageUsable.present ? imageUsable.value : this.imageUsable,
+    imageQualityIssues: imageQualityIssues.present
+        ? imageQualityIssues.value
+        : this.imageQualityIssues,
   );
   AiSuggestionRow copyWithCompanion(AiSuggestionRowsCompanion data) {
     return AiSuggestionRow(
@@ -4745,6 +4872,15 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
       suggestedDefectTerm: data.suggestedDefectTerm.present
           ? data.suggestedDefectTerm.value
           : this.suggestedDefectTerm,
+      imageRelevant: data.imageRelevant.present
+          ? data.imageRelevant.value
+          : this.imageRelevant,
+      imageUsable: data.imageUsable.present
+          ? data.imageUsable.value
+          : this.imageUsable,
+      imageQualityIssues: data.imageQualityIssues.present
+          ? data.imageQualityIssues.value
+          : this.imageQualityIssues,
     );
   }
 
@@ -4773,7 +4909,10 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           ..write('suggestedShortReason: $suggestedShortReason, ')
           ..write('suggestedCandidateEntryIds: $suggestedCandidateEntryIds, ')
           ..write('finalCatalogueEntryId: $finalCatalogueEntryId, ')
-          ..write('suggestedDefectTerm: $suggestedDefectTerm')
+          ..write('suggestedDefectTerm: $suggestedDefectTerm, ')
+          ..write('imageRelevant: $imageRelevant, ')
+          ..write('imageUsable: $imageUsable, ')
+          ..write('imageQualityIssues: $imageQualityIssues')
           ..write(')'))
         .toString();
   }
@@ -4803,6 +4942,9 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
     suggestedCandidateEntryIds,
     finalCatalogueEntryId,
     suggestedDefectTerm,
+    imageRelevant,
+    imageUsable,
+    imageQualityIssues,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4830,7 +4972,10 @@ class AiSuggestionRow extends DataClass implements Insertable<AiSuggestionRow> {
           other.suggestedShortReason == this.suggestedShortReason &&
           other.suggestedCandidateEntryIds == this.suggestedCandidateEntryIds &&
           other.finalCatalogueEntryId == this.finalCatalogueEntryId &&
-          other.suggestedDefectTerm == this.suggestedDefectTerm);
+          other.suggestedDefectTerm == this.suggestedDefectTerm &&
+          other.imageRelevant == this.imageRelevant &&
+          other.imageUsable == this.imageUsable &&
+          other.imageQualityIssues == this.imageQualityIssues);
 }
 
 class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
@@ -4857,6 +5002,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
   final Value<String?> suggestedCandidateEntryIds;
   final Value<String?> finalCatalogueEntryId;
   final Value<String?> suggestedDefectTerm;
+  final Value<bool?> imageRelevant;
+  final Value<bool?> imageUsable;
+  final Value<String?> imageQualityIssues;
   final Value<int> rowid;
   const AiSuggestionRowsCompanion({
     this.id = const Value.absent(),
@@ -4882,6 +5030,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.suggestedCandidateEntryIds = const Value.absent(),
     this.finalCatalogueEntryId = const Value.absent(),
     this.suggestedDefectTerm = const Value.absent(),
+    this.imageRelevant = const Value.absent(),
+    this.imageUsable = const Value.absent(),
+    this.imageQualityIssues = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AiSuggestionRowsCompanion.insert({
@@ -4908,6 +5059,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     this.suggestedCandidateEntryIds = const Value.absent(),
     this.finalCatalogueEntryId = const Value.absent(),
     this.suggestedDefectTerm = const Value.absent(),
+    this.imageRelevant = const Value.absent(),
+    this.imageUsable = const Value.absent(),
+    this.imageQualityIssues = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        sessionId = Value(sessionId),
@@ -4938,6 +5092,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Expression<String>? suggestedCandidateEntryIds,
     Expression<String>? finalCatalogueEntryId,
     Expression<String>? suggestedDefectTerm,
+    Expression<bool>? imageRelevant,
+    Expression<bool>? imageUsable,
+    Expression<String>? imageQualityIssues,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4975,6 +5132,10 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
         'final_catalogue_entry_id': finalCatalogueEntryId,
       if (suggestedDefectTerm != null)
         'suggested_defect_term': suggestedDefectTerm,
+      if (imageRelevant != null) 'image_relevant': imageRelevant,
+      if (imageUsable != null) 'image_usable': imageUsable,
+      if (imageQualityIssues != null)
+        'image_quality_issues': imageQualityIssues,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5003,6 +5164,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
     Value<String?>? suggestedCandidateEntryIds,
     Value<String?>? finalCatalogueEntryId,
     Value<String?>? suggestedDefectTerm,
+    Value<bool?>? imageRelevant,
+    Value<bool?>? imageUsable,
+    Value<String?>? imageQualityIssues,
     Value<int>? rowid,
   }) {
     return AiSuggestionRowsCompanion(
@@ -5033,6 +5197,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
       finalCatalogueEntryId:
           finalCatalogueEntryId ?? this.finalCatalogueEntryId,
       suggestedDefectTerm: suggestedDefectTerm ?? this.suggestedDefectTerm,
+      imageRelevant: imageRelevant ?? this.imageRelevant,
+      imageUsable: imageUsable ?? this.imageUsable,
+      imageQualityIssues: imageQualityIssues ?? this.imageQualityIssues,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5125,6 +5292,15 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
         suggestedDefectTerm.value,
       );
     }
+    if (imageRelevant.present) {
+      map['image_relevant'] = Variable<bool>(imageRelevant.value);
+    }
+    if (imageUsable.present) {
+      map['image_usable'] = Variable<bool>(imageUsable.value);
+    }
+    if (imageQualityIssues.present) {
+      map['image_quality_issues'] = Variable<String>(imageQualityIssues.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5157,6 +5333,9 @@ class AiSuggestionRowsCompanion extends UpdateCompanion<AiSuggestionRow> {
           ..write('suggestedCandidateEntryIds: $suggestedCandidateEntryIds, ')
           ..write('finalCatalogueEntryId: $finalCatalogueEntryId, ')
           ..write('suggestedDefectTerm: $suggestedDefectTerm, ')
+          ..write('imageRelevant: $imageRelevant, ')
+          ..write('imageUsable: $imageUsable, ')
+          ..write('imageQualityIssues: $imageQualityIssues, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9501,6 +9680,9 @@ typedef $$AiSuggestionRowsTableCreateCompanionBuilder =
       Value<String?> suggestedCandidateEntryIds,
       Value<String?> finalCatalogueEntryId,
       Value<String?> suggestedDefectTerm,
+      Value<bool?> imageRelevant,
+      Value<bool?> imageUsable,
+      Value<String?> imageQualityIssues,
       Value<int> rowid,
     });
 typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
@@ -9528,6 +9710,9 @@ typedef $$AiSuggestionRowsTableUpdateCompanionBuilder =
       Value<String?> suggestedCandidateEntryIds,
       Value<String?> finalCatalogueEntryId,
       Value<String?> suggestedDefectTerm,
+      Value<bool?> imageRelevant,
+      Value<bool?> imageUsable,
+      Value<String?> imageQualityIssues,
       Value<int> rowid,
     });
 
@@ -9688,6 +9873,21 @@ class $$AiSuggestionRowsTableFilterComposer
 
   ColumnFilters<String> get suggestedDefectTerm => $composableBuilder(
     column: $table.suggestedDefectTerm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get imageRelevant => $composableBuilder(
+    column: $table.imageRelevant,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get imageUsable => $composableBuilder(
+    column: $table.imageUsable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageQualityIssues => $composableBuilder(
+    column: $table.imageQualityIssues,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9853,6 +10053,21 @@ class $$AiSuggestionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get imageRelevant => $composableBuilder(
+    column: $table.imageRelevant,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get imageUsable => $composableBuilder(
+    column: $table.imageUsable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageQualityIssues => $composableBuilder(
+    column: $table.imageQualityIssues,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$InspectionSessionRowsTableOrderingComposer get sessionId {
     final $$InspectionSessionRowsTableOrderingComposer composer =
         $composerBuilder(
@@ -10011,6 +10226,21 @@ class $$AiSuggestionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get imageRelevant => $composableBuilder(
+    column: $table.imageRelevant,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get imageUsable => $composableBuilder(
+    column: $table.imageUsable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get imageQualityIssues => $composableBuilder(
+    column: $table.imageQualityIssues,
+    builder: (column) => column,
+  );
+
   $$InspectionSessionRowsTableAnnotationComposer get sessionId {
     final $$InspectionSessionRowsTableAnnotationComposer composer =
         $composerBuilder(
@@ -10113,6 +10343,9 @@ class $$AiSuggestionRowsTableTableManager
                     const Value.absent(),
                 Value<String?> finalCatalogueEntryId = const Value.absent(),
                 Value<String?> suggestedDefectTerm = const Value.absent(),
+                Value<bool?> imageRelevant = const Value.absent(),
+                Value<bool?> imageUsable = const Value.absent(),
+                Value<String?> imageQualityIssues = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion(
                 id: id,
@@ -10138,6 +10371,9 @@ class $$AiSuggestionRowsTableTableManager
                 suggestedCandidateEntryIds: suggestedCandidateEntryIds,
                 finalCatalogueEntryId: finalCatalogueEntryId,
                 suggestedDefectTerm: suggestedDefectTerm,
+                imageRelevant: imageRelevant,
+                imageUsable: imageUsable,
+                imageQualityIssues: imageQualityIssues,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10166,6 +10402,9 @@ class $$AiSuggestionRowsTableTableManager
                     const Value.absent(),
                 Value<String?> finalCatalogueEntryId = const Value.absent(),
                 Value<String?> suggestedDefectTerm = const Value.absent(),
+                Value<bool?> imageRelevant = const Value.absent(),
+                Value<bool?> imageUsable = const Value.absent(),
+                Value<String?> imageQualityIssues = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AiSuggestionRowsCompanion.insert(
                 id: id,
@@ -10191,6 +10430,9 @@ class $$AiSuggestionRowsTableTableManager
                 suggestedCandidateEntryIds: suggestedCandidateEntryIds,
                 finalCatalogueEntryId: finalCatalogueEntryId,
                 suggestedDefectTerm: suggestedDefectTerm,
+                imageRelevant: imageRelevant,
+                imageUsable: imageUsable,
+                imageQualityIssues: imageQualityIssues,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

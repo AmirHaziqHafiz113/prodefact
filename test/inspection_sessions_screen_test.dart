@@ -6,6 +6,9 @@ import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 
 import 'support/test_repository.dart';
+import 'support/photo_guide_helper.dart';
+
+import 'package:prodefact/features/home_inspection/presentation/screens/photo_guide_screen.dart';
 
 void main() {
   testWidgets(
@@ -72,6 +75,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start Inspection'));
     await tester.pumpAndSettle();
+    await passPhotoGuide(tester);
 
     expect(find.text('Physical Inspection'), findsOneWidget);
 
@@ -94,6 +98,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Physical Inspection'), findsOneWidget);
+    // 2. Resuming never shows the photo guide again.
+    expect(find.byType(PhotoGuideScreen), findsNothing);
   });
 
   testWidgets(

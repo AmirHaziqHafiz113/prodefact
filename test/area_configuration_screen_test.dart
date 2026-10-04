@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
 
 import 'support/test_repository.dart';
+import 'support/photo_guide_helper.dart';
 
 Future<void> _startHighRiseSetup(WidgetTester tester) async {
   await tester.pumpWidget(
@@ -36,6 +37,7 @@ Future<void> _reviewAndStart(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Start Inspection'));
   await tester.pumpAndSettle();
+  await passPhotoGuide(tester);
 }
 
 Future<void> _revealAndTap(WidgetTester tester, Finder finder) async {
@@ -287,6 +289,7 @@ void main() {
     await tester.tap(find.text('Start Inspection'));
     await tester.tap(find.text('Start Inspection'));
     await tester.pumpAndSettle();
+    await passPhotoGuide(tester);
 
     expect(find.text('Physical Inspection'), findsOneWidget);
 

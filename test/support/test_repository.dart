@@ -16,9 +16,11 @@ import 'package:prodefact/core/inspection/repository/inspection_repository.dart'
 import 'package:prodefact/core/inspection/services/connectivity_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_capture_service.dart';
 import 'package:prodefact/core/inspection/services/evidence_file_store.dart';
+import 'package:prodefact/core/inspection/services/image_quality_service.dart';
 import 'package:prodefact/data/areas/area_candidate_providers.dart';
 import 'package:prodefact/data/billing/billing_providers.dart';
 import 'package:prodefact/data/billing/fake_billing_service.dart';
+import 'package:prodefact/data/quality/basic_image_quality_service.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
@@ -85,6 +87,22 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
   }
 }
 
+/// Local photo-quality hints without decoding anything: every photo
+/// looks clear unless a test lists issues for its path (or for all).
+class FakeImageQualityService implements ImageQualityService {
+  FakeImageQualityService({this.issuesForAll = const []});
+
+  List<LocalImageIssue> issuesForAll;
+  final Map<String, List<LocalImageIssue>> issuesByPath = {};
+  int checks = 0;
+
+  @override
+  Future<ImageQualityAssessment> assess(String filePath) async {
+    checks++;
+    return ImageQualityAssessment(issuesByPath[filePath] ?? issuesForAll);
+  }
+}
+
 /// A fake connectivity service so tests never touch `connectivity_plus`'s
 /// real platform channel (unavailable/unmocked in the test environment).
 /// Defaults to always-online; tests exercising offline/reconnect
@@ -137,6 +155,7 @@ List<Override> testOverrides({
   ConnectivityService? connectivityService,
   BillingService? billingService,
   AreaCandidateService? areaCandidateService,
+  ImageQualityService? imageQualityService,
 }) {
   final resolvedBillingService = billingService ?? FakeBillingService();
   final resolvedWalletActivityService =
@@ -153,6 +172,10 @@ List<Override> testOverrides({
     ),
     evidenceCaptureServiceProvider.overrideWithValue(
       captureService ?? FakeEvidenceCaptureService(),
+    ),
+    // Never decodes real photos in a test.
+    imageQualityServiceProvider.overrideWithValue(
+      imageQualityService ?? FakeImageQualityService(),
     ),
     connectivityServiceProvider.overrideWithValue(
       connectivityService ?? FakeConnectivityService(),

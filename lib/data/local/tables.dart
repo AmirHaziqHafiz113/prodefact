@@ -262,6 +262,13 @@ class AiSuggestionRows extends Table {
   /// entry's wording (added in schema v14) — see `defectTermsFor`.
   TextColumn get suggestedDefectTerm => text().nullable()();
 
+  /// What the AI said about the photo (added in schema v15): relevant
+  /// to inspection, usable, and comma-separated controlled quality
+  /// issues. Null for older suggestions.
+  BoolColumn get imageRelevant => boolean().nullable()();
+  BoolColumn get imageUsable => boolean().nullable()();
+  TextColumn get imageQualityIssues => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

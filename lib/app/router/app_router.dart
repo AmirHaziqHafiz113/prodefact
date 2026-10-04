@@ -10,6 +10,7 @@ import '../../features/home_inspection/presentation/screens/area_inspection_scre
 import '../../features/home_inspection/presentation/screens/home_dashboard_screen.dart';
 import '../../features/home_inspection/presentation/screens/house_pass_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import '../../features/home_inspection/presentation/screens/photo_guide_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/profile_screen.dart';
 import '../../features/home_inspection/presentation/screens/property_details_screen.dart';
@@ -166,6 +167,12 @@ GoRouter buildAppRouter(WidgetRef ref) {
       GoRoute(
         path: InspectionQueueScreen.routePath,
         builder: (context, state) => const InspectionQueueScreen(),
+      ),
+      GoRoute(
+        path: PhotoGuideScreen.routePath,
+        builder: (context, state) => PhotoGuideScreen(
+          startsInspection: state.uri.queryParameters['start'] == '1',
+        ),
       ),
       GoRoute(
         path: '${HousePassScreen.routePath}/:inspectionId',

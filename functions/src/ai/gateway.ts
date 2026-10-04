@@ -24,6 +24,33 @@ export const MAX_CANDIDATE_ENTRIES = 5;
  * inspector as needsReview, with the entry kept as a candidate. */
 export const MIN_CONFIDENT_CONFIDENCE = 0.5;
 
+/** The only image-quality values a result may carry. */
+export const QUALITY_ISSUES = [
+  "blur",
+  "too_dark",
+  "overexposed",
+  "subject_too_small",
+  "obstructed",
+  "insufficient_context",
+  "unclear",
+  "unrelated",
+] as const;
+
+/**
+ * @param {unknown} value the model's qualityIssues.
+ * @return {string[]} the controlled values it named, deduplicated.
+ */
+function controlledQualityIssues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<string>(QUALITY_ISSUES);
+  return dedupe(
+    value
+      .filter((v): v is string => typeof v === "string")
+      .map((v) => v.trim().toLowerCase())
+      .filter((v) => allowed.has(v))
+  );
+}
+
 /** Splits an answer that names several ids at once ("a/b", "a or b"). */
 const MULTI_ID_SEPARATOR = /\s*(?:\/|,|;|\||\bor\b|\band\b)\s*/i;
 
@@ -124,10 +151,13 @@ export function validateAndNormalize(
 
   // A photo that isn't an inspection photo is never matched to the
   // catalogue — whatever else the answer says.
+  const qualityIssues = controlledQualityIssues(result.qualityIssues);
   if (result.isRelevantInspectionImage === false) {
     return {
       findingId: input.findingId,
       isRelevantInspectionImage: false,
+      imageUsable: false,
+      qualityIssues: dedupe(["unrelated", ...qualityIssues]),
       confidence: clampConfidence(result.confidence),
       shortReason:
         asOptionalString(result.shortReason) ??
@@ -172,9 +202,14 @@ export function validateAndNormalize(
   const missingTerm = allowedTerms.length > 0 && defectTerm === undefined;
   const lowConfidence =
     confidence !== undefined && confidence < MIN_CONFIDENT_CONFIDENCE;
+  // Imperfect quality alone never rejects a classification (the note is
+  // the primary evidence); only a photo the model says it could not
+  // interpret at all sends the finding to the inspector.
+  const imageUsable = result.imageUsable !== false;
 
   const needsReview =
     result.needsReview === true ||
+    !imageUsable ||
     validId === undefined ||
     missingTerm ||
     lowConfidence;
@@ -191,6 +226,8 @@ export function validateAndNormalize(
   return {
     findingId: input.findingId,
     isRelevantInspectionImage: true,
+    imageUsable,
+    qualityIssues,
     // An uncertain pick is still returned as the AI's best guess (the
     // inspector can Accept it in one tap); needsReview is what keeps it
     // from being accepted automatically.

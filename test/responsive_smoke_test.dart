@@ -8,6 +8,7 @@ import 'package:prodefact/features/home_inspection/providers/active_session_prov
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/test_repository.dart';
+import 'support/photo_guide_helper.dart';
 import 'support/uncertain_ai_billing_service.dart';
 
 Finder _within(Finder matching) =>
@@ -156,6 +157,8 @@ void main() {
 
     await tester.tap(_within(find.text('Start Inspection')));
     await tester.pumpAndSettle();
+    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Photo Guide');
+    await passPhotoGuide(tester);
     await _assertNoOverflowAcrossWidths(
       tester,
       screenLabel: 'Inspection Overview',

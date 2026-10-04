@@ -7,6 +7,7 @@ import 'package:prodefact/features/home_inspection/providers/active_session_prov
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 
 import 'support/test_repository.dart';
+import 'support/photo_guide_helper.dart';
 
 /// go_router pushes keep every previous screen mounted (for back-swipe /
 /// transition support), so several of these screens are simultaneously in
@@ -77,6 +78,7 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
 
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
+  await passPhotoGuide(tester);
 
   expect(find.text('Physical Inspection'), findsOneWidget);
   return container;

@@ -226,6 +226,9 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
         suggestedShortReason: classification.shortReason,
         suggestedCandidateEntryIds: validCandidates,
         suggestedDefectTerm: defectTerm,
+        isRelevantInspectionImage: classification.isRelevantInspectionImage,
+        imageUsable: classification.imageUsable,
+        qualityIssues: classification.qualityIssues,
         finalCatalogueEntryId: validEntryId,
         status: needsReview
             ? AiSuggestionStatus.pending

@@ -282,6 +282,10 @@ function toResult(
       findingId: job.classification.findingId,
       catalogueEntryId: job.classification.catalogueEntryId,
       defectTerm: job.classification.defectTerm,
+      isRelevantInspectionImage:
+        job.classification.isRelevantInspectionImage,
+      imageUsable: job.classification.imageUsable,
+      qualityIssues: job.classification.qualityIssues ?? [],
       confidence: job.classification.confidence,
       shortReason: job.classification.shortReason,
       candidateEntryIds: job.classification.candidateEntryIds ?? [],
@@ -827,6 +831,8 @@ async function runClaimedJob(params: {
       ...usageRecord,
       totalCatalogueSize: shortlist.totalCatalogueSize,
       isRelevantInspectionImage: normalized.isRelevantInspectionImage,
+      imageUsable: normalized.imageUsable,
+      qualityIssues: normalized.qualityIssues ?? [],
       needsReview: normalized.needsReview,
     });
 

@@ -10,6 +10,9 @@ class AiFindingClassification {
     required this.needsReview,
     this.catalogueEntryId,
     this.defectTerm,
+    this.isRelevantInspectionImage,
+    this.imageUsable,
+    this.qualityIssues = const [],
     this.confidence,
     this.shortReason,
     this.candidateEntryIds = const [],
@@ -27,6 +30,16 @@ class AiFindingClassification {
   /// The ONE concrete defect within [catalogueEntryId]'s wording, when
   /// that entry lists several — see `defectTermsFor`.
   final String? defectTerm;
+
+  /// False when the photo isn't a home-inspection photo at all.
+  final bool? isRelevantInspectionImage;
+
+  /// False when the photo prevented useful interpretation.
+  final bool? imageUsable;
+
+  /// Controlled values (blur, too_dark, overexposed, subject_too_small,
+  /// obstructed, insufficient_context, unclear, unrelated).
+  final List<String> qualityIssues;
 
   /// 0.0-1.0, if the provider reported one.
   final double? confidence;

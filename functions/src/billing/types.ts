@@ -149,6 +149,12 @@ export interface AnalyseFindingResult {
     catalogueEntryId?: string;
     /** The ONE concrete defect within a multi-defect entry's wording. */
     defectTerm?: string;
+    /** False for a photo unrelated to home inspection. */
+    isRelevantInspectionImage?: boolean;
+    /** False when the photo prevented useful interpretation. */
+    imageUsable?: boolean;
+    /** Controlled image-quality values (see gateway.ts). */
+    qualityIssues?: string[];
     confidence?: number;
     shortReason?: string;
     candidateEntryIds: string[];

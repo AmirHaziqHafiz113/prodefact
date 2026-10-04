@@ -85,6 +85,13 @@ export interface ClassificationResult {
    * result never carries a catalogue entry and is always needsReview.
    * Absent means relevant (older answers). */
   isRelevantInspectionImage?: boolean;
+  /** False only when the photo genuinely prevents useful
+   * interpretation (too blurry/dark/obstructed to tell anything). A
+   * defect that simply isn't visible (a hollow tile, an intermittent
+   * leak) does not make a photo unusable — the note carries that. */
+  imageUsable?: boolean;
+  /** Controlled values only — see `QUALITY_ISSUES` in gateway.ts. */
+  qualityIssues?: string[];
   /** True when the provider could not confidently classify this
    * finding at all. Always true if `catalogueEntryId` is absent. */
   needsReview: boolean;

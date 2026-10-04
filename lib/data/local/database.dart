@@ -101,6 +101,8 @@ part 'database.g.dart';
 ///   `AiSuggestionRows.suggestedDefectTerm` (both nullable, additive),
 ///   and set every session's `autoAnalyseEnabled` to true — AI analysis
 ///   is now always automatic, so an old opt-out is retired, not kept.
+/// - v15: (photo guidance pass) added `AiSuggestionRows.imageRelevant`,
+///   `imageUsable` and `imageQualityIssues` (all nullable, additive).
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -122,7 +124,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -295,6 +297,15 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'UPDATE inspection_session_rows SET auto_analyse_enabled = 1',
         );
+      }
+      if (from < 15) {
+        for (final column in [
+          aiSuggestionRows.imageRelevant,
+          aiSuggestionRows.imageUsable,
+          aiSuggestionRows.imageQualityIssues,
+        ]) {
+          await _addColumnIfMissing(migrator, aiSuggestionRows, column);
+        }
       }
     },
   );

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../data/quality/basic_image_quality_service.dart';
 import '../../../../data/remote/remote_providers.dart'
     show isOnlineForAiProvider;
 import '../../providers/active_session_providers.dart';
@@ -20,6 +21,7 @@ import 'ai_suggestion_review_dialog.dart';
 import 'photo_annotation_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'top_up_screen.dart';
+import 'photo_guide_screen.dart';
 
 /// Lets the inspector pick where a piece of evidence comes from —
 /// Camera or Gallery/Photos — before it enters the *exact same*
@@ -121,6 +123,7 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
             ),
             onPressed: () => _editAreaNote(context, ref, section),
           ),
+          const PhotoGuideAction(),
         ],
       ),
       body: ListView(
@@ -246,18 +249,49 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     final source = await chooseEvidenceSource(context);
     if (source == null || !mounted) return; // cancelled the source picker
 
-    setState(() => _isCapturing = true);
     final notifier = ref.read(activeSessionProvider.notifier);
-    // Gallery: up to 3 photos in one pick. Camera: one. Either way, each
-    // photo becomes its own finding.
-    final photos = await notifier.captureFindingPhotos(source: source);
-    if (!mounted) return;
-    setState(() => _isCapturing = false);
-    if (photos.isEmpty) return; // cancelled, or a capture error was shown
+    List<CapturedFindingPhoto> photos;
+    Map<String, ImageQualityAssessment> quality;
+    while (true) {
+      setState(() => _isCapturing = true);
+      // Gallery: up to 3 photos in one pick. Camera: one. Either way,
+      // each photo becomes its own finding.
+      photos = await notifier.captureFindingPhotos(source: source);
+      if (!mounted) return;
+      if (photos.isEmpty) {
+        setState(() => _isCapturing = false);
+        return; // cancelled, or a capture error was shown
+      }
+      // A cheap, local quality hint (never an AI request). Advisory
+      // only: "Use Anyway" always continues with the photo as it is.
+      final checker = ref.read(imageQualityServiceProvider);
+      quality = {
+        for (final photo in photos)
+          photo.filePath: await checker.assess(photo.filePath),
+      };
+      if (!mounted) return;
+      setState(() => _isCapturing = false);
+      if (quality.values.every((q) => q.looksClear)) break;
+      final choice = await showDialog<_QualityChoice>(
+        context: context,
+        builder: (context) =>
+            _QualityWarningDialog(photos: photos, quality: quality),
+      );
+      if (!mounted) return;
+      if (choice == _QualityChoice.retake) {
+        for (final photo in photos) {
+          unawaited(notifier.discardCapturedFindingPhoto(photo));
+        }
+        continue;
+      }
+      // "Use Anyway" — or the dialog dismissed — keeps the photo.
+      break;
+    }
 
     final result = await showAppBottomSheet<_PreviewResult>(
       context: context,
-      builder: (context) => _PhotoPreviewSheet(photos: photos),
+      builder: (context) =>
+          _PhotoPreviewSheet(photos: photos, quality: quality),
     );
 
     if (!mounted) return;
@@ -504,10 +538,64 @@ const _quickNoteHelper =
 /// with its own note, even when it shows the same defect from another
 /// angle. Saving never needs a note; AI analysis does (QA #16), so a
 /// finding saved without one simply waits for it.
-class _PhotoPreviewSheet extends ConsumerStatefulWidget {
-  const _PhotoPreviewSheet({required this.photos});
+enum _QualityChoice { retake, useAnyway }
+
+/// The soft quality warning: lists the possible issues and lets the
+/// inspector Retake or Use Anyway. Never blocks: "Use Anyway" (or simply
+/// dismissing) always continues with the photo.
+class _QualityWarningDialog extends StatelessWidget {
+  const _QualityWarningDialog({required this.photos, required this.quality});
 
   final List<CapturedFindingPhoto> photos;
+  final Map<String, ImageQualityAssessment> quality;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = <String>[
+      for (final (i, photo) in photos.indexed)
+        for (final issue
+            in quality[photo.filePath]?.issues ?? const <LocalImageIssue>[])
+          photos.length == 1
+              ? issue.label
+              : 'Photo ${i + 1}: ${issue.label.toLowerCase()}',
+    ];
+    return AlertDialog(
+      title: const Text('Photo may be difficult to analyse'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Possible issues:'),
+          const SizedBox(height: AppSpacing.xs),
+          for (final line in lines) Text('• $line'),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'This is only a suggestion — you can still use the photo.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_QualityChoice.retake),
+          child: const Text('Retake'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_QualityChoice.useAnyway),
+          child: const Text('Use Anyway'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PhotoPreviewSheet extends ConsumerStatefulWidget {
+  const _PhotoPreviewSheet({required this.photos, this.quality = const {}});
+
+  final List<CapturedFindingPhoto> photos;
+
+  /// Local quality hints by original file path (advisory only).
+  final Map<String, ImageQualityAssessment> quality;
 
   @override
   ConsumerState<_PhotoPreviewSheet> createState() => _PhotoPreviewSheetState();
@@ -612,6 +700,7 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
               ),
             ),
           ),
+          _QualityHint(assessment: widget.quality[current.filePath]),
           if (_photos.length > 1) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -811,6 +900,77 @@ class _CaptureBatchGroup extends StatelessWidget {
   }
 }
 
+/// One line under the preview: "Photo looks clear", or the possible
+/// issues the inspector chose to accept. Advisory only.
+class _QualityHint extends StatelessWidget {
+  const _QualityHint({required this.assessment});
+
+  final ImageQualityAssessment? assessment;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = assessment;
+    if (a == null) return const SizedBox.shrink();
+    final clear = a.looksClear;
+    return Padding(
+      key: const ValueKey('photo-quality-hint'),
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: Row(
+        children: [
+          Icon(
+            clear ? Icons.check_circle_outline : Icons.info_outline,
+            size: 16,
+            color: clear ? AppColors.success : AppColors.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              clear
+                  ? 'Photo looks clear'
+                  : 'Possible issues: '
+                        '${a.issues.map((i) => i.label.toLowerCase()).join(', ')}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The AI's own remark about a photo (blurry, unrelated, ...), shown
+/// under a finding. Informational only — nothing is forced.
+class AiImageQualityNote extends StatelessWidget {
+  const AiImageQualityNote({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.photo_camera_outlined,
+            size: 14,
+            color: AppColors.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              text,
+              key: const ValueKey('ai-image-quality-note'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 enum _FindingAction { editNote, remove }
 
 class _FindingCard extends ConsumerWidget {
@@ -841,6 +1001,8 @@ class _FindingCard extends ConsumerWidget {
                   _FindingPhotoStrip(finding: finding),
                   const SizedBox(height: AppSpacing.sm),
                   FindingAiStatusLine(finding: finding, suggestion: suggestion),
+                  if (aiImageQualityNote(suggestion) case final note?)
+                    AiImageQualityNote(text: note),
                   if (finding.defectNote != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),

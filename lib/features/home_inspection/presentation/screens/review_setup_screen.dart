@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
-import 'inspection_queue_screen.dart';
+import 'photo_guide_screen.dart';
 import 'property_type_selection_screen.dart';
 
 /// New Inspection setup, the final step before a session is actually
@@ -249,11 +249,11 @@ class _StartInspectionButtonState
       );
       return;
     }
-    // Setup no longer asks Flex Credits vs. House Pass (see the QA/QC
-    // simplification pass) — every new inspection starts straight into
-    // the queue, with that commercial decision available later, from
-    // the queue's own "House Pass" action, only if the inspector wants
-    // it.
-    context.push(InspectionQueueScreen.routePath);
+    // A new inspection first shows the photo guide (once — never on
+    // resume, never per photo); its "Start Inspection" continues into
+    // the queue. Setup no longer asks Flex Credits vs. House Pass (see
+    // the QA/QC simplification pass): that stays available later, from
+    // the queue's own "House Pass" action.
+    context.push(PhotoGuideScreen.startRoutePath);
   }
 }

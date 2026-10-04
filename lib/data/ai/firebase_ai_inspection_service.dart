@@ -104,6 +104,16 @@ AiFindingClassification parseClassifyFindingResponse(
     needsReview: needsReview || catalogueEntryId == null,
     catalogueEntryId: catalogueEntryId,
     defectTerm: _asStringOrNull(rawResult['defectTerm']),
+    isRelevantInspectionImage: rawResult['isRelevantInspectionImage'] is bool
+        ? rawResult['isRelevantInspectionImage'] as bool
+        : null,
+    imageUsable: rawResult['imageUsable'] is bool
+        ? rawResult['imageUsable'] as bool
+        : null,
+    qualityIssues: [
+      for (final issue in (rawResult['qualityIssues'] as List?) ?? const [])
+        if (issue is String) issue,
+    ],
     confidence: (rawResult['confidence'] as num?)?.toDouble(),
     shortReason: _asStringOrNull(rawResult['shortReason']),
     candidateEntryIds: rawCandidates is List

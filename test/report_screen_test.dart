@@ -9,6 +9,7 @@ import 'package:prodefact/features/home_inspection/providers/physical_inspection
 
 import 'support/fake_report_services.dart';
 import 'support/test_repository.dart';
+import 'support/photo_guide_helper.dart';
 
 Finder _within(Finder matching) =>
     find.descendant(of: find.byType(Scaffold).last, matching: matching);
@@ -53,6 +54,7 @@ Future<ProviderContainer> _pumpToReportScreen(
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('Start Inspection')));
   await tester.pumpAndSettle();
+  await passPhotoGuide(tester);
   // Auto Analyse on so saving a finding queues AI immediately — this
   // suite is about report generation, not the separate estimate/
   // approval gate (covered by `ai_gating_regression_test.dart`).

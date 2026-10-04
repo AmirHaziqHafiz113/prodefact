@@ -68,6 +68,7 @@ export function promptCatalogueFor(
  */
 export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
   const jsonShape = "{\"isRelevantInspectionImage\": boolean, " +
+    "\"imageUsable\": boolean, \"qualityIssues\": string[], " +
     "\"catalogueEntryId\": string | null, " +
     "\"defectTerm\": string | null, " +
     "\"confidence\": number, \"shortReason\": string, " +
@@ -100,7 +101,21 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "isRelevantInspectionImage to false, catalogueEntryId and",
     "defectTerm to null, candidateEntryIds to [], needsReview to true,",
     "and shortReason to \"Image does not appear related to home",
-    "inspection.\" — never force it onto a catalogue entry.",
+    "inspection.\" — never force it onto a catalogue entry. Also set",
+    "imageUsable to false and qualityIssues to [\"unrelated\"].",
+    "",
+    "IMAGE USABILITY:",
+    "Report qualityIssues using ONLY these values: blur, too_dark,",
+    "overexposed, subject_too_small, obstructed, insufficient_context,",
+    "unclear, unrelated (an empty list when the photo is fine). Set",
+    "imageUsable to false ONLY when the photo genuinely prevents useful",
+    "interpretation (you cannot tell what element or area it shows);",
+    "then also set needsReview to true. A defect that is simply not",
+    "visible — a hollow tile, an intermittent leak, a loose fitting —",
+    "does NOT make the photo unusable: if the photo confirms the",
+    "component, location or context, it is usable and the inspector's",
+    "note carries the defect. Never judge a photo by angle, distance or",
+    "framing alone.",
     "",
     "You must classify this finding by choosing exactly ONE entry",
     "from the CONTROLLED DEFECT CATALOGUE below, identified by its",
@@ -246,6 +261,11 @@ export function parseClassificationPayload(
       typeof r.isRelevantInspectionImage === "boolean" ?
         r.isRelevantInspectionImage :
         undefined,
+    imageUsable:
+      typeof r.imageUsable === "boolean" ? r.imageUsable : undefined,
+    qualityIssues: Array.isArray(r.qualityIssues) ?
+      r.qualityIssues.filter((x): x is string => typeof x === "string") :
+      undefined,
     candidateEntryIds: Array.isArray(r.candidateEntryIds) ?
       r.candidateEntryIds.filter((x): x is string => typeof x === "string") :
       [],

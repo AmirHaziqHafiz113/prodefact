@@ -280,6 +280,16 @@ AnalyseFindingResult parseAnalyseFindingResult(
       needsReview: needsReview || catalogueEntryId == null,
       catalogueEntryId: catalogueEntryId,
       defectTerm: _asStringOrNull(classificationRaw['defectTerm']),
+      isRelevantInspectionImage: classificationRaw['isRelevantInspectionImage'] is bool
+          ? classificationRaw['isRelevantInspectionImage'] as bool
+          : null,
+      imageUsable: classificationRaw['imageUsable'] is bool
+          ? classificationRaw['imageUsable'] as bool
+          : null,
+      qualityIssues: [
+        for (final issue in (classificationRaw['qualityIssues'] as List?) ?? const [])
+          if (issue is String) issue,
+      ],
       confidence: (classificationRaw['confidence'] as num?)?.toDouble(),
       shortReason: _asStringOrNull(classificationRaw['shortReason']),
       candidateEntryIds: rawCandidates is List

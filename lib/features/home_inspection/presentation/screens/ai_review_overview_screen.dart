@@ -9,7 +9,8 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
-import 'area_inspection_screen.dart' show FindingAiStatusLine;
+import 'area_inspection_screen.dart'
+    show AiImageQualityNote, FindingAiStatusLine;
 import 'report_screen.dart';
 
 /// Overview of AI's progressive classification work across every
@@ -434,6 +435,8 @@ class _SuggestionCard extends ConsumerWidget {
                             'Recommendation: '
                             '${suggestedEntry.correctiveAction}',
                           ),
+                        if (aiImageQualityNote(suggestion) case final note?)
+                          AiImageQualityNote(text: note),
                         if (suggestion.suggestedShortReason != null ||
                             suggestion.suggestedConfidence != null)
                           _AiDetailsToggle(suggestion: suggestion),

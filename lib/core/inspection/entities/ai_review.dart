@@ -36,6 +36,9 @@ class AiSuggestion {
     this.suggestedShortReason,
     this.suggestedCandidateEntryIds = const [],
     this.suggestedDefectTerm,
+    this.isRelevantInspectionImage,
+    this.imageUsable,
+    this.qualityIssues = const [],
     this.finalCatalogueEntryId,
     this.status = AiSuggestionStatus.pending,
     this.reviewedAt,
@@ -88,6 +91,13 @@ class AiSuggestion {
   /// tile ... damaged/chipped/hollow/uneven") — see `defectTermsFor`.
   /// Applies only while the final entry is still the suggested one.
   final String? suggestedDefectTerm;
+
+  /// What the AI said about the photo itself (same request): whether it
+  /// is an inspection photo, whether it was usable, and any controlled
+  /// quality issues. Null/empty for suggestions from before schema v15.
+  final bool? isRelevantInspectionImage;
+  final bool? imageUsable;
+  final List<String> qualityIssues;
 
   /// The catalogue entry the inspector approved (Accept: same as
   /// `suggestedCatalogueEntryId`) or picked themselves (Change) —
@@ -160,6 +170,9 @@ class AiSuggestion {
       suggestedShortReason: suggestedShortReason,
       suggestedCandidateEntryIds: suggestedCandidateEntryIds,
       suggestedDefectTerm: suggestedDefectTerm,
+      isRelevantInspectionImage: isRelevantInspectionImage,
+      imageUsable: imageUsable,
+      qualityIssues: qualityIssues,
       finalCatalogueEntryId:
           finalCatalogueEntryId ?? this.finalCatalogueEntryId,
       status: status ?? this.status,
