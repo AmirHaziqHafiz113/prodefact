@@ -3,6 +3,7 @@ import {AiProvider, AiProviderError} from "./ai/provider";
 import {ClassificationResult} from "./ai/types";
 import {resolveFindingEvidence} from "./ai/evidence";
 import {validateAndNormalize} from "./ai/gateway";
+import {buildCatalogueShortlist} from "./ai/catalogue_shortlist";
 import {parseClassifyFindingInput} from "./ai/validation";
 import type {Firestore} from "firebase-admin/firestore";
 import type {Storage} from "firebase-admin/storage";
@@ -40,7 +41,13 @@ export async function handleClassifyFinding(params: {
   }
   const uid = auth.uid;
 
-  const input = parseClassifyFindingInput(data);
+  // The model only ever sees (and may only choose from) a shortlist of
+  // the controlled catalogue — see `ai/catalogue_shortlist.ts`.
+  const parsed = parseClassifyFindingInput(data);
+  const input = {
+    ...parsed,
+    shortlistEntryIds: buildCatalogueShortlist(parsed).entryIds,
+  };
 
   const images = provider.supportsImages ?
     await resolveFindingEvidence({uid, input, firestore, storage}) :

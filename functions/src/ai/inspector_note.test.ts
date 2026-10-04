@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {normalizeInspectorNote} from "./inspector_note";
+import {defectCatalogue} from "./defect_catalogue";
 import {buildFindingContent, buildSystemPrompt} from "./prompt";
 
 test("QA #17 examples: holo, frem and win are read as hollow, frame, window",
@@ -67,7 +68,7 @@ test("the prompt carries the verbatim note plus a separate likely " +
   assert.match(text, /inspector note \(PRIMARY, verbatim\): win frem gap/);
   assert.match(text, /likely meaning: window frame gap/);
 
-  const system = buildSystemPrompt();
+  const system = buildSystemPrompt(defectCatalogue.entries.slice(0, 3));
   assert.match(system, /shorthand/);
   assert.match(system, /Malay \(BM\)/);
   assert.match(system, /spelling/);

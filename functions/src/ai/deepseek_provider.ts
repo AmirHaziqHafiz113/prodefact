@@ -3,6 +3,7 @@ import {fetchWithTimeout} from "./http_util";
 import {
   buildFindingContent,
   buildSystemPrompt,
+  promptCatalogueFor,
   parseClassificationPayload,
 } from "./prompt";
 import {
@@ -60,7 +61,10 @@ export class DeepSeekProvider implements AiProvider {
       temperature: 0.2,
       response_format: {type: "json_object"},
       messages: [
-        {role: "system", content: buildSystemPrompt()},
+        {
+          role: "system",
+          content: buildSystemPrompt(promptCatalogueFor(input)),
+        },
         {role: "user", content: buildFindingContent(input, images)},
       ],
     };

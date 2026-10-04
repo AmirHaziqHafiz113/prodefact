@@ -6,6 +6,7 @@ import {
   buildFindingContent,
   buildSystemPrompt,
   parseClassificationPayload,
+  promptCatalogueFor,
 } from "./prompt";
 import {validateAndNormalize} from "./gateway";
 import {defectCatalogue} from "./defect_catalogue";
@@ -52,7 +53,7 @@ test("19. the note is the primary signal: it comes before the area, and " +
   "the system prompt ranks it above the photo", () => {
   const text = userText();
   assert.ok(text.indexOf("inspector note (PRIMARY") < text.indexOf("area:"));
-  const system = buildSystemPrompt();
+  const system = buildSystemPrompt(promptCatalogueFor(input));
   const priority = system.indexOf("EVIDENCE PRIORITY");
   assert.ok(priority >= 0);
   assert.ok(
@@ -174,7 +175,7 @@ test("the parser reads defectTerm; the system prompt lists terms and " +
     "f1"
   );
   assert.equal(parsed.defectTerm, "hollow");
-  const system = buildSystemPrompt();
+  const system = buildSystemPrompt(promptCatalogueFor(input));
   assert.match(system, /ONE CONCRETE DEFECT ONLY/);
   assert.match(system, /wall\.wall_tile\.04 \|.*\| terms: .*hollow/);
   assert.match(system, /"defectTerm"/);

@@ -90,8 +90,11 @@ export function createProvider(
  * `needsReview` rather than propagated:
  *  - a response for the wrong findingId is rejected outright
  *  - `catalogueEntryId` must be a real, existing `DefectCatalogue`
- *    entry (see `defectCatalogue.isValidEntryId`) — a hallucinated or
- *    unknown id is discarded, forcing `needsReview: true`
+ *    entry (see `defectCatalogue.isValidEntryId`) AND one of the ids
+ *    this request was offered (`input.shortlistEntryIds`) — anything
+ *    else is discarded, forcing `needsReview: true`
+ *  - `isRelevantInspectionImage: false` (not an inspection photo) never
+ *    carries an entry, term or candidates and is always needsReview
  *  - `candidateEntryIds` are filtered to valid ids only, deduplicated,
  *    and capped at [MAX_CANDIDATE_ENTRIES]
  *  - `confidence` is clamped to [0, 1]; below
@@ -119,28 +122,45 @@ export function validateAndNormalize(
     return {findingId: input.findingId, needsReview: true};
   }
 
+  // A photo that isn't an inspection photo is never matched to the
+  // catalogue — whatever else the answer says.
+  if (result.isRelevantInspectionImage === false) {
+    return {
+      findingId: input.findingId,
+      isRelevantInspectionImage: false,
+      confidence: clampConfidence(result.confidence),
+      shortReason:
+        asOptionalString(result.shortReason) ??
+        "Image does not appear related to home inspection.",
+      candidateEntryIds: [],
+      needsReview: true,
+    };
+  }
+
+  // Only the ids this request was offered (its shortlist) count as
+  // valid — anything else is treated exactly like an unknown id.
+  const shortlist = input.shortlistEntryIds ?
+    new Set(input.shortlistEntryIds) :
+    undefined;
+  const isAllowed = (id: string) =>
+    defectCatalogue.isValidEntryId(id) && (!shortlist || shortlist.has(id));
+
   const rawId =
     typeof result.catalogueEntryId === "string" ?
       result.catalogueEntryId.trim() :
       undefined;
   const validId =
-    rawId !== undefined && defectCatalogue.isValidEntryId(rawId) ?
+    rawId !== undefined && isAllowed(rawId) ?
       rawId :
       undefined;
   // A combined answer ("a/b") is never one defect: its valid parts
   // become candidates for the inspector instead.
   const combinedIds =
     rawId !== undefined && validId === undefined ?
-      rawId.split(MULTI_ID_SEPARATOR).filter((id) =>
-        defectCatalogue.isValidEntryId(id)
-      ) :
+      rawId.split(MULTI_ID_SEPARATOR).filter(isAllowed) :
       [];
 
-  const confidence =
-    typeof result.confidence === "number" &&
-    Number.isFinite(result.confidence) ?
-      Math.min(1, Math.max(0, result.confidence)) :
-      undefined;
+  const confidence = clampConfidence(result.confidence);
 
   const entry = validId ? defectCatalogue.getById(validId) : undefined;
   const allowedTerms = entry ? defectTermsFor(entry.defectDescription) : [];
@@ -163,14 +183,14 @@ export function validateAndNormalize(
     ...combinedIds,
     ...(Array.isArray(result.candidateEntryIds) ?
       result.candidateEntryIds.filter(
-        (id): id is string =>
-          typeof id === "string" && defectCatalogue.isValidEntryId(id)
+        (id): id is string => typeof id === "string" && isAllowed(id)
       ) :
       []),
   ]).slice(0, MAX_CANDIDATE_ENTRIES);
 
   return {
     findingId: input.findingId,
+    isRelevantInspectionImage: true,
     // An uncertain pick is still returned as the AI's best guess (the
     // inspector can Accept it in one tap); needsReview is what keeps it
     // from being accepted automatically.
@@ -181,6 +201,16 @@ export function validateAndNormalize(
     candidateEntryIds,
     needsReview,
   };
+}
+
+/**
+ * @param {unknown} value a candidate confidence.
+ * @return {number | undefined} it clamped to [0, 1], if it was a number.
+ */
+function clampConfidence(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ?
+    Math.min(1, Math.max(0, value)) :
+    undefined;
 }
 
 /**

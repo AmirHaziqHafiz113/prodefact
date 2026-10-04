@@ -1,4 +1,5 @@
-import {defectCatalogue} from "./defect_catalogue";
+import {DefectCatalogueEntry, defectCatalogue} from "./defect_catalogue";
+import {buildCatalogueShortlist} from "./catalogue_shortlist";
 import {defectTermsFor} from "./defect_terms";
 import {
   INSPECTOR_NOTE_GUIDANCE,
@@ -19,19 +20,18 @@ import {
  */
 
 /**
- * Builds the compact catalogue listing embedded in the system prompt —
- * id, main element, component, and defect description only. The
- * corrective action is deliberately never sent to the model: it's
- * resolved server-side from whichever id the model returns, so a
- * hallucinated or altered corrective action can never reach the
- * inspector. Sending the *entire* catalogue every request (rather than
- * a deterministic subset keyed off the area name) is a deliberate
- * choice — see docs/ai_provider_architecture.md ("Why the full
- * catalogue").
- * @return {string} the catalogue listing, one line per defect entry.
+ * The catalogue lines one request may choose from: id, main element,
+ * component, defect description, and (for multi-defect entries) the
+ * allowed terms. Only the finding's shortlist is ever sent — never the
+ * whole catalogue on a normal request (see `catalogue_shortlist.ts`).
+ * The corrective action is deliberately never sent: it's resolved
+ * server-side from whichever id the model returns, so a hallucinated
+ * corrective action can never reach the inspector.
+ * @param {DefectCatalogueEntry[]} entries the shortlisted entries.
+ * @return {string} the listing, one line per entry.
  */
-function buildCatalogueListing(): string {
-  return defectCatalogue.entries
+function buildCatalogueListing(entries: DefectCatalogueEntry[]): string {
+  return entries
     .map((e) => {
       const terms = defectTermsFor(e.defectDescription);
       const line =
@@ -43,14 +43,32 @@ function buildCatalogueListing(): string {
 }
 
 /**
- * Builds the system prompt: the controlled catalogue, the JSON
- * contract, and explicit instructions to select only from the given
- * ids, to say so when uncertain, and to distinguish what's visible in
- * a photo from what's inferred.
+ * The entries one finding's request may choose from: the shortlist the
+ * callable set on [input], or (a direct provider call) one built now.
+ * @param {ClassifyFindingInput} input the finding's context.
+ * @return {DefectCatalogueEntry[]} the allowed entries.
+ */
+export function promptCatalogueFor(
+  input: ClassifyFindingInput
+): DefectCatalogueEntry[] {
+  const ids = input.shortlistEntryIds ??
+    buildCatalogueShortlist(input).entryIds;
+  return ids
+    .map((id) => defectCatalogue.getById(id))
+    .filter((e): e is DefectCatalogueEntry => e !== undefined);
+}
+
+/**
+ * Builds the system prompt: the finding's shortlisted catalogue
+ * entries, the JSON contract, and explicit instructions to select only
+ * from the given ids, to say so when uncertain, and to flag photos that
+ * are not inspection photos.
+ * @param {DefectCatalogueEntry[]} entries the shortlisted entries.
  * @return {string} the system prompt.
  */
-export function buildSystemPrompt(): string {
-  const jsonShape = "{\"catalogueEntryId\": string | null, " +
+export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
+  const jsonShape = "{\"isRelevantInspectionImage\": boolean, " +
+    "\"catalogueEntryId\": string | null, " +
     "\"defectTerm\": string | null, " +
     "\"confidence\": number, \"shortReason\": string, " +
     "\"candidateEntryIds\": string[], \"needsReview\": boolean}";
@@ -73,9 +91,23 @@ export function buildSystemPrompt(): string {
     "   visible in the photo, prefer the note.",
     "5. With no note, classify from the photo and area alone.",
     "",
+    "IS THIS AN INSPECTION PHOTO?",
+    "First decide whether the photo is meaningfully related to a",
+    "home/property inspection (building elements, finishes, fittings,",
+    "plumbing, electrical, doors, windows, ...). A selfie, food, an",
+    "animal, a random screenshot, social-media content, an unrelated",
+    "vehicle or object is NOT. For such a photo set",
+    "isRelevantInspectionImage to false, catalogueEntryId and",
+    "defectTerm to null, candidateEntryIds to [], needsReview to true,",
+    "and shortReason to \"Image does not appear related to home",
+    "inspection.\" — never force it onto a catalogue entry.",
+    "",
     "You must classify this finding by choosing exactly ONE entry",
     "from the CONTROLLED DEFECT CATALOGUE below, identified by its",
-    "id. You are NEVER allowed to invent a main element, component,",
+    "id. The list is a shortlist chosen for this finding; you may ONLY",
+    "use its ids. If none of them fits, set needsReview to true and",
+    "catalogueEntryId to null.",
+    "You are NEVER allowed to invent a main element, component,",
     "defect, or corrective action that is not one of the ids listed.",
     "The catalogue format is: id | main element | component | defect",
     "description, optionally followed by \"| terms: ...\".",
@@ -91,8 +123,8 @@ export function buildSystemPrompt(): string {
     "single most likely one; if you cannot choose with reasonable",
     "confidence, set needsReview to true.",
     "",
-    "CONTROLLED DEFECT CATALOGUE:",
-    buildCatalogueListing(),
+    "CONTROLLED DEFECT CATALOGUE (shortlist for this finding):",
+    buildCatalogueListing(entries),
     "",
     INSPECTOR_NOTE_GUIDANCE,
     "",
@@ -114,8 +146,9 @@ export function buildSystemPrompt(): string {
     "Respond with JSON only, shaped exactly as:",
     jsonShape,
     "",
-    "catalogueEntryId must be exactly one of the ids from the",
-    "catalogue above, or null. Never invent a new id.",
+    "catalogueEntryId must be exactly one of the ids listed above, or",
+    "null. Never invent a new id. candidateEntryIds may only contain",
+    "ids listed above.",
   ].join("\n");
 }
 
@@ -209,6 +242,10 @@ export function parseClassificationPayload(
     shortReason:
       typeof r.shortReason === "string" ? r.shortReason : undefined,
     defectTerm: typeof r.defectTerm === "string" ? r.defectTerm : undefined,
+    isRelevantInspectionImage:
+      typeof r.isRelevantInspectionImage === "boolean" ?
+        r.isRelevantInspectionImage :
+        undefined,
     candidateEntryIds: Array.isArray(r.candidateEntryIds) ?
       r.candidateEntryIds.filter((x): x is string => typeof x === "string") :
       [],

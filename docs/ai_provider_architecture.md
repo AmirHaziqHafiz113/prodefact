@@ -205,16 +205,24 @@ inference, and set `needsReview: true` with `catalogueEntryId: null`
 rather than guess when the photo is unclear or multiple entries are
 plausible.
 
-**Why the full catalogue, not a filtered subset**: sending the entire
-catalogue every request seems wasteful, but each request is now for
-*one finding*, not a whole session — the absolute cost per request is
-already small and bounded. A deterministic subset keyed off the area
-name (e.g. "Master Bathroom" → only sanitary fitting entries) risks the
-model being unable to find the actually-correct entry for a defect that
-doesn't map cleanly to the area's name (a cracked wall tile in a
-bathroom, say). Full catalogue, one finding at a time, is the safer
-trade-off; a future optimization could add prefiltering if cost
-becomes a real constraint.
+**Catalogue shortlist (2026-10-04)**: a request no longer carries all
+222 entries. `functions/src/ai/catalogue_shortlist.ts` scores every
+entry deterministically (no model call) against the inspector's note —
+raw and shorthand-expanded — matching component names (strongest),
+main element names, field synonyms ("tap", "toilet", "grout", ...),
+defect wording and concrete defect terms, plus a small boost for the
+area's usual elements. A specific note gives `noteMatch`: every entry of
+the best-matching components, then the next-strongest matches anywhere
+(12-30 entries), so one keyword never excludes the alternatives. A
+vague or missing note gives `areaContext` (an even spread over the
+area's elements, up to 60), or `broad` (an even spread over every
+component, 60). Only shortlisted ids may be returned — anything else is
+needsReview. There is deliberately **no** automatic full-catalogue
+retry: one finding is one paid request, and an answer the shortlist
+can't settle (or an unrelated photo, `isRelevantInspectionImage:
+false`) goes to the inspector as needsReview. The previous concern —
+that an area-only filter misses a cracked wall tile in a bathroom — is
+why the note, not the area, drives the shortlist.
 
 Request shape, per finding: a text block with the finding's structured
 context (area, plumbing flag, inspector note), followed by zero or more

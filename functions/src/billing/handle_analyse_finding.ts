@@ -6,6 +6,7 @@ import {AiProviderError} from "../ai/provider";
 import {ClassificationResult, ClassifyFindingInput} from "../ai/types";
 import {parseClassifyFindingInput} from "../ai/validation";
 import {resolveFindingEvidence} from "../ai/evidence";
+import {buildCatalogueShortlist} from "../ai/catalogue_shortlist";
 import {
   createProvider,
   SupportedProviderId,
@@ -166,6 +167,9 @@ interface AiJobRecord {
   /** Raw provider cost from the same pricing config billing uses. */
   providerCostUsd?: number;
   providerDurationMs?: number;
+  /** How many catalogue entries the request offered, and how chosen. */
+  shortlistSize?: number;
+  shortlistStrategy?: string;
   settledAt?: number;
   housePassUsageRecorded?: boolean;
   creditsCharged: number;
@@ -736,6 +740,15 @@ async function runClaimedJob(params: {
     const images = provider.supportsImages ?
       await resolveFindingEvidence({uid, input, firestore, storage}) :
       {findingId: input.findingId, images: [], unavailableCount: 0};
+    // Only a deterministic shortlist of the catalogue is sent — and
+    // only its ids may be chosen. One finding = ONE provider request:
+    // an answer the shortlist can't settle becomes needsReview, never
+    // a second (full-catalogue) call.
+    const shortlist = buildCatalogueShortlist(input);
+    const shortlistedInput = {
+      ...input,
+      shortlistEntryIds: shortlist.entryIds,
+    };
 
     let result: ClassificationResult;
     let usage: {inputTokens: number; outputTokens: number} | undefined;
@@ -753,7 +766,10 @@ async function runClaimedJob(params: {
         unavailableImages: images.unavailableCount,
         hasNote: Boolean(input.note),
       });
-      const classification = await provider.classifyFinding(input, images);
+      const classification = await provider.classifyFinding(
+        shortlistedInput,
+        images
+      );
       result = classification.result;
       usage = classification.usage;
       providerDurationMs = Date.now() - providerStartedAt;
@@ -795,22 +811,25 @@ async function runClaimedJob(params: {
       throw providerFailureError(error);
     }
 
-    const usageRecord = providerUsageRecord({
-      usage,
-      levelConfig,
-      providerDurationMs,
-    });
+    const normalized = validateAndNormalize(shortlistedInput, result);
+    const usageRecord = {
+      ...providerUsageRecord({usage, levelConfig, providerDurationMs}),
+      shortlistSize: shortlist.entryIds.length,
+      shortlistStrategy: shortlist.strategy,
+    };
     // One photo = one finding = one request, so this is the exact AI
-    // usage and raw provider cost of one image. Safe IDs and numbers
-    // only — never the prompt, note, image, key or any personal data.
+    // usage and raw provider cost of one image. Safe IDs, counts and
+    // flags only — never the prompt, note, image, key or personal data.
     console.info("provider_usage", {
       idempotencyKey,
       findingId: input.findingId,
       aiLevel,
       ...usageRecord,
+      totalCatalogueSize: shortlist.totalCatalogueSize,
+      isRelevantInspectionImage: normalized.isRelevantInspectionImage,
+      needsReview: normalized.needsReview,
     });
 
-    const normalized = validateAndNormalize(input, result);
     const reservationAmount = job.reservationAmount ?? 0;
     const actualCredits = usage ?
       Math.min(

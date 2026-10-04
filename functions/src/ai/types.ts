@@ -28,6 +28,13 @@ export interface ClassifyFindingInput {
    * evidence is skipped rather than failing the request.
    */
   evidenceIds?: string[];
+  /**
+   * Server-side only (never read from the client payload): the
+   * catalogue entries this finding's request may choose from — see
+   * `catalogue_shortlist.ts`. Set by the callable before the provider
+   * is called; validation rejects any id outside it.
+   */
+  shortlistEntryIds?: string[];
 }
 
 /** One evidence image, already downloaded, validated, and normalized
@@ -73,6 +80,11 @@ export interface ClassificationResult {
    * that wording lists several (e.g. "hollow" for "... damaged/chipped/
    * hollow/uneven"). Always one of `defectTermsFor(description)`. */
   defectTerm?: string;
+  /** False when the photo is not meaningfully related to a home/
+   * property inspection (a selfie, food, a screenshot, ...). Such a
+   * result never carries a catalogue entry and is always needsReview.
+   * Absent means relevant (older answers). */
+  isRelevantInspectionImage?: boolean;
   /** True when the provider could not confidently classify this
    * finding at all. Always true if `catalogueEntryId` is absent. */
   needsReview: boolean;

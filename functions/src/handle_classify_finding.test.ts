@@ -18,6 +18,9 @@ function basePayload() {
     findingId: "finding_1",
     area: "Master Bathroom",
     isPlumbingArea: true,
+    // Names the component, so VALID_ID is on this finding's shortlist
+    // (an id the request was not offered is rejected).
+    note: "door hinge creaking",
   };
 }
 
