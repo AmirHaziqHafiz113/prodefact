@@ -1,4 +1,5 @@
 import '../entities/ai_review.dart';
+import '../entities/custom_defect.dart';
 import '../entities/evidence.dart';
 import '../entities/finding.dart';
 import '../entities/inspection_session.dart';
@@ -35,6 +36,14 @@ abstract class CloudInspectionRepository {
     String sessionId,
     String findingId,
   );
+
+  /// Writes one custom catalogue entry under the owner's own account
+  /// (`users/{uid}/customCatalogue/{id}`) — never anywhere shared.
+  Future<void> pushCustomDefect(String ownerUid, CustomDefect defect);
+
+  /// The owner's custom catalogue entries (a fresh device restores its
+  /// company's own entries from here).
+  Future<List<CustomDefect>> fetchCustomDefects(String ownerUid);
 
   /// Uploads the evidence file at [Evidence.filePath] to cloud storage
   /// and returns the storage path it was written to. Does not touch

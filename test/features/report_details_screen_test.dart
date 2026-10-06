@@ -49,7 +49,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(AppFormSectionCard), findsNWidgets(3));
+      // Residence / Unit Photo (optional, page 1) + the three data cards.
+      expect(find.byType(AppFormSectionCard), findsNWidgets(4));
+      expect(find.text('Residence / Unit Photo'), findsOneWidget);
       expect(find.text('Property'), findsOneWidget);
       expect(find.text('Client & Inspector'), findsOneWidget);
       expect(find.text('Dates'), findsOneWidget);

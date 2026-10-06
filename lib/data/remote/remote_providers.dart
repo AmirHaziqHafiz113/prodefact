@@ -157,6 +157,14 @@ class _UnavailableCloudInspectionRepository
   ) => _unavailable();
 
   @override
+  Future<void> pushCustomDefect(String ownerUid, CustomDefect defect) =>
+      _unavailable();
+
+  @override
+  Future<List<CustomDefect>> fetchCustomDefects(String ownerUid) =>
+      _unavailable();
+
+  @override
   Future<String> uploadEvidenceFile(
     String ownerUid,
     String sessionId,

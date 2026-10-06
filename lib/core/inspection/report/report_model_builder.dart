@@ -97,6 +97,7 @@ ReportModel buildReportModel({
     contactNumber: metadata?.contactNumber,
     reportDate: metadata?.reportDate,
     inspectionNote: session.inspectionNote,
+    coverPhotoPath: metadata?.coverPhotoPath,
   );
 }
 

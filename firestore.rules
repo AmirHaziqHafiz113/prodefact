@@ -21,6 +21,13 @@ service cloud.firestore {
           allow read, write: if isOwner();
         }
 
+        // AI results and the inspector's decisions on them. Pushed by
+        // the app's sync (and deleted with their finding); without this
+        // rule the default deny rejected every AI-suggestion push.
+        match /aiSuggestions/{suggestionId} {
+          allow read, write: if isOwner();
+        }
+
         match /findings/{findingId} {
           allow read, write: if isOwner();
 
@@ -28,6 +35,13 @@ service cloud.firestore {
             allow read, write: if isOwner();
           }
         }
+      }
+
+      // The company's own custom defect catalogue — owner-only, never
+      // shared with any other account and never part of the master
+      // catalogue.
+      match /customCatalogue/{entryId} {
+        allow read, write: if isOwner();
       }
 
       // Commercial/billing data — the Credits ledger, cached wallet

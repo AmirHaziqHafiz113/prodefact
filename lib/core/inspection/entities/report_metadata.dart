@@ -25,6 +25,7 @@ class ReportMetadata {
     this.contactNumber,
     this.inspectionDate,
     this.reportDate,
+    this.coverPhotoPath,
   });
 
   final String title;
@@ -41,6 +42,11 @@ class ReportMetadata {
   final String? contactNumber;
   final DateTime? inspectionDate;
   final DateTime? reportDate;
+
+  /// Optional "Residence / Unit Photo" shown on page 1 of the report: a
+  /// local file path to a representative photo of the unit. Never a
+  /// finding photo, never required.
+  final String? coverPhotoPath;
 
   /// The default a Report Details screen should show before the
   /// inspector has ever confirmed/edited this session's report
@@ -75,8 +81,13 @@ class ReportMetadata {
     String? contactNumber,
     DateTime? inspectionDate,
     DateTime? reportDate,
+    String? coverPhotoPath,
+    bool clearCoverPhoto = false,
   }) {
     return ReportMetadata(
+      coverPhotoPath: clearCoverPhoto
+          ? null
+          : (coverPhotoPath ?? this.coverPhotoPath),
       title: title ?? this.title,
       projectDeveloperName: projectDeveloperName ?? this.projectDeveloperName,
       address: address ?? this.address,

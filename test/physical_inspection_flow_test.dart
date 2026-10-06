@@ -206,7 +206,11 @@ void main() {
 
     await tester.tap(_within(find.byIcon(Icons.more_vert)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove'));
+    await tester.tap(find.text('Delete finding'));
+    await tester.pumpAndSettle();
+    // Deleting asks first — the photo and its classification go with it.
+    expect(find.text('Delete this defect finding?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-delete-finding')));
     await tester.pumpAndSettle();
     expect(find.text('Edited text'), findsNothing);
     expect(

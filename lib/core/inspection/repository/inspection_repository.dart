@@ -3,6 +3,7 @@ import '../entities/ai_analysis_attempt.dart';
 import '../entities/ai_finding_status.dart';
 import '../entities/ai_level.dart';
 import '../entities/ai_review.dart';
+import '../entities/custom_defect.dart';
 import '../entities/ai_review_state.dart';
 import '../entities/commercial_mode.dart';
 import '../entities/evidence.dart';
@@ -74,6 +75,13 @@ abstract class InspectionRepository {
   Future<void> saveFinding(String sessionId, Finding finding);
 
   Future<void> deleteFinding(String sessionId, String findingId);
+
+  /// The custom catalogue entries [ownerUid] created (archived ones
+  /// included, so a sync can carry the archive flag).
+  Future<List<CustomDefect>> loadCustomDefects(String ownerUid);
+
+  /// Creates or updates one custom catalogue entry (keyed by its id).
+  Future<void> saveCustomDefect(CustomDefect defect);
 
   /// Records the per-finding progressive AI processing state — see
   /// `AiFindingStatus`.
@@ -179,7 +187,6 @@ abstract class InspectionRepository {
   /// Records the whole-inspection contextual note. Pass null to clear
   /// it.
   Future<void> saveInspectionNote(String sessionId, String? note);
-
 
   /// Records the inspector's post-setup commercial choice for one
   /// inspection — House Pass purchase is no longer offered during New

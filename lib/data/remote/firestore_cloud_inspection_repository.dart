@@ -125,12 +125,78 @@ class FirestoreCloudInspectionRepository implements CloudInspectionRepository {
       sessionId,
     ).collection('findings').doc(findingId);
     final evidence = await findingDoc.collection('evidence').get();
+    final suggestions = await _sessionDoc(ownerUid, sessionId)
+        .collection('aiSuggestions')
+        .where('findingId', isEqualTo: findingId)
+        .get();
     final batch = _firestore.batch();
     for (final doc in evidence.docs) {
       batch.delete(doc.reference);
     }
+    for (final doc in suggestions.docs) {
+      batch.delete(doc.reference);
+    }
     batch.delete(findingDoc);
     await batch.commit();
+    // The photos too, so a deleted finding leaves no orphaned storage
+    // cost. Scoped strictly to this finding's own folder; the finding's
+    // records are already gone, so a failure here is only logged.
+    try {
+      final folder = await _storage
+          .ref('users/$ownerUid/inspections/$sessionId/findings/$findingId')
+          .listAll();
+      for (final item in folder.items) {
+        await item.delete();
+      }
+    } catch (_) {
+      // Nothing uploaded, already gone or offline — never blocks a delete.
+    }
+  }
+
+  fs.CollectionReference<Map<String, dynamic>> _customCatalogue(
+    String ownerUid,
+  ) => _firestore
+      .collection('users')
+      .doc(ownerUid)
+      .collection('customCatalogue');
+
+  @override
+  Future<void> pushCustomDefect(String ownerUid, CustomDefect d) =>
+      _customCatalogue(ownerUid).doc(d.id).set({
+        'elementId': d.elementId,
+        'elementName': d.elementName,
+        'componentId': d.componentId,
+        'componentName': d.componentName,
+        'defectDescription': d.defectDescription,
+        'correctiveAction': d.correctiveAction,
+        'note': d.note,
+        'createdAt': fs.Timestamp.fromDate(d.createdAt),
+        'createdBy': ownerUid,
+        'archived': d.archived,
+      });
+
+  @override
+  Future<List<CustomDefect>> fetchCustomDefects(String ownerUid) async {
+    final snapshot = await _customCatalogue(ownerUid).get();
+    return [
+      for (final doc in snapshot.docs)
+        if (doc.data()['defectDescription'] is String)
+          CustomDefect(
+            id: doc.id,
+            ownerUid: ownerUid,
+            elementId: doc.data()['elementId'] as String? ?? '',
+            elementName: doc.data()['elementName'] as String? ?? '',
+            componentId: doc.data()['componentId'] as String? ?? '',
+            componentName: doc.data()['componentName'] as String? ?? '',
+            defectDescription: doc.data()['defectDescription'] as String,
+            correctiveAction: doc.data()['correctiveAction'] as String? ?? '',
+            note: doc.data()['note'] as String?,
+            createdAt:
+                (doc.data()['createdAt'] as fs.Timestamp?)?.toDate() ??
+                DateTime.now(),
+            archived: doc.data()['archived'] == true,
+          ),
+    ];
   }
 
   String _storagePathFor(

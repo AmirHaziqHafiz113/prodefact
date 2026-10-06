@@ -543,6 +543,8 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     _parkedTimerFindingIds.remove(findingId);
     _uploadFailures.remove(findingId);
     _parkedWaits.remove(findingId);
+    _parkedSince.remove(findingId);
+    _failureReasons.remove(findingId);
     _aiDiagnostics.remove(findingId);
     state = session.copyWith(
       findings: session.findings
@@ -1199,6 +1201,30 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   Timer? _queueWatchdog;
   final Map<String, int> _parkedWaits = {};
 
+  /// A finding that has been unable to start for this long (signed out,
+  /// or the device keeps reporting no connection) stops waiting silently
+  /// and becomes a visible, retryable failure with a reason. Waiting for
+  /// a connection is honest for a while — not forever.
+  @visibleForTesting
+  Duration maxParkedWait = const Duration(minutes: 10);
+
+  /// When each currently-parked finding first failed to start.
+  final Map<String, DateTime> _parkedSince = {};
+
+  /// Why a finding last ended `failed` in this app session, in plain
+  /// language for the card (in-memory; a restart shows the generic text).
+  final Map<String, String> _failureReasons = {};
+
+  /// The inspector-facing reason [findingId] last failed, if known.
+  String? aiFailureReason(String findingId) => _failureReasons[findingId];
+
+  void _failFinding(String sessionId, String findingId, String reason) {
+    _failureReasons[findingId] = reason;
+    _parkedSince.remove(findingId);
+    _parkedWaits.remove(findingId);
+    _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
+  }
+
   /// Findings whose pending timer is only a parked self-wake (offline /
   /// signed out). Any real recovery signal (reconnect, sign-in, resume)
   /// releases them at once; upload backoff and replay windows are
@@ -1295,6 +1321,23 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// Parks [findingId] (offline/signed out) as `queued` with its own
   /// bounded self-wake — never left waiting on an external event.
   void _parkAndRetry(String sessionId, String findingId, String reason) {
+    final since = _parkedSince.putIfAbsent(findingId, DateTime.now);
+    if (DateTime.now().difference(since) >= maxParkedWait) {
+      AppLogger.info(
+        'job_failed finding=$findingId stage=queue reason=parkedTooLong '
+        'cause=$reason',
+      );
+      _failFinding(
+        sessionId,
+        findingId,
+        reason == 'signedOut'
+            ? 'You appear to be signed out, so this could not be sent. '
+                  'Sign in, then retry.'
+            : 'No connection for too long, so this was not sent. '
+                  'Check your connection, then retry.',
+      );
+      return;
+    }
     _markWaitingIfInFlight(sessionId, findingId);
     final waits = _parkedWaits[findingId] ?? 0;
     _parkedWaits[findingId] = waits + 1;
@@ -1323,7 +1366,12 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       AppLogger.info(
         'job_failed finding=$findingId stage=upload attempts=$failures',
       );
-      _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
+      _failFinding(
+        sessionId,
+        findingId,
+        'The photo could not be uploaded after several tries. Check your '
+        'connection, then retry.',
+      );
       return;
     }
     _uploadFailures[findingId] = failures;
@@ -1535,6 +1583,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       _aiReplayTimers.remove(findingId)?.cancel();
       _parkedTimerFindingIds.remove(findingId);
       _uploadFailures.remove(findingId);
+      _failureReasons.remove(findingId);
+      _parkedSince.remove(findingId);
+      _parkedWaits.remove(findingId);
       _noteDiagnostic(findingId, retried: true);
       AppLogger.info('job_retried finding=$findingId reason=reanalyse');
       _setFindingAiStatusDurable(session.id, findingId, AiFindingStatus.queued);
@@ -1557,6 +1608,9 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
     if (finding == null || finding.aiStatus != AiFindingStatus.failed) return;
     _noteDiagnostic(findingId, retried: true);
+    _failureReasons.remove(findingId);
+    _parkedSince.remove(findingId);
+    _parkedWaits.remove(findingId);
     AppLogger.info('job_retried finding=$findingId reason=manualRetry');
     _setFindingAiStatusLocal(findingId, AiFindingStatus.queued);
     unawaited(_enqueueAiClassification(session.id, findingId));
@@ -1764,6 +1818,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           }
           _uploadFailures.remove(findingId);
           _parkedWaits.remove(findingId);
+          _parkedSince.remove(findingId);
           AppLogger.info(
             'upload_completed finding=$findingId '
             'ms=${upload.elapsedMilliseconds}',
@@ -1810,6 +1865,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       );
       if (result.outcome == AiClassificationOutcome.failure) {
         _noteDiagnostic(findingId, errorCode: 'ai_failure');
+        _failureReasons[findingId] =
+            'AI could not analyse this photo. Retry, or choose the defect '
+            'yourself.';
+      } else {
+        _failureReasons.remove(findingId);
       }
 
       if (!ref.mounted) return;
@@ -1870,7 +1930,12 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       AppLogger.info('job_failed finding=$findingId reason=unexpected');
       _noteDiagnostic(findingId, errorCode: 'unexpected');
       // Keeps any outstanding attempt, so a Retry replays its key.
-      _setFindingAiStatusDurable(sessionId, findingId, AiFindingStatus.failed);
+      _failFinding(
+        sessionId,
+        findingId,
+        'Something went wrong while analysing this photo. Retry, or '
+        'choose the defect yourself.',
+      );
     } finally {
       _classifyingFindingIds.remove(findingId);
       _stopQueueWatchdogIfIdle();
@@ -1926,6 +1991,46 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       status: AiSuggestionStatus.rejected,
       finalCatalogueEntryId: (_) => '',
     );
+  }
+
+  /// The inspector chooses [catalogueEntryId] for [findingId] by hand
+  /// (Recommended / Other possible defects / search) — whatever state the
+  /// finding is in: waiting, failed, needs review, accepted or rejected.
+  /// Zero provider calls, zero AI usage. The previous AI result stays in
+  /// the suggestion; any queued retry for the finding is cancelled so a
+  /// later answer cannot replace the choice. Returns false when a request
+  /// is running right now (a late answer could overwrite the choice) or
+  /// the finding doesn't exist.
+  bool selectDefectForFinding(String findingId, String catalogueEntryId) {
+    final session = state;
+    if (session == null) return false;
+    final finding = session.findings.firstWhereOrNull((f) => f.id == findingId);
+    if (finding == null || !FindingResolution.canPickManually(finding)) {
+      return false;
+    }
+    if (!DefectCatalogue.instance.isValidEntryId(catalogueEntryId)) {
+      return false;
+    }
+    _aiReplayTimers.remove(findingId)?.cancel();
+    _parkedTimerFindingIds.remove(findingId);
+    _failureReasons.remove(findingId);
+    _parkedSince.remove(findingId);
+    final suggestion = session.aiSuggestions.firstWhereOrNull(
+      (s) => s.findingId == findingId,
+    );
+    if (suggestion == null) {
+      manuallyClassifyFinding(findingId, catalogueEntryId);
+      return true;
+    }
+    if (finding.aiStatus != AiFindingStatus.completed) {
+      _setFindingAiStatusDurable(
+        session.id,
+        findingId,
+        AiFindingStatus.completed,
+      );
+    }
+    changeSuggestion(suggestion.id, catalogueEntryId);
+    return true;
   }
 
   /// Classifies a finding that has **no** `AiSuggestion` yet — the

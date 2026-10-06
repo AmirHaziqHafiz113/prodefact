@@ -72,7 +72,11 @@ class ReportModel {
     this.contactNumber,
     this.reportDate,
     this.inspectionNote,
+    this.coverPhotoPath,
   });
+
+  /// The optional Residence / Unit Photo for page 1 (local file path).
+  final String? coverPhotoPath;
 
   final String sessionId;
   final String propertyTypeLabel;

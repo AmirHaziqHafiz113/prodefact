@@ -7342,6 +7342,686 @@ class AreaCandidateRowsCompanion extends UpdateCompanion<AreaCandidateRow> {
   }
 }
 
+class $CustomDefectRowsTable extends CustomDefectRows
+    with TableInfo<$CustomDefectRowsTable, CustomDefectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomDefectRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ownerUidMeta = const VerificationMeta(
+    'ownerUid',
+  );
+  @override
+  late final GeneratedColumn<String> ownerUid = GeneratedColumn<String>(
+    'owner_uid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _elementIdMeta = const VerificationMeta(
+    'elementId',
+  );
+  @override
+  late final GeneratedColumn<String> elementId = GeneratedColumn<String>(
+    'element_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _elementNameMeta = const VerificationMeta(
+    'elementName',
+  );
+  @override
+  late final GeneratedColumn<String> elementName = GeneratedColumn<String>(
+    'element_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _componentIdMeta = const VerificationMeta(
+    'componentId',
+  );
+  @override
+  late final GeneratedColumn<String> componentId = GeneratedColumn<String>(
+    'component_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _componentNameMeta = const VerificationMeta(
+    'componentName',
+  );
+  @override
+  late final GeneratedColumn<String> componentName = GeneratedColumn<String>(
+    'component_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _defectDescriptionMeta = const VerificationMeta(
+    'defectDescription',
+  );
+  @override
+  late final GeneratedColumn<String> defectDescription =
+      GeneratedColumn<String>(
+        'defect_description',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _correctiveActionMeta = const VerificationMeta(
+    'correctiveAction',
+  );
+  @override
+  late final GeneratedColumn<String> correctiveAction = GeneratedColumn<String>(
+    'corrective_action',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _archivedMeta = const VerificationMeta(
+    'archived',
+  );
+  @override
+  late final GeneratedColumn<bool> archived = GeneratedColumn<bool>(
+    'archived',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("archived" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    ownerUid,
+    elementId,
+    elementName,
+    componentId,
+    componentName,
+    defectDescription,
+    correctiveAction,
+    note,
+    createdAt,
+    archived,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custom_defect_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomDefectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('owner_uid')) {
+      context.handle(
+        _ownerUidMeta,
+        ownerUid.isAcceptableOrUnknown(data['owner_uid']!, _ownerUidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerUidMeta);
+    }
+    if (data.containsKey('element_id')) {
+      context.handle(
+        _elementIdMeta,
+        elementId.isAcceptableOrUnknown(data['element_id']!, _elementIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_elementIdMeta);
+    }
+    if (data.containsKey('element_name')) {
+      context.handle(
+        _elementNameMeta,
+        elementName.isAcceptableOrUnknown(
+          data['element_name']!,
+          _elementNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_elementNameMeta);
+    }
+    if (data.containsKey('component_id')) {
+      context.handle(
+        _componentIdMeta,
+        componentId.isAcceptableOrUnknown(
+          data['component_id']!,
+          _componentIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_componentIdMeta);
+    }
+    if (data.containsKey('component_name')) {
+      context.handle(
+        _componentNameMeta,
+        componentName.isAcceptableOrUnknown(
+          data['component_name']!,
+          _componentNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_componentNameMeta);
+    }
+    if (data.containsKey('defect_description')) {
+      context.handle(
+        _defectDescriptionMeta,
+        defectDescription.isAcceptableOrUnknown(
+          data['defect_description']!,
+          _defectDescriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_defectDescriptionMeta);
+    }
+    if (data.containsKey('corrective_action')) {
+      context.handle(
+        _correctiveActionMeta,
+        correctiveAction.isAcceptableOrUnknown(
+          data['corrective_action']!,
+          _correctiveActionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_correctiveActionMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('archived')) {
+      context.handle(
+        _archivedMeta,
+        archived.isAcceptableOrUnknown(data['archived']!, _archivedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomDefectRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomDefectRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      ownerUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_uid'],
+      )!,
+      elementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}element_id'],
+      )!,
+      elementName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}element_name'],
+      )!,
+      componentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}component_id'],
+      )!,
+      componentName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}component_name'],
+      )!,
+      defectDescription: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}defect_description'],
+      )!,
+      correctiveAction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}corrective_action'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      archived: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}archived'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomDefectRowsTable createAlias(String alias) {
+    return $CustomDefectRowsTable(attachedDatabase, alias);
+  }
+}
+
+class CustomDefectRow extends DataClass implements Insertable<CustomDefectRow> {
+  final String id;
+  final String ownerUid;
+  final String elementId;
+  final String elementName;
+  final String componentId;
+  final String componentName;
+  final String defectDescription;
+  final String correctiveAction;
+  final String? note;
+  final DateTime createdAt;
+  final bool archived;
+  const CustomDefectRow({
+    required this.id,
+    required this.ownerUid,
+    required this.elementId,
+    required this.elementName,
+    required this.componentId,
+    required this.componentName,
+    required this.defectDescription,
+    required this.correctiveAction,
+    this.note,
+    required this.createdAt,
+    required this.archived,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['owner_uid'] = Variable<String>(ownerUid);
+    map['element_id'] = Variable<String>(elementId);
+    map['element_name'] = Variable<String>(elementName);
+    map['component_id'] = Variable<String>(componentId);
+    map['component_name'] = Variable<String>(componentName);
+    map['defect_description'] = Variable<String>(defectDescription);
+    map['corrective_action'] = Variable<String>(correctiveAction);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['archived'] = Variable<bool>(archived);
+    return map;
+  }
+
+  CustomDefectRowsCompanion toCompanion(bool nullToAbsent) {
+    return CustomDefectRowsCompanion(
+      id: Value(id),
+      ownerUid: Value(ownerUid),
+      elementId: Value(elementId),
+      elementName: Value(elementName),
+      componentId: Value(componentId),
+      componentName: Value(componentName),
+      defectDescription: Value(defectDescription),
+      correctiveAction: Value(correctiveAction),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+      archived: Value(archived),
+    );
+  }
+
+  factory CustomDefectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomDefectRow(
+      id: serializer.fromJson<String>(json['id']),
+      ownerUid: serializer.fromJson<String>(json['ownerUid']),
+      elementId: serializer.fromJson<String>(json['elementId']),
+      elementName: serializer.fromJson<String>(json['elementName']),
+      componentId: serializer.fromJson<String>(json['componentId']),
+      componentName: serializer.fromJson<String>(json['componentName']),
+      defectDescription: serializer.fromJson<String>(json['defectDescription']),
+      correctiveAction: serializer.fromJson<String>(json['correctiveAction']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      archived: serializer.fromJson<bool>(json['archived']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'ownerUid': serializer.toJson<String>(ownerUid),
+      'elementId': serializer.toJson<String>(elementId),
+      'elementName': serializer.toJson<String>(elementName),
+      'componentId': serializer.toJson<String>(componentId),
+      'componentName': serializer.toJson<String>(componentName),
+      'defectDescription': serializer.toJson<String>(defectDescription),
+      'correctiveAction': serializer.toJson<String>(correctiveAction),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'archived': serializer.toJson<bool>(archived),
+    };
+  }
+
+  CustomDefectRow copyWith({
+    String? id,
+    String? ownerUid,
+    String? elementId,
+    String? elementName,
+    String? componentId,
+    String? componentName,
+    String? defectDescription,
+    String? correctiveAction,
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+    bool? archived,
+  }) => CustomDefectRow(
+    id: id ?? this.id,
+    ownerUid: ownerUid ?? this.ownerUid,
+    elementId: elementId ?? this.elementId,
+    elementName: elementName ?? this.elementName,
+    componentId: componentId ?? this.componentId,
+    componentName: componentName ?? this.componentName,
+    defectDescription: defectDescription ?? this.defectDescription,
+    correctiveAction: correctiveAction ?? this.correctiveAction,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+    archived: archived ?? this.archived,
+  );
+  CustomDefectRow copyWithCompanion(CustomDefectRowsCompanion data) {
+    return CustomDefectRow(
+      id: data.id.present ? data.id.value : this.id,
+      ownerUid: data.ownerUid.present ? data.ownerUid.value : this.ownerUid,
+      elementId: data.elementId.present ? data.elementId.value : this.elementId,
+      elementName: data.elementName.present
+          ? data.elementName.value
+          : this.elementName,
+      componentId: data.componentId.present
+          ? data.componentId.value
+          : this.componentId,
+      componentName: data.componentName.present
+          ? data.componentName.value
+          : this.componentName,
+      defectDescription: data.defectDescription.present
+          ? data.defectDescription.value
+          : this.defectDescription,
+      correctiveAction: data.correctiveAction.present
+          ? data.correctiveAction.value
+          : this.correctiveAction,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      archived: data.archived.present ? data.archived.value : this.archived,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomDefectRow(')
+          ..write('id: $id, ')
+          ..write('ownerUid: $ownerUid, ')
+          ..write('elementId: $elementId, ')
+          ..write('elementName: $elementName, ')
+          ..write('componentId: $componentId, ')
+          ..write('componentName: $componentName, ')
+          ..write('defectDescription: $defectDescription, ')
+          ..write('correctiveAction: $correctiveAction, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('archived: $archived')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    ownerUid,
+    elementId,
+    elementName,
+    componentId,
+    componentName,
+    defectDescription,
+    correctiveAction,
+    note,
+    createdAt,
+    archived,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomDefectRow &&
+          other.id == this.id &&
+          other.ownerUid == this.ownerUid &&
+          other.elementId == this.elementId &&
+          other.elementName == this.elementName &&
+          other.componentId == this.componentId &&
+          other.componentName == this.componentName &&
+          other.defectDescription == this.defectDescription &&
+          other.correctiveAction == this.correctiveAction &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt &&
+          other.archived == this.archived);
+}
+
+class CustomDefectRowsCompanion extends UpdateCompanion<CustomDefectRow> {
+  final Value<String> id;
+  final Value<String> ownerUid;
+  final Value<String> elementId;
+  final Value<String> elementName;
+  final Value<String> componentId;
+  final Value<String> componentName;
+  final Value<String> defectDescription;
+  final Value<String> correctiveAction;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<bool> archived;
+  final Value<int> rowid;
+  const CustomDefectRowsCompanion({
+    this.id = const Value.absent(),
+    this.ownerUid = const Value.absent(),
+    this.elementId = const Value.absent(),
+    this.elementName = const Value.absent(),
+    this.componentId = const Value.absent(),
+    this.componentName = const Value.absent(),
+    this.defectDescription = const Value.absent(),
+    this.correctiveAction = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.archived = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomDefectRowsCompanion.insert({
+    required String id,
+    required String ownerUid,
+    required String elementId,
+    required String elementName,
+    required String componentId,
+    required String componentName,
+    required String defectDescription,
+    required String correctiveAction,
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+    this.archived = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       ownerUid = Value(ownerUid),
+       elementId = Value(elementId),
+       elementName = Value(elementName),
+       componentId = Value(componentId),
+       componentName = Value(componentName),
+       defectDescription = Value(defectDescription),
+       correctiveAction = Value(correctiveAction),
+       createdAt = Value(createdAt);
+  static Insertable<CustomDefectRow> custom({
+    Expression<String>? id,
+    Expression<String>? ownerUid,
+    Expression<String>? elementId,
+    Expression<String>? elementName,
+    Expression<String>? componentId,
+    Expression<String>? componentName,
+    Expression<String>? defectDescription,
+    Expression<String>? correctiveAction,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<bool>? archived,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (ownerUid != null) 'owner_uid': ownerUid,
+      if (elementId != null) 'element_id': elementId,
+      if (elementName != null) 'element_name': elementName,
+      if (componentId != null) 'component_id': componentId,
+      if (componentName != null) 'component_name': componentName,
+      if (defectDescription != null) 'defect_description': defectDescription,
+      if (correctiveAction != null) 'corrective_action': correctiveAction,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (archived != null) 'archived': archived,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomDefectRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? ownerUid,
+    Value<String>? elementId,
+    Value<String>? elementName,
+    Value<String>? componentId,
+    Value<String>? componentName,
+    Value<String>? defectDescription,
+    Value<String>? correctiveAction,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+    Value<bool>? archived,
+    Value<int>? rowid,
+  }) {
+    return CustomDefectRowsCompanion(
+      id: id ?? this.id,
+      ownerUid: ownerUid ?? this.ownerUid,
+      elementId: elementId ?? this.elementId,
+      elementName: elementName ?? this.elementName,
+      componentId: componentId ?? this.componentId,
+      componentName: componentName ?? this.componentName,
+      defectDescription: defectDescription ?? this.defectDescription,
+      correctiveAction: correctiveAction ?? this.correctiveAction,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      archived: archived ?? this.archived,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (ownerUid.present) {
+      map['owner_uid'] = Variable<String>(ownerUid.value);
+    }
+    if (elementId.present) {
+      map['element_id'] = Variable<String>(elementId.value);
+    }
+    if (elementName.present) {
+      map['element_name'] = Variable<String>(elementName.value);
+    }
+    if (componentId.present) {
+      map['component_id'] = Variable<String>(componentId.value);
+    }
+    if (componentName.present) {
+      map['component_name'] = Variable<String>(componentName.value);
+    }
+    if (defectDescription.present) {
+      map['defect_description'] = Variable<String>(defectDescription.value);
+    }
+    if (correctiveAction.present) {
+      map['corrective_action'] = Variable<String>(correctiveAction.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (archived.present) {
+      map['archived'] = Variable<bool>(archived.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomDefectRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('ownerUid: $ownerUid, ')
+          ..write('elementId: $elementId, ')
+          ..write('elementName: $elementName, ')
+          ..write('componentId: $componentId, ')
+          ..write('componentName: $componentName, ')
+          ..write('defectDescription: $defectDescription, ')
+          ..write('correctiveAction: $correctiveAction, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('archived: $archived, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7362,6 +8042,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $AreaCandidateRowsTable areaCandidateRows =
       $AreaCandidateRowsTable(this);
+  late final $CustomDefectRowsTable customDefectRows = $CustomDefectRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7376,6 +8059,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     userProfileRows,
     walletCacheRows,
     areaCandidateRows,
+    customDefectRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -12061,6 +12745,345 @@ typedef $$AreaCandidateRowsTableProcessedTableManager =
       AreaCandidateRow,
       PrefetchHooks Function()
     >;
+typedef $$CustomDefectRowsTableCreateCompanionBuilder =
+    CustomDefectRowsCompanion Function({
+      required String id,
+      required String ownerUid,
+      required String elementId,
+      required String elementName,
+      required String componentId,
+      required String componentName,
+      required String defectDescription,
+      required String correctiveAction,
+      Value<String?> note,
+      required DateTime createdAt,
+      Value<bool> archived,
+      Value<int> rowid,
+    });
+typedef $$CustomDefectRowsTableUpdateCompanionBuilder =
+    CustomDefectRowsCompanion Function({
+      Value<String> id,
+      Value<String> ownerUid,
+      Value<String> elementId,
+      Value<String> elementName,
+      Value<String> componentId,
+      Value<String> componentName,
+      Value<String> defectDescription,
+      Value<String> correctiveAction,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+      Value<bool> archived,
+      Value<int> rowid,
+    });
+
+class $$CustomDefectRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomDefectRowsTable> {
+  $$CustomDefectRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerUid => $composableBuilder(
+    column: $table.ownerUid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get elementId => $composableBuilder(
+    column: $table.elementId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get elementName => $composableBuilder(
+    column: $table.elementName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get componentId => $composableBuilder(
+    column: $table.componentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get componentName => $composableBuilder(
+    column: $table.componentName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defectDescription => $composableBuilder(
+    column: $table.defectDescription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get correctiveAction => $composableBuilder(
+    column: $table.correctiveAction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get archived => $composableBuilder(
+    column: $table.archived,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CustomDefectRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomDefectRowsTable> {
+  $$CustomDefectRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerUid => $composableBuilder(
+    column: $table.ownerUid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get elementId => $composableBuilder(
+    column: $table.elementId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get elementName => $composableBuilder(
+    column: $table.elementName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get componentId => $composableBuilder(
+    column: $table.componentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get componentName => $composableBuilder(
+    column: $table.componentName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defectDescription => $composableBuilder(
+    column: $table.defectDescription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get correctiveAction => $composableBuilder(
+    column: $table.correctiveAction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get archived => $composableBuilder(
+    column: $table.archived,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CustomDefectRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomDefectRowsTable> {
+  $$CustomDefectRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerUid =>
+      $composableBuilder(column: $table.ownerUid, builder: (column) => column);
+
+  GeneratedColumn<String> get elementId =>
+      $composableBuilder(column: $table.elementId, builder: (column) => column);
+
+  GeneratedColumn<String> get elementName => $composableBuilder(
+    column: $table.elementName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get componentId => $composableBuilder(
+    column: $table.componentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get componentName => $composableBuilder(
+    column: $table.componentName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defectDescription => $composableBuilder(
+    column: $table.defectDescription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get correctiveAction => $composableBuilder(
+    column: $table.correctiveAction,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get archived =>
+      $composableBuilder(column: $table.archived, builder: (column) => column);
+}
+
+class $$CustomDefectRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomDefectRowsTable,
+          CustomDefectRow,
+          $$CustomDefectRowsTableFilterComposer,
+          $$CustomDefectRowsTableOrderingComposer,
+          $$CustomDefectRowsTableAnnotationComposer,
+          $$CustomDefectRowsTableCreateCompanionBuilder,
+          $$CustomDefectRowsTableUpdateCompanionBuilder,
+          (
+            CustomDefectRow,
+            BaseReferences<
+              _$AppDatabase,
+              $CustomDefectRowsTable,
+              CustomDefectRow
+            >,
+          ),
+          CustomDefectRow,
+          PrefetchHooks Function()
+        > {
+  $$CustomDefectRowsTableTableManager(
+    _$AppDatabase db,
+    $CustomDefectRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomDefectRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomDefectRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomDefectRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> ownerUid = const Value.absent(),
+                Value<String> elementId = const Value.absent(),
+                Value<String> elementName = const Value.absent(),
+                Value<String> componentId = const Value.absent(),
+                Value<String> componentName = const Value.absent(),
+                Value<String> defectDescription = const Value.absent(),
+                Value<String> correctiveAction = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> archived = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomDefectRowsCompanion(
+                id: id,
+                ownerUid: ownerUid,
+                elementId: elementId,
+                elementName: elementName,
+                componentId: componentId,
+                componentName: componentName,
+                defectDescription: defectDescription,
+                correctiveAction: correctiveAction,
+                note: note,
+                createdAt: createdAt,
+                archived: archived,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String ownerUid,
+                required String elementId,
+                required String elementName,
+                required String componentId,
+                required String componentName,
+                required String defectDescription,
+                required String correctiveAction,
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+                Value<bool> archived = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomDefectRowsCompanion.insert(
+                id: id,
+                ownerUid: ownerUid,
+                elementId: elementId,
+                elementName: elementName,
+                componentId: componentId,
+                componentName: componentName,
+                defectDescription: defectDescription,
+                correctiveAction: correctiveAction,
+                note: note,
+                createdAt: createdAt,
+                archived: archived,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CustomDefectRowsTable, CustomDefectRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CustomDefectRowsTable,
+                    CustomDefectRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CustomDefectRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomDefectRowsTable,
+      CustomDefectRow,
+      $$CustomDefectRowsTableFilterComposer,
+      $$CustomDefectRowsTableOrderingComposer,
+      $$CustomDefectRowsTableAnnotationComposer,
+      $$CustomDefectRowsTableCreateCompanionBuilder,
+      $$CustomDefectRowsTableUpdateCompanionBuilder,
+      (
+        CustomDefectRow,
+        BaseReferences<_$AppDatabase, $CustomDefectRowsTable, CustomDefectRow>,
+      ),
+      CustomDefectRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12083,4 +13106,6 @@ class $AppDatabaseManager {
       $$WalletCacheRowsTableTableManager(_db, _db.walletCacheRows);
   $$AreaCandidateRowsTableTableManager get areaCandidateRows =>
       $$AreaCandidateRowsTableTableManager(_db, _db.areaCandidateRows);
+  $$CustomDefectRowsTableTableManager get customDefectRows =>
+      $$CustomDefectRowsTableTableManager(_db, _db.customDefectRows);
 }

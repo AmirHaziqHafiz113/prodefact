@@ -216,6 +216,16 @@ class FaultInjectingRepository implements InspectionRepository {
   }
 
   @override
+  Future<List<CustomDefect>> loadCustomDefects(String ownerUid) =>
+      _inner.loadCustomDefects(ownerUid);
+
+  @override
+  Future<void> saveCustomDefect(CustomDefect defect) {
+    _maybeFail('saveCustomDefect');
+    return _inner.saveCustomDefect(defect);
+  }
+
+  @override
   Future<void> saveUserProfile(UserProfile profile) {
     _maybeFail('saveUserProfile');
     return _inner.saveUserProfile(profile);

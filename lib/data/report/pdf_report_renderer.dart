@@ -44,7 +44,8 @@ class PdfReportRenderer implements ReportRenderer {
         footer: _buildFooter,
         build: (context) => [
           _buildCover(model),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 16),
+          ..._buildResidencePhoto(model),
           _buildSummary(model),
         ],
       ),
@@ -139,6 +140,40 @@ class PdfReportRenderer implements ReportRenderer {
       ],
     );
   }
+
+  /// The optional Residence / Unit Photo: a fixed, full-width box in the
+  /// middle of page 1 with the photo fitted inside it (aspect ratio
+  /// preserved, never stretched). Nothing is drawn — and no blank box is
+  /// left behind — when there is no photo or it can't be read.
+  List<pw.Widget> _buildResidencePhoto(ReportModel model) {
+    final path = model.coverPhotoPath;
+    if (path == null || path.isEmpty) return const [];
+    final pw.MemoryImage image;
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return const [];
+      image = pw.MemoryImage(file.readAsBytesSync());
+    } catch (_) {
+      return const [];
+    }
+    return [
+      pw.Container(
+        width: double.infinity,
+        height: _residencePhotoHeight,
+        decoration: pw.BoxDecoration(
+          color: _findingBackground,
+          border: pw.Border.all(color: _dividerColor),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        padding: const pw.EdgeInsets.all(4),
+        child: pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
+      ),
+      pw.SizedBox(height: 16),
+    ];
+  }
+
+  /// Height of the Residence / Unit Photo box on page 1, in points.
+  static const double _residencePhotoHeight = 220;
 
   pw.Widget _buildCoverRow(String label, String value) {
     return pw.Padding(

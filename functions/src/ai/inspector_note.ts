@@ -151,6 +151,9 @@ const EXPANSIONS: Record<string, string> = {
   "cat": "paint",
   "celah": "gap",
   "renggang": "gap",
+  "perangkap lantai": "floor trap",
+  "perangkap": "trap",
+  "flo": "floor",
 };
 
 const PHRASES = Object.keys(EXPANSIONS)

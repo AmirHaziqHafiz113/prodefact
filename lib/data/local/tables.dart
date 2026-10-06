@@ -365,3 +365,22 @@ class AreaCandidateRows extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+/// Defects a company added to its OWN catalogue (schema v17) — never part
+/// of the ProDefact master catalogue. Keyed by id; scoped by [ownerUid].
+class CustomDefectRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get ownerUid => text()();
+  TextColumn get elementId => text()();
+  TextColumn get elementName => text()();
+  TextColumn get componentId => text()();
+  TextColumn get componentName => text()();
+  TextColumn get defectDescription => text()();
+  TextColumn get correctiveAction => text()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get archived => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../../../data/local/database_providers.dart';
 import '../../providers/active_session_providers.dart';
 
 /// "Report Details" — lets the inspector review/edit the report's
@@ -36,6 +39,7 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   DateTime _inspectionDate = DateTime.now();
   DateTime _reportDate = DateTime.now();
   bool _prefilled = false;
+  String? _coverPhotoPath;
 
   @override
   void dispose() {
@@ -52,6 +56,80 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _pickCoverPhoto(String sessionId, EvidenceSource source) async {
+    try {
+      final captured = await ref
+          .read(evidenceCaptureServiceProvider)
+          .captureImage(findingId: 'cover_$sessionId', source: source);
+      if (captured == null || !mounted) return;
+      setState(() => _coverPhotoPath = captured.filePath);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not add that photo. Check camera/photo permissions and '
+            'try again.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildResidencePhotoCard(String sessionId) {
+    final path = _coverPhotoPath;
+    return AppFormSectionCard(
+      icon: Icons.photo_outlined,
+      title: 'Residence / Unit Photo',
+      subtitle: 'Optional — shown on page 1 of the report',
+      children: [
+        if (path != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: ColoredBox(
+              color: AppColors.surfaceAlt,
+              child: SizedBox(
+                key: const ValueKey('residence-photo-preview'),
+                height: 160,
+                width: double.infinity,
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Center(child: Icon(Icons.photo_outlined)),
+                ),
+              ),
+            ),
+          ),
+        Wrap(
+          spacing: AppSpacing.sm,
+          children: [
+            OutlinedButton.icon(
+              key: const ValueKey('residence-photo-gallery'),
+              onPressed: () =>
+                  _pickCoverPhoto(sessionId, EvidenceSource.gallery),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(path == null ? 'Choose photo' : 'Change photo'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('residence-photo-camera'),
+              onPressed: () =>
+                  _pickCoverPhoto(sessionId, EvidenceSource.camera),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Take photo'),
+            ),
+            if (path != null)
+              TextButton(
+                key: const ValueKey('residence-photo-remove'),
+                onPressed: () => setState(() => _coverPhotoPath = null),
+                child: const Text('Remove'),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -82,6 +160,7 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
       _contactNumber.text = metadata.contactNumber ?? '';
       _inspectionDate = metadata.inspectionDate ?? DateTime.now();
       _reportDate = metadata.reportDate ?? DateTime.now();
+      _coverPhotoPath = metadata.coverPhotoPath;
       _prefilled = true;
     }
 
@@ -98,6 +177,8 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                 'change the inspection\'s original Property Details.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
+              const SizedBox(height: AppSpacing.lg),
+              _buildResidencePhotoCard(session.id),
               const SizedBox(height: AppSpacing.lg),
               AppFormSectionCard(
                 icon: Icons.home_outlined,
@@ -203,6 +284,7 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
             contactNumber: orNull(_contactNumber),
             inspectionDate: _inspectionDate,
             reportDate: _reportDate,
+            coverPhotoPath: _coverPhotoPath,
           ),
         );
     ScaffoldMessenger.of(context)

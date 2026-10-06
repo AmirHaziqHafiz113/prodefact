@@ -137,6 +137,9 @@ const Map<String, String> kInspectorNoteAliases = {
   'cat': 'paint',
   'celah': 'gap',
   'renggang': 'gap',
+  'perangkap lantai': 'floor trap',
+  'perangkap': 'trap',
+  'flo': 'floor',
 };
 
 /// Multi-word alias keys, longest first, so "pintu sliding" is matched

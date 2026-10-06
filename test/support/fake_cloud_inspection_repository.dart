@@ -15,6 +15,18 @@ class FakeCloudInspectionRepository implements CloudInspectionRepository {
   final Map<String, AiSuggestion> pushedAiSuggestions = {};
   final Map<String, Report> pushedReports = {};
 
+  /// ownerUid -> custom defects pushed (keyed by id).
+  final Map<String, Map<String, CustomDefect>> pushedCustomDefects = {};
+
+  @override
+  Future<void> pushCustomDefect(String ownerUid, CustomDefect defect) async {
+    pushedCustomDefects.putIfAbsent(ownerUid, () => {})[defect.id] = defect;
+  }
+
+  @override
+  Future<List<CustomDefect>> fetchCustomDefects(String ownerUid) async =>
+      (pushedCustomDefects[ownerUid] ?? const {}).values.toList();
+
   int pushAiSuggestionCalls = 0;
   int pushReportMetadataCalls = 0;
 

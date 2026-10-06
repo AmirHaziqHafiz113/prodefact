@@ -21,7 +21,13 @@ class DefectCatalogueEntry {
     required this.defectId,
     required this.defectDescription,
     required this.correctiveAction,
+    this.isCustom = false,
   });
+
+  /// True for an entry the user's own company added (never part of the
+  /// ProDefact master catalogue). Custom entries are visible only to the
+  /// account that created them.
+  final bool isCustom;
 
   /// Stable, globally-unique id for this entry — currently equal to
   /// [defectId] (one catalogue row per defect description), kept as a
@@ -77,10 +83,16 @@ class DefectCatalogueComponent {
 /// the app should go through this rather than searching the raw list
 /// directly.
 class DefectCatalogue {
-  DefectCatalogue._(this.entries)
-    : _byId = {for (final e in entries) e.id: e},
-      _byComponent = _groupBy(entries, (e) => e.componentId),
-      _byMainElement = _groupBy(entries, (e) => e.mainElementId) {
+  DefectCatalogue._(this._master) {
+    _rebuild();
+  }
+
+  void _rebuild() {
+    final entries = [..._master, ..._custom.values];
+    _all = entries;
+    _byId = {for (final e in entries) e.id: e};
+    _byComponent = _groupBy(entries, (e) => e.componentId);
+    _byMainElement = _groupBy(entries, (e) => e.mainElementId);
     final mainElementIds = <String>[];
     final mainElementNames = <String, String>{};
     final componentsById = <String, DefectCatalogueComponent>{};
@@ -118,13 +130,38 @@ class DefectCatalogue {
     kDefectCatalogueEntries,
   );
 
-  final List<DefectCatalogueEntry> entries;
-  final Map<String, DefectCatalogueEntry> _byId;
-  final Map<String, List<DefectCatalogueEntry>> _byComponent;
-  final Map<String, List<DefectCatalogueEntry>> _byMainElement;
+  final List<DefectCatalogueEntry> _master;
+  final Map<String, DefectCatalogueEntry> _custom = {};
 
-  late final List<DefectCatalogueMainElement> mainElements;
-  late final List<DefectCatalogueComponent> components;
+  late List<DefectCatalogueEntry> _all;
+  late Map<String, DefectCatalogueEntry> _byId;
+  late Map<String, List<DefectCatalogueEntry>> _byComponent;
+  late Map<String, List<DefectCatalogueEntry>> _byMainElement;
+
+  /// The master catalogue followed by the signed-in company's custom
+  /// entries (none unless [replaceCustomEntries] was called).
+  List<DefectCatalogueEntry> get entries => _all;
+
+  /// Only the ProDefact master entries — what AI is ever shown.
+  List<DefectCatalogueEntry> get masterEntries => _master;
+
+  /// Replaces the whole custom overlay (call on sign-in with that
+  /// account's entries, and with `[]` on sign-out / account switch so one
+  /// company's entries can never be visible to another). Custom ids never
+  /// shadow a master id.
+  void replaceCustomEntries(Iterable<DefectCatalogueEntry> custom) {
+    _custom
+      ..clear()
+      ..addEntries([
+        for (final e in custom)
+          if (e.isCustom && !_master.any((m) => m.id == e.id))
+            MapEntry(e.id, e),
+      ]);
+    _rebuild();
+  }
+
+  late List<DefectCatalogueMainElement> mainElements;
+  late List<DefectCatalogueComponent> components;
 
   DefectCatalogueEntry? byId(String id) => _byId[id];
 

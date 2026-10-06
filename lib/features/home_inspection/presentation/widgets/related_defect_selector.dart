@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
+import '../../providers/custom_catalogue_providers.dart';
+import 'add_custom_defect_dialog.dart';
 
 /// "Other possible defects ▼": a manual, searchable alternative to the
 /// AI's own top-4 candidates — the full controlled 222-entry catalogue,
@@ -14,7 +17,7 @@ import '../../../../core/inspection/inspection_domain.dart';
 /// [onSelected] to apply the choice the right way for that state (e.g.
 /// `changeSuggestion` when a suggestion already exists, or
 /// `manuallyClassifyFinding` for a failed finding that has none yet).
-class RelatedDefectSelector extends StatefulWidget {
+class RelatedDefectSelector extends ConsumerStatefulWidget {
   const RelatedDefectSelector({
     super.key,
     required this.keyId,
@@ -31,15 +34,24 @@ class RelatedDefectSelector extends StatefulWidget {
   final void Function(DefectCatalogueEntry entry) onSelected;
 
   @override
-  State<RelatedDefectSelector> createState() => _RelatedDefectSelectorState();
+  ConsumerState<RelatedDefectSelector> createState() =>
+      _RelatedDefectSelectorState();
 }
 
-class _RelatedDefectSelectorState extends State<RelatedDefectSelector> {
+class _RelatedDefectSelectorState extends ConsumerState<RelatedDefectSelector> {
   final _controller = TextEditingController();
-  late final List<DefectCatalogueEntry> _ranked = rankRelatedDefects(
-    widget.relatedContext,
-  );
+  List<DefectCatalogueEntry> _ranked = const [];
+  int _rankedForEntryCount = -1;
   String _query = '';
+
+  /// Re-ranks only when the catalogue itself changed (a custom entry was
+  /// added/archived), never on every keystroke.
+  void _ensureRanked() {
+    final count = DefectCatalogue.instance.entries.length;
+    if (count == _rankedForEntryCount) return;
+    _rankedForEntryCount = count;
+    _ranked = rankRelatedDefects(widget.relatedContext);
+  }
 
   @override
   void dispose() {
@@ -49,6 +61,8 @@ class _RelatedDefectSelectorState extends State<RelatedDefectSelector> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(customCatalogueProvider);
+    _ensureRanked();
     final results = searchRelatedDefects(ranked: _ranked, query: _query);
     return Theme(
       // No divider lines from the default ExpansionTile theme — this
@@ -100,6 +114,28 @@ class _RelatedDefectSelectorState extends State<RelatedDefectSelector> {
                       );
                     },
                   ),
+          ),
+          // Not in the list? Add it to this company's own catalogue —
+          // never to the ProDefact master catalogue.
+          Text(
+            "Still can't find what you're looking for?",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: ValueKey('add-custom-defect-${widget.keyId}'),
+              onPressed: () async {
+                final entry = await showAddCustomDefectDialog(
+                  context,
+                  initialDescription: _query,
+                );
+                if (entry == null || !context.mounted) return;
+                widget.onSelected(entry);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add New'),
+            ),
           ),
         ],
       ),

@@ -304,3 +304,35 @@ test("model text is bounded: shortReason and detected names are capped",
     assert.equal(r.detectedComponent!.length, 60);
     assert.equal(r.noteImageAgreement, undefined);
   });
+
+test("real case: an ordinary Door Frame dent is never auto-accepted as a " +
+  "Sliding Door Frame, while the genuine sliding entry still is", () => {
+  const slidingFrame = "door.sliding_door_frame.01";
+  const input = shortlisted("frame dented", "Master Bedroom");
+  const wrong = validateAndNormalize(input, answer({
+    detectedComponent: "Door Frame",
+    catalogueEntryId: slidingFrame,
+    confidence: 0.95,
+  }));
+  assert.equal(wrong.needsReview, true);
+  assert.equal(wrong.needsReviewReason, "component_mismatch");
+
+  const sliding = shortlisted("sliding door frame gap", "Balcony");
+  assert.ok(sliding.shortlistEntryIds!.includes(slidingFrame));
+  const right = validateAndNormalize(sliding, answer({
+    detectedComponent: "Sliding Door Frame",
+    catalogueEntryId: slidingFrame,
+    confidence: 0.95,
+  }));
+  assert.equal(right.needsReview, false);
+  assert.equal(right.catalogueEntryId, slidingFrame);
+});
+
+test("floor trap shorthand and BM are read as 'floor trap' (no AI call)",
+  () => {
+    for (const note of ["flo trap blocked", "perangkap lantai tersumbat"]) {
+      const reading = normalizeInspectorNote(note).normalized;
+      assert.ok(reading.includes("trap"), `${note} -> ${reading}`);
+      assert.ok(/\bfloor\b/.test(reading), `${note} -> ${reading}`);
+    }
+  });

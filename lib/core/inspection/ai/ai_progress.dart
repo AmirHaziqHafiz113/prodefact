@@ -114,7 +114,7 @@ class AiReviewProgress {
   static AiReviewProgress forSuggestions(List<AiSuggestion> suggestions) {
     return AiReviewProgress(
       total: suggestions.length,
-      resolved: suggestions.where((s) => s.isResolved).length,
+      resolved: suggestions.where((s) => s.isResolved && !s.isRejected).length,
       autoAccepted: suggestions.where((s) => s.isAutoAccepted).length,
     );
   }
@@ -144,21 +144,29 @@ List<AiSuggestion> activeSuggestionsOf(InspectionSession session) {
 /// - [failed]: AI failed and nothing was decided — Retry or Classify
 ///   Manually. Never silently included in a report.
 /// - [toReview]: a suggestion still needs the inspector's decision.
+/// - [unresolved]: the inspector rejected the result and has not chosen
+///   another defect — still editable, but never report-ready.
 class ReportReadiness {
   const ReportReadiness({
     required this.analysing,
     required this.waitingForNote,
     required this.failed,
     required this.toReview,
+    this.unresolved = 0,
   });
 
   final int analysing;
   final int waitingForNote;
   final int failed;
   final int toReview;
+  final int unresolved;
 
   bool get isReady =>
-      analysing == 0 && waitingForNote == 0 && failed == 0 && toReview == 0;
+      analysing == 0 &&
+      waitingForNote == 0 &&
+      failed == 0 &&
+      toReview == 0 &&
+      unresolved == 0;
 
   static ReportReadiness of(InspectionSession session) {
     final suggestionByFinding = {
@@ -168,6 +176,7 @@ class ReportReadiness {
     var waitingForNote = 0;
     var failed = 0;
     var toReview = 0;
+    var unresolved = 0;
     for (final finding in session.findings) {
       if (!finding.isAiEligible) continue;
       final suggestion = suggestionByFinding[finding.id];
@@ -175,7 +184,11 @@ class ReportReadiness {
         // A suggestion exists: its review decides, whatever happened to
         // the pipeline since (e.g. a manual classification after a
         // failure).
-        if (!suggestion.isResolved) toReview++;
+        if (!suggestion.isResolved) {
+          toReview++;
+        } else if (suggestion.isRejected) {
+          unresolved++;
+        }
         continue;
       }
       switch (finding.aiStatus) {
@@ -202,6 +215,7 @@ class ReportReadiness {
       waitingForNote: waitingForNote,
       failed: failed,
       toReview: toReview,
+      unresolved: unresolved,
     );
   }
 
@@ -218,6 +232,9 @@ class ReportReadiness {
         '${n(failed, 'finding needs', 'findings need')} Retry or Classify '
             'Manually',
       if (toReview > 0) '${n(toReview, 'finding', 'findings')} to review',
+      if (unresolved > 0)
+        '${n(unresolved, 'finding', 'findings')} unresolved — choose a '
+            'defect or delete it',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }

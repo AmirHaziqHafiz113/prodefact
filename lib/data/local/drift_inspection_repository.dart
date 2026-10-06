@@ -62,9 +62,7 @@ class DriftInspectionRepository implements InspectionRepository {
                 propertyDetails.title.isEmpty ? null : propertyDetails.title,
               ),
               propertyAddress: Value(propertyDetails.address),
-              projectDeveloperName: Value(
-                propertyDetails.projectDeveloperName,
-              ),
+              projectDeveloperName: Value(propertyDetails.projectDeveloperName),
               blockTower: Value(propertyDetails.blockTower),
               unitNumber: Value(propertyDetails.unitNumber),
               clientName: Value(propertyDetails.clientName),
@@ -311,6 +309,7 @@ class DriftInspectionRepository implements InspectionRepository {
       contactNumber: decoded['contactNumber'] as String?,
       inspectionDate: parseDate(decoded['inspectionDate'] as String?),
       reportDate: parseDate(decoded['reportDate'] as String?),
+      coverPhotoPath: decoded['coverPhotoPath'] as String?,
     );
   }
 
@@ -326,6 +325,7 @@ class DriftInspectionRepository implements InspectionRepository {
       'contactNumber': metadata.contactNumber,
       'inspectionDate': metadata.inspectionDate?.toIso8601String(),
       'reportDate': metadata.reportDate?.toIso8601String(),
+      'coverPhotoPath': metadata.coverPhotoPath,
     });
   }
 
@@ -753,11 +753,9 @@ class DriftInspectionRepository implements InspectionRepository {
     InspectionStatus status,
   ) async {
     final now = DateTime.now();
-    await (_db.update(
-      _db.inspectionSessionRows,
-    )..where((t) => t.id.equals(sessionId))).write(
-      InspectionSessionRowsCompanion(status: Value(status.name)),
-    );
+    await (_db.update(_db.inspectionSessionRows)
+          ..where((t) => t.id.equals(sessionId)))
+        .write(InspectionSessionRowsCompanion(status: Value(status.name)));
     await _touchSession(sessionId, now);
   }
 
@@ -847,6 +845,48 @@ class DriftInspectionRepository implements InspectionRepository {
         );
     await _touchSession(report.sessionId, DateTime.now());
   }
+
+  @override
+  Future<List<CustomDefect>> loadCustomDefects(String ownerUid) async {
+    final rows = await (_db.select(
+      _db.customDefectRows,
+    )..where((t) => t.ownerUid.equals(ownerUid))).get();
+    return [
+      for (final r in rows)
+        CustomDefect(
+          id: r.id,
+          ownerUid: r.ownerUid,
+          elementId: r.elementId,
+          elementName: r.elementName,
+          componentId: r.componentId,
+          componentName: r.componentName,
+          defectDescription: r.defectDescription,
+          correctiveAction: r.correctiveAction,
+          note: r.note,
+          createdAt: r.createdAt,
+          archived: r.archived,
+        ),
+    ];
+  }
+
+  @override
+  Future<void> saveCustomDefect(CustomDefect d) => _db
+      .into(_db.customDefectRows)
+      .insertOnConflictUpdate(
+        CustomDefectRowsCompanion.insert(
+          id: d.id,
+          ownerUid: d.ownerUid,
+          elementId: d.elementId,
+          elementName: d.elementName,
+          componentId: d.componentId,
+          componentName: d.componentName,
+          defectDescription: d.defectDescription,
+          correctiveAction: d.correctiveAction,
+          note: Value(d.note),
+          createdAt: d.createdAt,
+          archived: Value(d.archived),
+        ),
+      );
 
   @override
   Future<UserProfile> loadUserProfile() async {
@@ -956,16 +996,16 @@ class DriftInspectionRepository implements InspectionRepository {
       _db.inspectionSessionRows,
     )..where((t) => t.id.equals(sessionId))).getSingleOrNull();
     final demote = row?.syncStatus == SyncStatus.synced.name;
-    await (_db.update(_db.inspectionSessionRows)
-          ..where((t) => t.id.equals(sessionId)))
-        .write(
-          InspectionSessionRowsCompanion(
-            updatedAt: Value(timestamp),
-            syncStatus: demote
-                ? Value(SyncStatus.pendingUpdate.name)
-                : const Value.absent(),
-          ),
-        );
+    await (_db.update(
+      _db.inspectionSessionRows,
+    )..where((t) => t.id.equals(sessionId))).write(
+      InspectionSessionRowsCompanion(
+        updatedAt: Value(timestamp),
+        syncStatus: demote
+            ? Value(SyncStatus.pendingUpdate.name)
+            : const Value.absent(),
+      ),
+    );
   }
 
   @override

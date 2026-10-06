@@ -162,6 +162,10 @@ class AiSuggestion {
 
   bool get isResolved => status != AiSuggestionStatus.pending;
 
+  /// The inspector rejected the result and chose nothing else — the
+  /// finding is *unresolved*: editable, but never report-ready.
+  bool get isRejected => status == AiSuggestionStatus.rejected;
+
   /// Accepted by the system (a valid, confident AI match) rather than
   /// by the inspector — an inspector decision always stamps
   /// [reviewedAt].

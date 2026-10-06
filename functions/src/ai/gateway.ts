@@ -103,9 +103,30 @@ export function detectedMatches(detected: string, names: string[]): boolean {
   if (seen.length === 0) return true;
   return names.some((name) => {
     const target = nameWords(name);
-    return seen.every((w) => target.includes(w)) ||
-      target.every((w) => seen.includes(w));
+    return qualifiersAgree(seen, target) && (
+      seen.every((w) => target.includes(w)) ||
+      target.every((w) => seen.includes(w))
+    );
   });
+}
+
+/**
+ * Words that change WHICH component a name is, so a plain subset match
+ * must not cross them: a "Door Frame" is not a "Sliding Door Frame"
+ * (the reported real-device error), nor the reverse. A bare, generic
+ * "Door" (one word) is still allowed to fit either.
+ * @param {string[]} seen the detected name's words.
+ * @param {string[]} target the entry's name words.
+ * @return {boolean} whether the qualifiers are compatible.
+ */
+function qualifiersAgree(seen: string[], target: string[]): boolean {
+  for (const q of ["sliding"]) {
+    const s = seen.includes(q);
+    const t = target.includes(q);
+    if (s && !t) return false;
+    if (t && !s && seen.length >= 2) return false;
+  }
+  return true;
 }
 
 /** Splits an answer that names several ids at once ("a/b", "a or b"). */

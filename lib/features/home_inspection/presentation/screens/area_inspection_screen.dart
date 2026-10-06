@@ -22,6 +22,7 @@ import 'photo_annotation_screen.dart';
 import 'photo_viewer_screen.dart';
 import 'top_up_screen.dart';
 import 'photo_guide_screen.dart';
+import '../widgets/finding_resolution_panel.dart';
 import '../widgets/reanalyse_and_candidates.dart';
 
 /// Lets the inspector pick where a piece of evidence comes from —
@@ -1001,12 +1002,9 @@ class _FindingCard extends ConsumerWidget {
                 children: [
                   _FindingPhotoStrip(finding: finding),
                   const SizedBox(height: AppSpacing.sm),
-                  FindingAiStatusLine(finding: finding, suggestion: suggestion),
-                  if (aiImageQualityNote(suggestion) case final note?)
-                    AiImageQualityNote(text: note),
                   if (finding.defectNote != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
                         finding.defectNote!,
                         maxLines: 2,
@@ -1014,6 +1012,12 @@ class _FindingCard extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                  FindingResolutionPanel(
+                    finding: finding,
+                    suggestion: suggestion,
+                  ),
+                  if (aiImageQualityNote(suggestion) case final note?)
+                    AiImageQualityNote(text: note),
                   // One photo = one finding: another photo — even of
                   // this same defect — is captured as a NEW finding,
                   // never added to this one.
@@ -1038,10 +1042,11 @@ class _FindingCard extends ConsumerWidget {
                   ref: ref,
                   finding: finding,
                 ),
-                _FindingAction.remove =>
-                  ref
-                      .read(inspectionFindingsProvider.notifier)
-                      .removeFinding(finding.id),
+                _FindingAction.remove => confirmAndDeleteFinding(
+                  context,
+                  ref,
+                  finding,
+                ),
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(
@@ -1070,7 +1075,7 @@ class _FindingCard extends ConsumerWidget {
                   value: _FindingAction.remove,
                   child: ListTile(
                     leading: Icon(Icons.delete_outline),
-                    title: Text('Remove'),
+                    title: Text('Delete finding'),
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),

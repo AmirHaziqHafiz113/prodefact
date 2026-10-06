@@ -216,7 +216,7 @@ class _PendingFindingCard extends ConsumerWidget {
                 relatedContext: RelatedDefectContext(note: finding.defectNote),
                 onSelected: (entry) => ref
                     .read(activeSessionProvider.notifier)
-                    .manuallyClassifyFinding(finding.id, entry.id),
+                    .selectDefectForFinding(finding.id, entry.id),
               ),
             ],
           ],
@@ -480,7 +480,7 @@ class _SuggestionCard extends ConsumerWidget {
               ),
               onSelected: (entry) => ref
                   .read(activeSessionProvider.notifier)
-                  .changeSuggestion(suggestion.id, entry.id),
+                  .selectDefectForFinding(suggestion.findingId, entry.id),
             ),
             if (suggestion.isResolved) ...[
               const SizedBox(height: AppSpacing.sm),

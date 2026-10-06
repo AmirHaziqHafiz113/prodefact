@@ -101,6 +101,8 @@ part 'database.g.dart';
 ///   `AiSuggestionRows.suggestedDefectTerm` (both nullable, additive),
 ///   and set every session's `autoAnalyseEnabled` to true — AI analysis
 ///   is now always automatic, so an old opt-out is retired, not kept.
+/// - v17: (custom catalogue pass) added the `CustomDefectRows` table —
+///   defects a company added to its own catalogue. New table only.
 /// - v16: (AI accuracy pass) added AI-suggestion evaluation columns —
 ///   `needsReviewReason`, `noteImageAgreement`, `detectedComponent`,
 ///   `aiLevel`, `aiJobKey`, `reanalysisCount` (default 0) and
@@ -118,6 +120,7 @@ part 'database.g.dart';
     UserProfileRows,
     WalletCacheRows,
     AreaCandidateRows,
+    CustomDefectRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -128,7 +131,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -310,6 +313,9 @@ class AppDatabase extends _$AppDatabase {
         ]) {
           await _addColumnIfMissing(migrator, aiSuggestionRows, column);
         }
+      }
+      if (from < 17) {
+        await migrator.createTable(customDefectRows);
       }
       if (from < 16) {
         for (final column in [
