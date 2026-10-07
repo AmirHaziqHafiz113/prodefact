@@ -1,0 +1,1349 @@
+{
+ "elements": [
+  "Door",
+  "Window",
+  "Wall",
+  "Floor",
+  "Roof",
+  "Ceiling",
+  "Plumbing",
+  "Electrical Fitting",
+  "Sanitary Fitting",
+  "Furniture",
+  "Others"
+ ],
+ "entries": [
+  {
+   "element": "Door",
+   "component": "Door Bell Switch",
+   "defect": "Door bell is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Bell Switch",
+   "defect": "Door bell switch is damaged/not functioning properly",
+   "action": "Replace with a new door bell switch. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Bell Switch",
+   "defect": "Door bell switch is loose",
+   "action": "Reinstall the door bell switch. Make sure it is firm and tightened."
+  },
+  {
+   "element": "Door",
+   "component": "Door Bell Switch",
+   "defect": "Door bell switch is slanted",
+   "action": "Readjust the door bell switch alignment. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Door Bell Switch",
+   "defect": "Visible gap between door bell switch and wall",
+   "action": "Seal off the gap with sealant/filler. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Door Closer",
+   "defect": "Door closer is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Closer",
+   "defect": "Door closer is loose",
+   "action": "Reinstall the door closer. Make sure it is tightened. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Closer",
+   "defect": "Door closer is rusty",
+   "action": "Replace to a new door closer. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Closer",
+   "defect": "Door closer produces creaking sound when opened/closed",
+   "action": "Reinstall the door closer. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Closer",
+   "defect": "Door slams/stops half way when closed. Door closer is not functioning properly",
+   "action": "Readjust the door closer alignment. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Aluminum door frame is damaged/chipped/scratched",
+   "action": "Sand down the dented area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded door paint."
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Door frame is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Door frame is not aligned",
+   "action": "Readjust the door frame alignment. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Door frame is rusty",
+   "action": "Chip off the rust, apply anti-rust coating and repaint with the same colour coded paint"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Gap between door frame and wall/floor is not properly sealed off",
+   "action": "Seal off the gap with silicon/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Missing rubber cover on the door frame",
+   "action": "Install the rubber cover. Make sure it is firm and tightened. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Poor paint finishing on the door frame",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Visible gap between door frame panels",
+   "action": "Seal off the gap with silicone/filler. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Door Frame",
+   "defect": "Wooden door frame is damaged/chipped/scratched",
+   "action": "Fill the chipped area with wood filler. Sand down and repaint with the same colour coded paint"
+  },
+  {
+   "element": "Door",
+   "component": "Door Hinge",
+   "defect": "Door hinge installation is poor/slanted/gap/loose",
+   "action": "Reinstall the hinge. Make sure the finishing is good. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Hinge",
+   "defect": "Door hinge is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Hinge",
+   "defect": "Door hinge is rusty",
+   "action": "Replace with a new door hinge. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Hinge",
+   "defect": "Door hinge produces a creaking sound when opened/closed",
+   "action": "Apply lubricant or replace the door hinge if required. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Hinge",
+   "defect": "Missing screw on the door hinge",
+   "action": "Install the missing screw. Make sure it is tightened and firm. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Knob/Handle",
+   "defect": "Door handle is damaged/chipped/scratched",
+   "action": "Replace with a new door handle. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Knob/Handle",
+   "defect": "Door handle is loose",
+   "action": "Reinstall the door handle. Make sure it is tightened. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Knob/Handle",
+   "defect": "Door handle is not functioning properly",
+   "action": "Replace with a new door knob/handle. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Knob/Handle",
+   "defect": "Door handle is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Knob/Handle",
+   "defect": "Door knob/handle is rusty",
+   "action": "Replace with a new door knob/handle. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Latch",
+   "defect": "Door cannot latch properly. Door latch does not align to the door strike plate",
+   "action": "Readjust the door strike plate alignment. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Latch",
+   "defect": "Door latch is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Latch",
+   "defect": "Door latch is stuck to the door strike plate when closed",
+   "action": "Readjust the door strike plate alignment. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Latch",
+   "defect": "Door strike plate does not flush to the door leaf. Poor installation",
+   "action": "Readjust the door strike plate alignment. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Door in contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Door leaf clashes with others elements when closed",
+   "action": "Readjust the door leaf alignment. Make sure it can be opened/closed smoothly."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Door leaf does not flush with door frame when closed",
+   "action": "Readjust the door leaf alignment. Make sure it flushes with the door frame when closed."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Door leaf is cracked/damaged/chipped",
+   "action": "Fill the chipped area with wood filler. Sand down and repaint with same colour coded paint"
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Door leaf is not aligned/rattles when closed",
+   "action": "Readjust the door leaf alignment. Make sure it is flushed to the door frame when closed. Test for functionality."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Insufficient rubber seal length",
+   "action": "Install the door seal with sufficient length. Make sure it is firm and the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Leaf",
+   "defect": "Poor paint finishing on the door leaf Top/bottom part of the door is not painted",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Door",
+   "component": "Door Lockset",
+   "defect": "Door lockset screw is rusty",
+   "action": "Replace with the same screw type. Make sure it is firm and tightened. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Lockset",
+   "defect": "Keys provided do not match with the door lockset/unable to use",
+   "action": "Provide the keys that match with the door lockset."
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Door stopper is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Door stopper is loose",
+   "action": "Reinstall the door stopper. Make sure it is firm and tightened."
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Door stopper is not functioning properly",
+   "action": "Replace with a new door stopper. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Door stopper is rusty",
+   "action": "Replace with a new door stopper. Make sure it is firm and tightened."
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Missing door stopper",
+   "action": "Install the door stopper. Make sure it is firm and tightened. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Door Stopper",
+   "defect": "Poor installation of door stopper",
+   "action": "Reinstall the door stopper. Make sure it is firm and tightened."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Grill door is dented/chipped/scratched",
+   "action": "Sand down the dented area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded door paint."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Door grill is not aligned",
+   "action": "Reinstall the door grill. Make sure it is aligned and test for functionality."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Grill is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Latch hole is missing/misaligned",
+   "action": "Provide the latch hole. Test the functionality."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Missing lock pin on the grill door hinge",
+   "action": "Provide and install the lock pin. Make sure it tightened. Test for grill door functionality."
+  },
+  {
+   "element": "Door",
+   "component": "Grill Door",
+   "defect": "Poor paint finishing on the grill door/paint peeled off",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Gap between sliding door frame and wall is not properly sealed off",
+   "action": "Seal off the gap with sealant/filler. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Missing rubber seal/rubber seal is peeled off",
+   "action": "Install the rubber seal. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Missing screw on the sliding door frame",
+   "action": "Install with the same screw type. Make sure it is firm and tightened. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Poor paint finishing on the sliding door frame",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Sliding door frame is damaged/chipped/scratched",
+   "action": "Sand down the dented area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded door paint."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Sliding door frame is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Sliding door frame is not aligned",
+   "action": "Readjust the sliding door frame alignment. Test for functionality."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Frame",
+   "defect": "Sliding door frame is rusty",
+   "action": "Chip off the rust, apply anti-rust coating and repaint with the same colour coded paint"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Glass",
+   "defect": "Sliding door glass is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Glass",
+   "defect": "Sliding door glass is damaged/chipped/scratched",
+   "action": "Replace with a new glass panel. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Gap between sliding door panels is not properly sealed off",
+   "action": "Seal off the gap with sealant/filler. Make sure the finishing is good"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Missing rubber cover on the door frame",
+   "action": "Install the rubber cover. Make sure it is firm and tightened. Test the functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Missing rubber seal/rubber seal is peeled off",
+   "action": "Install the rubber seal. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Poor paint finishing on the sliding door panel",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door is damaged/chipped/scratched",
+   "action": "Sand down the dented area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded door paint."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door panel is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door panel is not aligned",
+   "action": "Readjust the sliding door panel alignment. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door panel is not functioning properly",
+   "action": "Readjust the sliding door panel alignment. Test for functionality"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door panel is rusty",
+   "action": "Chip off the rust, apply anti-rust coating and repaint with the same colour coded paint"
+  },
+  {
+   "element": "Door",
+   "component": "Sliding Door Panel",
+   "defect": "Sliding door panel produces a creaking sound when opened/and closed",
+   "action": "Apply lubricant or reinstall the door panel if required. Test the functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window awning",
+   "defect": "Poor painting finishing on the window awning",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Window",
+   "component": "Window awning",
+   "defect": "Window awning is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window awning",
+   "defect": "Window awning is damaged/chipped/scratched",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Window",
+   "component": "Window awning",
+   "defect": "Window awning is not aligned/slanted",
+   "action": "Readjust the window awning alignment. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Gap between window frame and wall is not properly sealed off",
+   "action": "Seal off the gap with sealant/filler. Make sure the finishing is good"
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Insufficient rubber seal on the window frame",
+   "action": "Replace with a new rubber seal with sufficient length. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Missing rubber seal/rubber seal is peeled off",
+   "action": "Install the new rubber seal. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Missing screw on the window frame",
+   "action": "Install with the same screw type. Make sure it is tightened and firm. Test for functionality."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Poor paint finishing on the window frame",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Poor window frame installation",
+   "action": "Reinstall the window frame. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Visible gap between window frame",
+   "action": "Seal off the gap with silicone/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Window frame are contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Window frame is damaged/chipped/scratched",
+   "action": "Sand down the dented area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded window paint."
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Window frame is not aligned/slanted",
+   "action": "Readjust the window frame alignment. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window frame",
+   "defect": "Window frame is rusty",
+   "action": "Chip off the rust, apply anti-rust coating and repaint with the same colour coded paint."
+  },
+  {
+   "element": "Window",
+   "component": "Window glass",
+   "defect": "Window glass are contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window glass",
+   "defect": "Window glass is damaged/chipped/scratched",
+   "action": "Replace with a new glass panel. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Missing screw on the window handle",
+   "action": "Install the missing screw. Make sure it is tightened and firm. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Rusty screw on window handle",
+   "action": "Replace with the same screw type. Make sure it is firm and tightened"
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Window handle is loose",
+   "action": "Reinstall with the new window handle. Make sure it is tightened. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Window handle is not functioning properly",
+   "action": "Replace with a new window handle. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Window handle are contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window handle",
+   "defect": "Window handle is damaged/chipped/scratched",
+   "action": "Replace with a new window handle. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Missing screw on the window hinge",
+   "action": "Install the missing screw. Make sure it is tightened and firm. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Window hinge installation is poor/loose",
+   "action": "Reinstall the hinge. Make sure the finishing is good. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Window hinge is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Window hinge is rusty",
+   "action": "Replace with a new window hinge. Test for window functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Window hinge Is stuck. Window cannot be closed properly.",
+   "action": "Reinstall the hinge. Make sure the finishing is good. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window hinge",
+   "defect": "Window hinge produces a creaking sound when opened/closed.",
+   "action": "Apply lubricant or replace the window hinge if required. Tests for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Insufficient rubber seal on the window leaf",
+   "action": "Replace with a new rubber seal with sufficient length. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Missing rubber seal/rubber seal is peeled off",
+   "action": "Install the rubber seal. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Poor paint finishing on the window leaf",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Window cannot be closed properly",
+   "action": "Readjust the window alignment. Make sure it is flushed to the frame when closed. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Window leaf clashes with wall when opened/closed",
+   "action": "Readjust the window leaf alignment. Test for functionality"
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Window leaf is contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Window leaf is damaged/chipped/scratched",
+   "action": "Sand down the affected area to the bare metal. Apply auto body filler until it is flushed to the surface. Repaint the area with same colour coded window paint."
+  },
+  {
+   "element": "Window",
+   "component": "Window leaf",
+   "defect": "Window leaf is not aligned with the window frame. Inconsistent gap when close.",
+   "action": "Readjust the window alignment. Make sure it is flushed to the frame when closed. Test for functionality"
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Gap is not properly sealed off",
+   "action": "Seal off the gap with silicone/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Hairline crack on the wall",
+   "action": "Cut along the hairline crack, install fibre/wire mesh, fill the area with skim filler, sand down the surface and repaint with same colour coded paint. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Poor skim/paint finishing",
+   "action": "Apply skim coat and sand down the affected area. c"
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Wall is bulging",
+   "action": "Chip off the affected area, apply Portland cement, fill the area with skim filler, sand down the surface and repaint with same colour coded paint. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Wall is chipped",
+   "action": "Fill the affected area with skim filler, sand down and repaint with same colour coded paint. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Wall in contaminated with stain",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Wall is uneven/not straight",
+   "action": "Chip off the affected area, apply Portland cement, fill the area with skim filler, sand down the surface and repaint with same colour coded paint. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Wall squareness exceeds tolerance",
+   "action": "Readjust the wall alignment. Make sure the wall alignment is within the acceptable tolerance <4mm"
+  },
+  {
+   "element": "Wall",
+   "component": "Concrete wall",
+   "defect": "Watermark stain spotted on the wall",
+   "action": "Further investigation must be made to check on the source of leakage. This problem must be rectified according to the approved method statement from the consultant/SO"
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Inconsistent grout colour tone",
+   "action": "Grout the gap between the tiles with the same tile gap filler tone. Make sure the gap is fully sealed"
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Tile gap is not properly sealed off. Poor finishing",
+   "action": "Grout the gap between the tiles with tile gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Wall tile/tile grout is contaminated with stain/scratched",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Wall tile inconsistent colour tone/Wall tile is damaged/chipped/hollow/uneven/not straight",
+   "action": "Replace with a new tile with the same colour coded. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test for tile hollowness."
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Wall tile is not aligned/lippage",
+   "action": "Readjust the tile alignment. Make sure it is consistent and the finishing is good"
+  },
+  {
+   "element": "Wall",
+   "component": "Wall tile",
+   "defect": "Wall tile opening is not sealed off",
+   "action": "Seal off the gap with selant/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Timber floor are contaminated with stain.",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Floor board has different colour tone",
+   "action": "Replace with the same colour coded floor board. Make sure the surface is even, the alignment is consistent and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Floor board is damaged/chipped/scratched",
+   "action": "Replace with the same colour coded floor board. Make sure the surface is even, the alignment is consistent and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Floor board is uneven/lippage",
+   "action": "Reinstall the floor panel. Make sure the surface is even, the alignment is consistent and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Floor board is wobbly and not firm",
+   "action": "Reinstall the floor panel. Make sure the surface is even, the alignment is consistent and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Floor coating finishing is poor/faded/not properly done",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/S.O."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Gap between floor board and door frame is not properly sealed off",
+   "action": "Grout the gap with gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Gap between floor board is not sealed off",
+   "action": "Grout the gap between the floor board with sealant/filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Gap between floor skirting and wall is not sealed off",
+   "action": "Grout the gap with gap filler/sealant. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Inconsistent gap between floor board",
+   "action": "Readjust the floor board alignment. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Timber floor",
+   "defect": "Visible gap between floor skirt and floor board when load is applied",
+   "action": "Grout the gap with gap filler/sealant. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting is contaminated with stains.",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Gap between skirting and wall is not properly sealed off",
+   "action": "Grout the gap between the wall with gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Poor finishing on the wood skirting",
+   "action": "Reinstall the wood skirting. Make sure it is firm and the finishing is good. Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting gap is not properly sealed off. Poor finishing",
+   "action": "Grout the gap with gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting has inconsistent colour tone",
+   "action": "Sand down the affected area. Repaint with the same colour coded paint. Make sure the surface is smooth and even."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting is damaged/chipped/cracked",
+   "action": "Replace with a new skirting with the same colour coded. Ensure the tile alignment is consistent and adhesive is fully spread."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting lippage exceeds tolerance",
+   "action": "Readjust the skirting alignment. Make sure the surface is even and the tile adhesive is fully spread."
+  },
+  {
+   "element": "Floor",
+   "component": "Wood skirting",
+   "defect": "Wood skirting paint peeled off",
+   "action": "Repaint the affected area with the same colour coded paint. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile are contaminated with stain/scratched.",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile inconsistent colour tone.",
+   "action": "Replace with a new tile with the same colour tone. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test the tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile is chipped/damaged.",
+   "action": "Replace with a new tile with the same colour tone. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test the tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile is faded",
+   "action": "Replace with a new tile with the same colour tone. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test the tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile is hollow.",
+   "action": "Replace with a new tile with the same colour tone. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test the tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile is uneven/not straight.",
+   "action": "Replace with a new tile with the same colour tone. Ensure the tile alignment is consistent and tile adhesive is fully spread. Test the tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Floor tile lippage exceeds tolerance",
+   "action": "Readjust the tile alignment. Make sure the surface is even and tile adhesive is fully spread. Test for tile hollowness and evenness."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Gap between floor tile and door frame is not properly sealed off.",
+   "action": "Grout the gap with gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Inconsistent grout colour tone.",
+   "action": "Grout the gap between the tiles with the same tile gap filler tone. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Tile edge is sharp",
+   "action": "Chamfer the tile edge. Make sure the finishing is smooth and good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Tile gap is not properly sealed off. Poor finishing",
+   "action": "Grout the gap between the tiles with tile gap filler. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Floor tiles",
+   "defect": "Water remains stagnant on one side of the floor.",
+   "action": "Readjust the floor tiles gradient. Make sure the finishing is good and the gradient is directed towards the floor trap. Test with spirit level."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tiles skirting is contaminated with stain.",
+   "action": "Remove the stain and clean the affected area. Make sure the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Inconsistent grout colour tone",
+   "action": "Grout the between the tiles with the same tile gap filler tone. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tile gap is not properly sealed off. Poor finishing",
+   "action": "Grout the between the tiles with the tile gap filler tone. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tile skirting inconsistent colour tone",
+   "action": "Replace with a new tile with the same colour code. Ensure the tile alignment is consistent and the tile adhesive is fully spread. Test for tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tiles skirting is damaged/chipped",
+   "action": "Replace with a new tile with the same colour code. Ensure the tile alignment is consistent and the tile adhesive is fully spread. Test for tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tile skirting is hollow",
+   "action": "Replace with a new tile with the same colour code. Ensure the tile alignment is consistent and the tile adhesive is fully spread. Test for tile hollowness."
+  },
+  {
+   "element": "Floor",
+   "component": "Tiles skirting",
+   "defect": "Tile skirting lippage exceeds tolerance",
+   "action": "Readjust the tile alignment. Make sure the surface is even and tile adhesive is fully spread. Test for tile hollowness and evenness."
+  },
+  {
+   "element": "Roof",
+   "component": "Roof tiles",
+   "defect": "Roof tiles are chipped/damaged",
+   "action": "Replace with a new roof tile. Make sure it is aligned and the finishing is good."
+  },
+  {
+   "element": "Roof",
+   "component": "Roof tiles",
+   "defect": "Roof tile is not aligned/not installed properly",
+   "action": "Reinstall the roof tile. Make sure it is aligned and the finishing is good."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Ceiling bracket is rusty",
+   "action": "Replace with a new ceiling bracket. Make sure it is firm and tightened."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Ceiling is chipped",
+   "action": "Filled the affected area with a skim filler, sand down and repaint with same colour coded paint. Ensure surface is smooth and even."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Ceiling is uneven/not straight",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Construction debris left above the ceiling",
+   "action": "Remove the debris. Make sure the area is clean."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Gap between ceiling and wall is not properly sealed off",
+   "action": "Seal off the gap with silicon/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Hairline crack on the ceiling",
+   "action": "Cut along the hairline crack, install fibre/wire mesh, fill the area with skim filler, sand down the surface and repaint with same colour coded paint."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Missing water drip grooveline/Poor water drip grooveline finishing",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Poor skim/paint finishing",
+   "action": "Apply skim coat and sand down the affected area. Repaint with the same colour coded paint and ensure the surface is smooth and even."
+  },
+  {
+   "element": "Ceiling",
+   "component": "Ceiling",
+   "defect": "Watermark stain spotted on the ceiling",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Bottle trap",
+   "defect": "Bottle trap is clogged/slow draining",
+   "action": "Remove any debris and clear the bottle trap. Test for water flow. Replace if required."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Bottle trap",
+   "defect": "Bottle trap is damaged",
+   "action": "Replace with a new bottle trap. Make sure the height is right. Test for water flow and water leakage."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Bottle trap",
+   "defect": "Bottle trap is leaking",
+   "action": "Check the source of leakage. Apply Teflon tape around the pipe thread. Replace if required. Test for water leakage."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Bottle trap",
+   "defect": "Bottle trap is loose",
+   "action": "Reinstall the bottle trap. Make sure it is firm and tighten. Apply Teflon tape around the pipe thread and test for water leakage."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Discharge pipe",
+   "defect": "Discharge pipe is clogged/slow draining",
+   "action": "Remove any debris and clear the discharge pipe. Test for water flow."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Discharge pipe",
+   "defect": "Discharge pipe is damage",
+   "action": "Replace with a new discharge pipe. Make sure the gradient is right. Test for water flow and water leakage."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Discharge pipe",
+   "defect": "Discharge pipe is leaking",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Plumbing",
+   "component": "Discharge pipe",
+   "defect": "Discharge pipe is slanted/reversed gradient",
+   "action": "Reinstall the discharge pipe. Make sure the gradient towards the right direction. Test with spirit level and water flow."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "DB cover is damaged",
+   "action": "Replace with a new DB cover. Make sure the finishing is good."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "DB is not properly installed",
+   "action": "Reinstall the DB. Make sure the finishing is good."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "Earthing for metal DB cover leakage protection is not provided",
+   "action": "Install the earthing link for safety purpose."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "Gap between DB and wall is not properly sealed off",
+   "action": "Seal off the gap with sealant/filler. Make sure the finishing is good."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "Missing blank plate cover on the unused slot",
+   "action": "Install the blank plate cover on the unused slot. Make sure the finishing is good."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "Missing screw on the DB cover",
+   "action": "Install the missing screw. Make sure it is tightened and firm. Test for functionality."
+  },
+  {
+   "element": "Electrical Fitting",
+   "component": "Distributio n Board",
+   "defect": "Single line diagram and MCB label are not provided",
+   "action": "Provide the Single Line Diagram and MCB label for owner’s future maintenance purpose."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Missing shower head",
+   "action": null
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "No hot water supply",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is chipped/damaged/dented",
+   "action": "Reinstall the shower head. Test for functionality and leakage"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is leaking",
+   "action": null
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is loose",
+   "action": "Reinstall the shower head. Make sure it is tightened and firm. Test for functionality and leakage"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is not functioning properly",
+   "action": "Replace with a new shower head. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is rusty",
+   "action": "Replace with a new shower head. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head is slanted",
+   "action": "Readjust the shower head alignment. Make sure the finishing is good."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Shower Head",
+   "defect": "Shower head water pressure is low",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "No hot water supply",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "Water tap is damaged",
+   "action": "Replace with a new water tap. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "Water tap is leaking/dripping",
+   "action": "Check the source of leakage. Apply Teflon tape around the pipe thread. Replace if required. Test for water leakage."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "Water tap is loose",
+   "action": "Reinstall the water tap. Make sure it is tightened and firm. Test for functionality."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "Water tap is rusty",
+   "action": "Replace with a new water tap. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "Water tap",
+   "defect": "Water tap water pressure is low",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "Flush button is not functioning properly",
+   "action": "Readjust the flush button installation. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "Toilet cistern float is not functioning. Water overflows.",
+   "action": "Replace with a new toilet cistern float. Make sure water stops at the required level. Test for functionality."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern has no water supply",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern inlet pipe is rusty/damaged",
+   "action": "Replace with a new inlet pipe. Make sure the finishing is good. Test for leakage."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern is chipped/damaged",
+   "action": "Replace with a new WC cistern. Test for functionality and leakage."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern is leaking",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern is loose",
+   "action": "Reinstall the cistern. Make sure it is plugged to the wall, tightened and firm. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC cistern lid is loose",
+   "action": "Reinstall the cistern lid. Replace if required. Test for functionality"
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Cistern",
+   "defect": "WC inlet pipe is leaking",
+   "action": "Check the source of leakage. Apply Teflon tape around the pipe thread. Replace if required. Test for water leakage."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Gap between WC and floor tiles is not sealed off",
+   "action": "Grout the gap with sealant. Make sure the gap is fully sealed and the finishing is good."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl is chipped/damaged/crack",
+   "action": "Replace with a new toilet bowl. Test for functionality and leakage."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl is clogged/slow draining",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl is leaking",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl is loose",
+   "action": "Reinstall the toilet bowl. Make sure it is tightened and firm. Test for leakage and functionality."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl seat cover is damaged",
+   "action": "Replace with a new toilet bowl seat cover. Test for functionality."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Toilet bowl is cover is loose",
+   "action": "Reinstall the toilet bowl seat cover. Make sure it is tightened and firm. Test for functionality."
+  },
+  {
+   "element": "Sanitary Fitting",
+   "component": "WC Toilet Bowl",
+   "defect": "Water keeps flowing inside the toilet bowl after pressing the flush button",
+   "action": "Further investigation must be made by the Developer to check on the source of problem. This problem must be rectified according to the approved method statement from the Consultant/SO."
+  }
+ ]
+}
