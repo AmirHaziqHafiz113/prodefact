@@ -802,7 +802,9 @@ void main() {
       raw.execute(
         'ALTER TABLE finding_rows DROP COLUMN ai_attempt_submitted_at',
       );
-      raw.execute('ALTER TABLE evidence_rows DROP COLUMN annotated_file_path');
+      raw.execute(
+        'ALTER TABLE evidence_rows DROP COLUMN annotated_file_path',
+      );
       raw.execute('PRAGMA user_version = 10');
       raw.close();
 
@@ -907,11 +909,8 @@ void main() {
     addTearDown(db.close);
     final repo = DriftInspectionRepository(db);
 
-    final photo = (await repo.loadSession(session.id))!
-        .findings
-        .single
-        .evidence
-        .single;
+    final photo =
+        (await repo.loadSession(session.id))!.findings.single.evidence.single;
     expect(photo.filePath, '/evidence/finding_v11/original.jpg');
     expect(photo.syncStatus, SyncStatus.synced);
     expect(photo.annotatedFilePath, isNull);
@@ -923,11 +922,8 @@ void main() {
       'evidence_v11',
       '/evidence/finding_v11/original_annotated.png',
     );
-    final marked = (await repo.loadSession(session.id))!
-        .findings
-        .single
-        .evidence
-        .single;
+    final marked =
+        (await repo.loadSession(session.id))!.findings.single.evidence.single;
     expect(marked.filePath, '/evidence/finding_v11/original.jpg');
     expect(
       marked.annotatedFilePath,

@@ -206,7 +206,9 @@ void main() {
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
-      propertyDetails: const PropertyDetails(contactNumber: '+60123456789'),
+      propertyDetails: const PropertyDetails(
+        contactNumber: '+60123456789',
+      ),
     );
     await _addResolvedFinding(local, session.id);
     await local.setSessionStatus(
@@ -243,7 +245,9 @@ void main() {
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
-      propertyDetails: const PropertyDetails(contactNumber: '+60123456789'),
+      propertyDetails: const PropertyDetails(
+        contactNumber: '+60123456789',
+      ),
     );
     await _addResolvedFinding(local, session.id);
     await local.setSessionStatus(
@@ -274,7 +278,9 @@ void main() {
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
-      propertyDetails: const PropertyDetails(contactNumber: '+60123456789'),
+      propertyDetails: const PropertyDetails(
+        contactNumber: '+60123456789',
+      ),
     );
     await _addResolvedFinding(local, session.id);
     await local.setSessionStatus(
@@ -341,7 +347,9 @@ void main() {
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
-      propertyDetails: const PropertyDetails(contactNumber: '+60123456789'),
+      propertyDetails: const PropertyDetails(
+        contactNumber: '+60123456789',
+      ),
     );
     await _addResolvedFinding(firstRepository, session.id);
     await firstRepository.setSessionStatus(
