@@ -114,6 +114,13 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "f. Is it reliable enough to accept? If not, set needsReview to",
     "   true — but still give your best entry and the next best ones.",
     "",
+    "COMPONENT FIRST, DEFECT SECOND: settle the component (note and",
+    "photo together), then choose the defect only among that",
+    "component's entries. When the note spells out a defect (e.g.",
+    "'poor paint') the photo's job is to confirm WHICH component and",
+    "to challenge the note only if it plainly shows something else.",
+    "Never swap in a different component to make an entry fit.",
+    "",
     "IS THIS AN INSPECTION PHOTO?",
     "First decide whether the photo is meaningfully related to a",
     "home/property inspection (building elements, finishes, fittings,",
@@ -188,6 +195,59 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
   ].join("\n");
 }
 
+/**
+ * Safe, structured per-request hints (no raw note, no image): what the
+ * note alone already pins down, and — for an explicit Reanalyse — what
+ * the earlier attempt reported.
+ * @param {ClassifyFindingInput} input the finding's context.
+ * @return {string[]} extra user-message lines.
+ */
+export function noteReadingLines(input: ClassifyFindingInput): string[] {
+  const lines: string[] = [];
+  const strong = input.strongNote;
+  if (strong?.componentIds.length) {
+    lines.push(
+      `note names component: ${strong.componentNames.join(", ")} — choose ` +
+      "the defect WITHIN this component unless the photo plainly shows " +
+      "something else"
+    );
+  }
+  if (strong && strong.entryIds.length > 0) {
+    lines.push(
+      "note spells out a defect that matches the first listed entries — " +
+      "the photo only needs to confirm the component"
+    );
+  }
+  if (strong?.unlistedTerms.length) {
+    lines.push(
+      "note names a part the catalogue does not list: " +
+      `${strong.unlistedTerms.join(", ")} — do NOT map it onto a ` +
+      "different component; set needsReview to true"
+    );
+  }
+  const attempt = input.reanalysisAttempt ?? 0;
+  if (attempt > 0) {
+    lines.push(
+      `this is reanalysis attempt ${attempt}: the previous analysis was ` +
+      "not accepted. Re-evaluate the note and the photo independently, " +
+      "paying particular attention to the component and to the " +
+      "inspector's own terminology. Do not simply pick a different " +
+      "answer — pick the correct one, or set needsReview."
+    );
+    const prev = input.previousAttempt;
+    if (prev?.needsReviewReason) {
+      lines.push(`previous outcome: ${prev.needsReviewReason}`);
+    }
+    if (prev?.detectedComponent) {
+      lines.push(`previously detected component: ${prev.detectedComponent}`);
+    }
+    if (prev?.selectedEntryId) {
+      lines.push(`previously selected entry id: ${prev.selectedEntryId}`);
+    }
+  }
+  return lines;
+}
+
 export type PromptContentBlock =
   | {type: "text"; text: string}
   | {type: "image_url"; image_url: {url: string; detail: "auto"}};
@@ -221,6 +281,7 @@ export function buildFindingContent(
   lines.push(
     `area: ${input.area}${input.isPlumbingArea ? " (plumbing area)" : ""}`
   );
+  lines.push(...noteReadingLines(input));
 
   const photoCount = images.images.length;
   if (photoCount > 0) {

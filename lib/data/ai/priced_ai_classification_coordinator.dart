@@ -101,6 +101,17 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       evidenceFilePaths: finding.evidence.map((e) => e.filePath).toList(),
       evidenceIds: finding.evidence.map((e) => e.id).toList(),
       reanalysisAttempt: reanalysisCount,
+      // A Reanalyse tells the backend (safely) what the earlier,
+      // unaccepted attempt said, so the second look is deliberate.
+      previousAttempt: reanalyse && previous != null
+          ? PreviousAttemptContext(
+              needsReviewReason: previous.needsReviewReason,
+              detectedComponent: previous.detectedComponent,
+              selectedEntryId: previous.hasFinalEntry
+                  ? previous.finalCatalogueEntryId
+                  : previous.suggestedCatalogueEntryId,
+            )
+          : null,
     );
 
     // Billing identity. An outstanding attempt (persisted before an
@@ -215,9 +226,8 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
 
     // A finding deleted while its request was in flight must never come
     // back (as an orphan suggestion) when the answer arrives.
-    final stillExists = (await _local.loadSession(
-      session.id,
-    ))?.findings.any((f) => f.id == finding.id);
+    final stillExists = (await _local.loadSession(session.id))?.findings
+        .any((f) => f.id == finding.id);
     if (stillExists != true) {
       AppLogger.info('ai_result_discarded finding=${finding.id} deleted=true');
       return const AiClassificationResult.findingNotFound();

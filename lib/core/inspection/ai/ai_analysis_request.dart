@@ -14,6 +14,7 @@ class AiFindingClassificationRequest {
     this.evidenceFilePaths = const [],
     this.evidenceIds = const [],
     this.reanalysisAttempt = 0,
+    this.previousAttempt,
   });
 
   final String sessionId;
@@ -41,4 +42,22 @@ class AiFindingClassificationRequest {
   /// Which explicit inspector "Reanalyse" this is (0 = first analysis).
   /// Sent for analytics/logging only — billing is per request key.
   final int reanalysisAttempt;
+
+  /// For a Reanalyse only: safe, structured facts about the attempt it
+  /// replaces (never the note, never the image). The backend keeps only
+  /// controlled values and tells the model the earlier answer was not
+  /// accepted — it never asks for "a different answer".
+  final PreviousAttemptContext? previousAttempt;
+}
+
+class PreviousAttemptContext {
+  const PreviousAttemptContext({
+    this.needsReviewReason,
+    this.detectedComponent,
+    this.selectedEntryId,
+  });
+
+  final String? needsReviewReason;
+  final String? detectedComponent;
+  final String? selectedEntryId;
 }

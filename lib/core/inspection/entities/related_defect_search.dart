@@ -184,3 +184,32 @@ Set<String> _searchableText(DefectCatalogueEntry entry) {
       '${entry.defectDescription}';
   return _tokensOf(joined);
 }
+
+/// The component this finding most likely concerns, from the AI's
+/// detected component or — failing that — the component(s) whose full
+/// name the note spells out (after alias/typo expansion). Null when
+/// nothing specific is named: the full catalogue search still works.
+/// Deterministic and on-device; never calls AI.
+DefectCatalogueComponent? likelyComponentFor(RelatedDefectContext context) {
+  final catalogue = DefectCatalogue.instance;
+  final detected = context.detectedComponent?.trim().toLowerCase();
+  if (detected != null && detected.isNotEmpty) {
+    for (final c in catalogue.components) {
+      if (c.name.toLowerCase() == detected) return c;
+    }
+  }
+  final noteTokens = _queryTokensOf(context.note ?? '');
+  if (noteTokens.isEmpty) return null;
+  DefectCatalogueComponent? best;
+  var bestWords = 0;
+  for (final c in catalogue.components) {
+    final words = _tokensOf(c.name);
+    if (words.isEmpty || !words.every(noteTokens.contains)) continue;
+    // "sliding door frame" beats "door frame" when both are spelled out.
+    if (words.length > bestWords) {
+      best = c;
+      bestWords = words.length;
+    }
+  }
+  return best;
+}

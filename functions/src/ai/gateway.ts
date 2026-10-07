@@ -258,7 +258,7 @@ export function validateAndNormalize(
     typeof result.catalogueEntryId === "string" ?
       result.catalogueEntryId.trim() :
       undefined;
-  const validId =
+  let validId =
     rawId !== undefined && isAllowed(rawId) ?
       rawId :
       undefined;
@@ -269,12 +269,45 @@ export function validateAndNormalize(
       rawId.split(MULTI_ID_SEPARATOR).filter(isAllowed) :
       [];
 
-  const confidence = clampConfidence(result.confidence);
+  let confidence = clampConfidence(result.confidence);
+
+  const strong = input.strongNote;
+  const imageIsUsable = result.imageUsable !== false;
+  const agreement = String(result.noteImageAgreement);
+  const detectedName = bounded(result.detectedComponent, MAX_DETECTED);
+
+  // The note names a part the catalogue has no component for (e.g. a
+  // railing): never forced onto a look-alike component.
+  const unlistedPart = (strong?.unlistedTerms.length ?? 0) > 0 &&
+    (strong?.componentIds.length ?? 0) === 0;
+
+  // The note alone pins down exactly one entry (its component and its
+  // defect), the photo does not contradict it, and the model gave no
+  // usable pick: the inspector's on-site reading wins over a vague
+  // image reading. Never overrides a pick the model did make.
+  let anchoredByNote = false;
+  const anchorId = strong && strong.componentIds.length > 0 &&
+    strong.entryIds.length === 1 && isAllowed(strong.entryIds[0]) ?
+    strong.entryIds[0] :
+    undefined;
+  if (validId === undefined && anchorId !== undefined && imageIsUsable &&
+    agreement !== "contradicts" && !unlistedPart) {
+    const anchorEntry = defectCatalogue.getById(anchorId);
+    if (anchorEntry && (detectedName === undefined ||
+      detectedMatches(detectedName, [anchorEntry.componentName]))) {
+      validId = anchorId;
+      anchoredByNote = true;
+      confidence = Math.max(confidence ?? 0, MIN_CONFIDENT_CONFIDENCE);
+    }
+  }
 
   const entry = validId ? defectCatalogue.getById(validId) : undefined;
   const allowedTerms = entry ? defectTermsFor(entry.defectDescription) : [];
   const defectTerm = entry ?
-    matchDefectTerm(entry.defectDescription, result.defectTerm) :
+    matchDefectTerm(
+      entry.defectDescription,
+      result.defectTerm ?? (anchoredByNote ? input.note : undefined)
+    ) :
     undefined;
   // An entry that words several defects needs the ONE term too;
   // without a valid one the finding isn't concrete yet.
@@ -286,7 +319,7 @@ export function validateAndNormalize(
   // interpret at all sends the finding to the inspector.
   const imageUsable = result.imageUsable !== false;
 
-  const detectedComponent = bounded(result.detectedComponent, MAX_DETECTED);
+  const detectedComponent = detectedName;
   const detectedElement = bounded(result.detectedElement, MAX_DETECTED);
   const noteImageAgreement = (NOTE_IMAGE_AGREEMENT as readonly string[])
     .includes(String(result.noteImageAgreement)) ?
@@ -305,17 +338,31 @@ export function validateAndNormalize(
       !detectedMatches(detectedElement, [entry.mainElementName]))
   );
 
+  // The note names one component but the model chose another without
+  // saying the photo contradicts the note: a disagreement the
+  // inspector settles, never a confident wrong answer.
+  const noteComponentMismatch = entry !== undefined &&
+    (strong?.componentIds.length ?? 0) > 0 &&
+    !strong!.componentIds.includes(entry.componentId) && !contradicts;
+
   const reason: NeedsReviewReason | undefined =
     !imageUsable ? "image_quality" :
       contradicts ? "note_image_contradiction" :
-        componentMismatch ? "component_mismatch" :
-          lowConfidence ? "low_confidence" :
-            validId === undefined && combinedIds.length === 0 &&
-              !hasValidCandidate(result, isAllowed) ? "no_catalogue_match" :
-              validId === undefined || missingTerm ||
-                result.needsReview === true ? "ambiguous_candidates" :
-                undefined;
+        unlistedPart ? "no_catalogue_match" :
+          componentMismatch || noteComponentMismatch ?
+            "component_mismatch" :
+            lowConfidence ? "low_confidence" :
+              validId === undefined && combinedIds.length === 0 &&
+                !hasValidCandidate(result, isAllowed) ?
+                "no_catalogue_match" :
+                validId === undefined || missingTerm ||
+                  (result.needsReview === true && !anchoredByNote) ?
+                  "ambiguous_candidates" :
+                  undefined;
   const needsReview = reason !== undefined;
+  // A pick that disagrees with what the note names (or names a part the
+  // catalogue lacks) is never offered as the AI's answer.
+  const dropPick = unlistedPart || noteComponentMismatch;
 
   // Uncertain should still be useful: up to 4 ranked catalogue options,
   // best first — the model's own pick, then its alternatives, then
@@ -326,11 +373,14 @@ export function validateAndNormalize(
       (id): id is string => typeof id === "string" && isAllowed(id)
     ) :
     [];
-  const fallback = needsReview && input.shortlistStrategy === "noteMatch" ?
+  const fallback = needsReview &&
+    (input.shortlistStrategy === "noteMatch" || strong?.matched === true) ?
     (input.shortlistEntryIds ?? []) :
     [];
+  const noteLead = needsReview && dropPick ? strong?.entryIds ?? [] : [];
   const candidateEntryIds = dedupe([
-    ...(needsReview && validId ? [validId] : []),
+    ...(needsReview && validId && !dropPick ? [validId] : []),
+    ...noteLead.filter(isAllowed),
     ...combinedIds,
     ...modelCandidates,
     ...fallback,
@@ -347,8 +397,8 @@ export function validateAndNormalize(
     // An uncertain pick is still returned as the AI's best guess (the
     // inspector can Accept it in one tap); needsReview is what keeps it
     // from being accepted automatically.
-    catalogueEntryId: validId,
-    defectTerm,
+    catalogueEntryId: dropPick ? undefined : validId,
+    defectTerm: dropPick ? undefined : defectTerm,
     confidence,
     shortReason: bounded(result.shortReason, MAX_SHORT_REASON),
     candidateEntryIds,

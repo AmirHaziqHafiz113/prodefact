@@ -3,12 +3,18 @@ import {HttpsError} from "firebase-functions/v2/https";
 import type {Firestore} from "firebase-admin/firestore";
 import type {Storage} from "firebase-admin/storage";
 import {AiProviderError} from "../ai/provider";
-import {ClassificationResult, ClassifyFindingInput} from "../ai/types";
+import {
+  ClassificationResult,
+  ClassifyFindingInput,
+  PreviousAttemptContext,
+} from "../ai/types";
+import {defectCatalogue} from "../ai/defect_catalogue";
 import {parseClassifyFindingInput} from "../ai/validation";
 import {resolveFindingEvidence} from "../ai/evidence";
 import {buildCatalogueShortlist} from "../ai/catalogue_shortlist";
 import {
   createProvider,
+  NEEDS_REVIEW_REASONS,
   SupportedProviderId,
   validateAndNormalize,
 } from "../ai/gateway";
@@ -85,6 +91,38 @@ export interface AnalyseFindingRequest {
 }
 
 /**
+ * Validates the optional structured context a Reanalyse carries about
+ * the attempt it replaces. Only controlled values survive: a known
+ * needs-review reason, a bounded component name, a real catalogue id.
+ * @param {unknown} raw the client's `previousAttempt` value.
+ * @return {PreviousAttemptContext | undefined} the safe subset.
+ */
+export function parsePreviousAttempt(
+  raw: unknown
+): PreviousAttemptContext | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const reason = typeof r.needsReviewReason === "string" &&
+    (NEEDS_REVIEW_REASONS as readonly string[]).includes(r.needsReviewReason) ?
+    r.needsReviewReason :
+    undefined;
+  const component = typeof r.detectedComponent === "string" ?
+    // eslint-disable-next-line no-control-regex
+    r.detectedComponent.replace(/[\x00-\x1f]/g, " ").trim().slice(0, 60) :
+    undefined;
+  const entry = typeof r.selectedEntryId === "string" &&
+    defectCatalogue.isValidEntryId(r.selectedEntryId) ?
+    r.selectedEntryId :
+    undefined;
+  if (!reason && !component && !entry) return undefined;
+  return {
+    needsReviewReason: reason,
+    detectedComponent: component || undefined,
+    selectedEntryId: entry,
+  };
+}
+
+/**
  * @param {unknown} data the raw callable payload.
  * @return {AnalyseFindingRequest} the validated request.
  */
@@ -116,7 +154,11 @@ export function parseAnalyseFindingInput(
       attempt :
       0;
   return {
-    input: {...input, reanalysisAttempt},
+    input: {
+      ...input,
+      reanalysisAttempt,
+      previousAttempt: parsePreviousAttempt(d.previousAttempt),
+    },
     aiLevel: d.aiLevel,
     idempotencyKey: d.idempotencyKey,
   };
@@ -770,6 +812,7 @@ async function runClaimedJob(params: {
       ...input,
       shortlistEntryIds: shortlist.entryIds,
       shortlistStrategy: shortlist.strategy,
+      strongNote: shortlist.strongNote,
     };
 
     let result: ClassificationResult;
@@ -840,6 +883,11 @@ async function runClaimedJob(params: {
       shortlistStrategy: shortlist.strategy,
       normalizationStrategy: shortlist.normalizationStrategy,
       reanalysisAttempt: input.reanalysisAttempt ?? 0,
+      strongNoteMatch: shortlist.strongNote.matched,
+      matchedComponentIds: shortlist.strongNote.componentIds,
+      matchedEntryCount: shortlist.strongNote.entryIds.length,
+      unlistedTerms: shortlist.strongNote.unlistedTerms,
+      previousFailureReason: input.previousAttempt?.needsReviewReason ?? null,
     };
     // One photo = one finding = one request, so this is the exact AI
     // usage and raw provider cost of one image. Safe IDs, counts and

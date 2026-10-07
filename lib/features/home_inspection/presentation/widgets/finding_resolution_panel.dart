@@ -163,6 +163,14 @@ class FindingResolutionPanel extends ConsumerWidget {
                 .read(activeSessionProvider.notifier)
                 .selectDefectForFinding(finding.id, entry.id),
           ),
+        if (needsChoice && canPick)
+          _ComponentDefects(
+            finding: finding,
+            relatedContext: relatedContext,
+            onSelected: (entry) => ref
+                .read(activeSessionProvider.notifier)
+                .selectDefectForFinding(finding.id, entry.id),
+          ),
         if (canPick)
           RelatedDefectSelector(
             keyId: finding.id,
@@ -240,6 +248,54 @@ class _ResultBlock extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+  }
+}
+
+/// Every defect of the component this finding most likely concerns
+/// (from the AI's detected component or the component named in the
+/// note) — so an unresolved finding is never a dead end. One tap selects
+/// (never an AI call).
+class _ComponentDefects extends StatelessWidget {
+  const _ComponentDefects({
+    required this.finding,
+    required this.relatedContext,
+    required this.onSelected,
+  });
+
+  final Finding finding;
+  final RelatedDefectContext relatedContext;
+  final void Function(DefectCatalogueEntry entry) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final component = likelyComponentFor(relatedContext);
+    if (component == null) return const SizedBox.shrink();
+    final ranked = rankRelatedDefects(relatedContext)
+        .where((e) => e.componentId == component.id)
+        .toList();
+    if (ranked.isEmpty) return const SizedBox.shrink();
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: ValueKey('component-defects-${finding.id}'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          'All defects for ${component.name}',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        children: [
+          for (final entry in ranked)
+            ListTile(
+              key: ValueKey('component-defect-${finding.id}-${entry.id}'),
+              dense: true,
+              title: Text(entry.defectDescription),
+              trailing: const Icon(Icons.check_circle_outline),
+              onTap: () => onSelected(entry),
+            ),
+        ],
+      ),
     );
   }
 }

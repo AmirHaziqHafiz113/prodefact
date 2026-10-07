@@ -7,6 +7,7 @@ import 'package:prodefact/core/inspection/inspection_domain.dart';
 
 void main() {
   final catalogue = DefectCatalogue.instance;
+  strongNoteSearchTests();
 
   group('rankRelatedDefects', () {
     test('a component named in the note ranks first, and never excludes '
@@ -155,6 +156,91 @@ void main() {
       // Still in the same relative order as the unfiltered ranking.
       final expectedOrder = ranked.where((e) => results.contains(e)).toList();
       expect(results, expectedOrder);
+    });
+  });
+}
+
+void strongNoteSearchTests() {
+  group('2026-10-07 note accuracy on-device', () {
+    List<DefectCatalogueEntry> search(String query, {String? note}) =>
+        searchRelatedDefects(
+          ranked: rankRelatedDefects(RelatedDefectContext(note: note)),
+          query: query,
+        );
+
+    test('"poor paint" in any spelling finds the paint-finish defects', () {
+      for (final q in ['poor paint', 'por paint', 'poor peint', 'por peint']) {
+        final hits = search(q);
+        expect(hits, isNotEmpty, reason: q);
+        expect(
+          hits
+              .take(5)
+              .every(
+                (e) => RegExp(
+                  'paint',
+                  caseSensitive: false,
+                ).hasMatch(e.defectDescription),
+              ),
+          isTrue,
+          reason: q,
+        );
+      }
+    });
+
+    test('door frame / sliding door / floor tile / BM queries resolve', () {
+      expect(
+        search('door frame').first.componentName,
+        anyOf('Door Frame', 'Sliding Door Frame'),
+      );
+      expect(search('sliding door').first.componentName, startsWith('Sliding'));
+      expect(
+        search('frem pintu').map((e) => e.componentName),
+        contains('Door Frame'),
+      );
+      expect(search('retak dinding'), isNotEmpty);
+    });
+
+    test('"railing" and "floor trap" have no master component (the '
+        'catalogue lacks them): the search says so honestly, and the '
+        'likely-component helper never invents one', () {
+      expect(
+        DefectCatalogue.instance.masterEntries.any(
+          (e) => e.componentName.toLowerCase().contains('railing'),
+        ),
+        isFalse,
+      );
+      expect(
+        likelyComponentFor(
+          const RelatedDefectContext(note: 'railng por peint'),
+        ),
+        isNull,
+      );
+    });
+
+    test('likelyComponentFor: the named component wins, the more specific '
+        'name beats the shorter one, and the AI\'s detected component is '
+        'used first', () {
+      expect(
+        likelyComponentFor(const RelatedDefectContext(note: 'door frem gap'))
+            ?.name,
+        'Door Frame',
+      );
+      expect(
+        likelyComponentFor(
+          const RelatedDefectContext(note: 'sliding door frame scratched'),
+        )?.name,
+        'Sliding Door Frame',
+      );
+      expect(
+        likelyComponentFor(
+          const RelatedDefectContext(
+            note: 'something',
+            detectedComponent: 'wall tile',
+          ),
+        )?.name,
+        'Wall Tile',
+      );
+      expect(likelyComponentFor(const RelatedDefectContext()), isNull);
     });
   });
 }

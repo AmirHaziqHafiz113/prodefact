@@ -23,6 +23,7 @@ class _Backend extends FakeBillingService {
   bool unsure = false;
   Completer<void>? hold;
   int calls = 0;
+  final List<AiFindingClassificationRequest> requests = [];
 
   @override
   Future<AnalyseFindingResult> analyseFinding({
@@ -31,6 +32,7 @@ class _Backend extends FakeBillingService {
     required String idempotencyKey,
   }) async {
     calls++;
+    requests.add(request);
     if (hold != null) await hold!.future;
     if (fail) throw Exception('provider failed');
     if (unsure) {
@@ -43,6 +45,7 @@ class _Backend extends FakeBillingService {
           findingId: request.findingId,
           needsReview: true,
           needsReviewReason: 'low_confidence',
+          detectedComponent: 'Door Frame',
           candidateEntryIds: const [
             'wall.wall_tile.04',
             'wall.wall_tile.01',
@@ -238,6 +241,89 @@ void main() {
         notifier.selectDefectForFinding(finding.id, 'not.a.real.id'),
         isFalse,
       );
+    });
+  });
+
+  group('the final resolved finding is the report source of truth', () {
+    test('AI said one thing, the inspector chose another: the report '
+        'shows the inspector\'s choice, its own recommendation and no trace '
+        'of the stale AI result', () async {
+      final backend = _Backend();
+      final container = await _start(backend);
+      final finding = await _save(container, 'sliding door frame poor paint');
+      await _until(
+        () => !aiFindingStatusIsInFlight(
+          _finding(container, finding.id).aiStatus,
+        ),
+      );
+      final notifier = container.read(activeSessionProvider.notifier);
+      const manualId = 'wall.wall_tile.04';
+      notifier.selectDefectForFinding(finding.id, manualId);
+
+      final report = buildReportModel(
+        session: _session(container),
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 10, 7),
+      ).areas.expand((a) => a.findings).single;
+      final entry = DefectCatalogue.instance.byId(manualId)!;
+      expect(report.componentName, entry.componentName);
+      expect(
+        report.defectType,
+        contains(entry.defectDescription.split(' ').first),
+      );
+      expect(report.recommendation, entry.correctiveAction);
+      expect(report.componentName, isNot(contains('Sliding')));
+
+      // Changing it again (and rejecting) is just as authoritative.
+      notifier.selectDefectForFinding(finding.id, 'door.door_frame.07');
+      final again = buildReportModel(
+        session: _session(container),
+        propertyTypeLabel: 'High Rise',
+        generatedAt: DateTime(2026, 10, 7),
+      ).areas.expand((a) => a.findings).single;
+      expect(again.componentName, 'Door Frame');
+    });
+  });
+
+  group('reanalyse', () {
+    test('is one deliberate fresh request that carries the earlier '
+        'attempt\'s safe facts; the first request carries none; history '
+        'keeps the old result; a double tap makes no second call', () async {
+      final backend = _Backend()..unsure = true;
+      final container = await _start(backend);
+      final finding = await _save(container, 'door frame poor paint');
+      await _until(
+        () => !aiFindingStatusIsInFlight(
+          _finding(container, finding.id).aiStatus,
+        ),
+      );
+      expect(backend.calls, 1);
+      expect(backend.requests.single.previousAttempt, isNull);
+      expect(backend.requests.single.reanalysisAttempt, 0);
+      final firstKey = _suggestion(container, finding.id)!.aiJobKey;
+
+      final notifier = container.read(activeSessionProvider.notifier);
+      backend.unsure = false;
+      final started = await notifier.reanalyseFinding(finding.id);
+      final doubleTap = await notifier.reanalyseFinding(finding.id);
+      expect(started, isTrue);
+      expect(doubleTap, isFalse, reason: 'already running: no second call');
+      await _until(
+        () => !aiFindingStatusIsInFlight(
+          _finding(container, finding.id).aiStatus,
+        ),
+      );
+
+      expect(backend.calls, 2);
+      final second = backend.requests.last;
+      expect(second.reanalysisAttempt, 1);
+      expect(second.previousAttempt?.needsReviewReason, 'low_confidence');
+      expect(second.previousAttempt?.detectedComponent, 'Door Frame');
+      final result = _suggestion(container, finding.id)!;
+      expect(result.aiJobKey, isNot(firstKey));
+      expect(result.reanalysisCount, 1);
+      expect(result.history, hasLength(1));
+      expect(result.history.single['needsReviewReason'], 'low_confidence');
     });
   });
 

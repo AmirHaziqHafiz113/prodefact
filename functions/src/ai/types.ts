@@ -41,6 +41,38 @@ export interface ClassifyFindingInput {
   /** Server-side only: how the shortlist was built (its order is only a
    * meaningful ranking for `noteMatch`). */
   shortlistStrategy?: string;
+  /** Safe structured facts about the attempt an explicit Reanalyse is
+   * replacing (validated server-side; never the note or prompt). */
+  previousAttempt?: PreviousAttemptContext;
+  /** Server-side only: what the note itself pins down (see
+   * `catalogue_shortlist.ts`). */
+  strongNote?: StrongNoteMatch;
+}
+
+/** What a Reanalyse request may say about the attempt it replaces. */
+export interface PreviousAttemptContext {
+  needsReviewReason?: string;
+  detectedComponent?: string;
+  selectedEntryId?: string;
+}
+
+/**
+ * What the inspector's (normalised) note determines by itself, before
+ * any photo is considered — computed deterministically.
+ */
+export interface StrongNoteMatch {
+  /** The note names at least one defect (family) in the catalogue. */
+  matched: boolean;
+  /** Components whose full name the note mentions. */
+  componentIds: string[];
+  componentNames: string[];
+  /** Entries whose wording the note fully covers (within the named
+   * components when there are any). */
+  entryIds: string[];
+  /** Building parts the note names that the catalogue has no component
+   * for (e.g. "railing"): such a finding is never forced onto a
+   * look-alike component. */
+  unlistedTerms: string[];
 }
 
 /** One evidence image, already downloaded, validated, and normalized

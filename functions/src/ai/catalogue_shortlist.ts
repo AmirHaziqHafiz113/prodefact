@@ -1,5 +1,6 @@
 import {DefectCatalogueEntry, defectCatalogue} from "./defect_catalogue";
 import {defectTermsFor} from "./defect_terms";
+import {StrongNoteMatch} from "./types";
 import {
   NormalizationStrategy,
   normalizeInspectorNote,
@@ -41,6 +42,8 @@ export interface CatalogueShortlist {
   /** How the note was read (see `normalizeInspectorNote`). */
   normalizationStrategy: NormalizationStrategy;
   totalCatalogueSize: number;
+  /** What the note alone pins down (component and/or defect family). */
+  strongNote: StrongNoteMatch;
 }
 
 /** Field words for a component/element that its catalogue name lacks. */
@@ -163,7 +166,13 @@ export function buildCatalogueShortlist(input: {
   note?: string;
   area: string;
   isPlumbingArea: boolean;
+  reanalysisAttempt?: number;
 }): CatalogueShortlist {
+  // An explicit Reanalyse is a deliberate second look: the same single
+  // request, but over a broader (still capped, still relevant) list.
+  const maxEntries = (input.reanalysisAttempt ?? 0) > 0 ?
+    SHORTLIST_BROAD_MAX :
+    SHORTLIST_MAX;
   const all = defectCatalogue.entries;
   const note = input.note?.trim() ?? "";
   const reading = note ? normalizeInspectorNote(note) : undefined;
@@ -238,7 +247,7 @@ export function buildCatalogueShortlist(input: {
     // misspelt note never narrows the list to the wrong family.
     strategy = "noteWeak";
     const matched = byScore.filter((s) => s.noteScore > 0)
-      .slice(0, SHORTLIST_MAX);
+      .slice(0, maxEntries);
     const pool = scored.filter((s) => !matched.includes(s) &&
       (hintedElements.size === 0 || hintedElements.has(s.entry.mainElementId)));
     chosen = [
@@ -260,7 +269,7 @@ export function buildCatalogueShortlist(input: {
       strongComponents.has(s.entry.componentId));
     const rest = byScore.filter((s) =>
       !strongComponents.has(s.entry.componentId) && s.score > 0);
-    chosen = pick([...core, ...rest], SHORTLIST_MAX);
+    chosen = pick([...core, ...rest], maxEntries);
     if (chosen.length < SHORTLIST_MIN) {
       // Too narrow: broaden with siblings of the matched elements.
       const elements = new Set(chosen.map((s) => s.entry.mainElementId));
@@ -281,15 +290,131 @@ export function buildCatalogueShortlist(input: {
     chosen = roundRobinByComponent(scored, SHORTLIST_BROAD_MAX);
   }
 
-  const entries = chosen.map((s) => s.entry);
+  const strongNote = detectStrongNote(normalized || note);
+  let entries = chosen.map((s) => s.entry);
+  // Component first: when the note names a component, every entry of
+  // it is offered (and ranked first) — the defect is then chosen
+  // within that component rather than across look-alike ones.
+  if (strongNote.componentIds.length > 0) {
+    const named = new Set(strongNote.componentIds);
+    const fromNamed = all.filter((e) => named.has(e.componentId));
+    const ordered = [
+      ...strongNote.entryIds.flatMap((id) => {
+        const e = all.find((x) => x.id === id);
+        return e ? [e] : [];
+      }),
+      ...fromNamed,
+      ...entries,
+    ];
+    const seen = new Set<string>();
+    entries = ordered.filter((e) => !seen.has(e.id) && seen.add(e.id))
+      .slice(0, Math.max(maxEntries, fromNamed.length));
+  } else if (strongNote.entryIds.length > 0) {
+    // A defect family the note spells out ("poor paint") leads the list.
+    const lead = strongNote.entryIds.flatMap((id) => {
+      const e = all.find((x) => x.id === id);
+      return e ? [e] : [];
+    });
+    const seen = new Set<string>();
+    entries = [...lead, ...entries]
+      .filter((e) => !seen.has(e.id) && seen.add(e.id))
+      .slice(0, maxEntries);
+  }
   return {
     entries,
     entryIds: entries.map((e) => e.id),
     strategy,
     normalizationStrategy: reading?.strategy ?? "none",
     totalCatalogueSize: all.length,
+    strongNote,
   };
 }
+
+/**
+ * Deterministically reads what the (normalised) note pins down: the
+ * components whose full name it mentions, and the entries whose wording
+ * covers every remaining content word. No model call.
+ * @param {string} text the normalised note.
+ * @return {StrongNoteMatch} the match, `matched: false` when nothing
+ *   specific is named.
+ */
+export function detectStrongNote(text: string): StrongNoteMatch {
+  const none: StrongNoteMatch = {
+    matched: false, componentIds: [], componentNames: [], entryIds: [],
+    unlistedTerms: [],
+  };
+  const noteWords = Array.from(new Set(words(text)));
+  if (noteWords.length === 0) return none;
+  const all = defectCatalogue.entries;
+  const unlistedTerms = UNLISTED_PARTS
+    .filter((phrase) => phrase.every((p) => noteWords.some((n) => same(n, p))))
+    .map((phrase) => phrase.join(" "));
+  // Words that only name an uncatalogued part are not defect wording.
+  const unlistedWords = new Set(
+    UNLISTED_PARTS.filter((p) => unlistedTerms.includes(p.join(" ")))
+      .flat());
+
+  const components = new Map<string, string>();
+  for (const e of all) components.set(e.componentId, e.componentName);
+  // The most specific names first, so "sliding door frame" is taken
+  // whole and does not also claim the plain "door frame".
+  const named = Array.from(components.entries())
+    .map(([id, name]) => ({id, name, ws: words(name)}))
+    .filter((c) => c.ws.length > 0 &&
+      c.ws.every((w) => noteWords.some((n) => same(n, w))))
+    .sort((a, b) => b.ws.length - a.ws.length);
+  const claimed = new Set<string>();
+  const chosen: typeof named = [];
+  for (const c of named) {
+    if (c.ws.every((w) => claimed.has(w)) && chosen.length > 0) continue;
+    chosen.push(c);
+    c.ws.forEach((w) => claimed.add(w));
+  }
+  // "door frame" is part of "sliding door frame": drop the shorter one
+  // when the note clearly says sliding.
+  const finalNamed = chosen.filter((c) =>
+    !chosen.some((o) => o !== c && o.ws.length > c.ws.length &&
+      c.ws.every((w) => o.ws.includes(w))));
+
+  const componentWords = new Set(finalNamed.flatMap((c) => c.ws));
+  const defectWords = noteWords.filter((w) =>
+    !Array.from(componentWords).some((c) => same(c, w)) &&
+    !Array.from(unlistedWords).some((u) => same(u, w)));
+  const pool = finalNamed.length > 0 ?
+    all.filter((e) => finalNamed.some((c) => c.id === e.componentId)) :
+    all;
+  // With a named component one more word is enough ("railing paint");
+  // without one the note must spell out a defect ("poor paint").
+  const needed = finalNamed.length > 0 ? 1 : 2;
+  const entryIds = defectWords.length >= needed ?
+    pool.filter((e) => {
+      const dw = [
+        ...words(e.defectDescription),
+        ...defectTermsFor(e.defectDescription).flatMap(words),
+      ];
+      return defectWords.every((w) => dw.some((d) => same(d, w)));
+    }).slice(0, 12).map((e) => e.id) :
+    [];
+
+  return {
+    matched: finalNamed.length > 0 || entryIds.length > 0,
+    componentIds: finalNamed.map((c) => c.id),
+    componentNames: finalNamed.map((c) => c.name),
+    entryIds,
+    unlistedTerms,
+  };
+}
+
+/**
+ * Parts inspectors name that the controlled catalogue has no component
+ * for. A note naming one must not be forced onto a look-alike (a
+ * railing is not a door); the inspector adds it to their own catalogue.
+ * Stemmed words; every word of a phrase must appear.
+ */
+const UNLISTED_PARTS: string[][] = [
+  ["railing"], ["handrail"], ["balustrade"], ["staircase"], ["stair"],
+  ["floor", "trap"], ["cabinet"], ["wardrobe"], ["countertop"], ["fence"],
+];
 
 /**
  * An even spread: the first entry of every component, then the second,

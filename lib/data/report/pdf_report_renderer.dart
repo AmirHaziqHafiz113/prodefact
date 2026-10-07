@@ -35,25 +35,29 @@ class PdfReportRenderer implements ReportRenderer {
   Future<Uint8List> render(ReportModel model) async {
     final doc = pw.Document(compress: compress);
 
-    // Page 1: branding, title, report details and the Inspection
-    // Summary only. Defects always start on page 2.
+    // Page 1 (cover): brand header, the large Residence / Unit Photo,
+    // the report title, then the property and inspector details and the
+    // Inspection Summary. Defects always start on page 2.
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: _pageMargin,
         footer: _buildFooter,
         build: (context) => [
-          _buildCover(model),
-          pw.SizedBox(height: 16),
+          _buildBrandHeader(model),
+          pw.SizedBox(height: 14),
           ..._buildResidencePhoto(model),
+          _buildCoverTitleAndDetails(model),
+          pw.SizedBox(height: 14),
           _buildSummary(model),
         ],
       ),
     );
 
-    // One MultiPage per planned page of at most 5 findings: each starts
-    // on a fresh page, and if its photos are too tall for one page it
-    // continues onto the next without ever splitting a finding.
+    // One MultiPage per planned page of at most 5 findings, each a table
+    // (No. | Area / Element | Finding | Photo | Recommendation | Note).
+    // A table that outgrows its page continues on the next one with the
+    // header row repeated; a row is never split.
     final pages = planDefectPages(
       model,
       findingHeight: _estimatedFindingHeight,
@@ -70,7 +74,7 @@ class PdfReportRenderer implements ReportRenderer {
           margin: _pageMargin,
           header: (context) => _buildRunningHeader(model),
           footer: _buildFooter,
-          build: (context) => [for (final entry in page) ..._buildEntry(entry)],
+          build: (context) => [_buildDefectTable(page)],
         ),
       );
     }
@@ -83,78 +87,111 @@ class PdfReportRenderer implements ReportRenderer {
   pw.Text _text(String value, {pw.TextStyle? style, pw.TextAlign? align}) =>
       pw.Text(pdfSafeText(value), style: style, textAlign: align);
 
-  pw.Widget _buildCover(ReportModel model) {
+  /// Top band of the cover: brand on the left, document kind on the
+  /// right, over a rule.
+  pw.Widget _buildBrandHeader(ReportModel model) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _text(
-          'ProDefact',
-          style: pw.TextStyle(
-            fontSize: 28,
-            fontWeight: pw.FontWeight.bold,
-            color: _accentColor,
-          ),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            _text(
+              'ProDefact',
+              style: pw.TextStyle(
+                fontSize: 22,
+                fontWeight: pw.FontWeight.bold,
+                color: _accentColor,
+              ),
+            ),
+            pw.Spacer(),
+            _text(
+              'Home Inspection',
+              style: pw.TextStyle(fontSize: 10, color: _mutedColor),
+            ),
+          ],
         ),
-        pw.SizedBox(height: 4),
-        _text(
-          'Home Inspection Report',
-          style: pw.TextStyle(fontSize: 16, color: _mutedColor),
-        ),
-        pw.SizedBox(height: 16),
-        pw.Divider(color: _dividerColor),
-        pw.SizedBox(height: 12),
-        _buildCoverRow(
-          'Property',
-          model.propertyTitle ?? model.propertyTypeLabel,
-        ),
-        if (model.projectDeveloperName != null)
-          _buildCoverRow('Project / Developer', model.projectDeveloperName!),
-        if (model.blockTower != null || model.unitNumber != null)
-          _buildCoverRow(
-            'Block / Unit',
-            [
-              model.blockTower,
-              model.unitNumber,
-            ].whereType<String>().join(' / '),
-          ),
-        if (model.propertyAddress != null)
-          _buildCoverRow('Address', model.propertyAddress!),
-        _buildCoverRow('Property type', model.propertyTypeLabel),
-        if (model.clientName != null)
-          _buildCoverRow('Client', model.clientName!),
-        if (model.contactNumber != null)
-          _buildCoverRow('Client / Agent Contact', model.contactNumber!),
-        if (model.inspectorName != null)
-          _buildCoverRow('Inspector', model.inspectorName!),
-        _buildCoverRow('Inspection ID', model.sessionId),
-        _buildCoverRow(
-          'Inspection date & time',
-          _formatDateTime(model.inspectionDate),
-        ),
-        _buildCoverRow(
-          'Report date',
-          _formatDate(model.reportDate ?? model.generatedAt),
-        ),
-        _buildCoverRow('Report generated', _formatDate(model.generatedAt)),
-        _buildCoverRow('Report version', 'v${model.version}'),
+        pw.SizedBox(height: 6),
+        pw.Container(height: 2, color: _accentColor),
       ],
     );
   }
 
-  /// The optional Residence / Unit Photo: a fixed, full-width box in the
-  /// middle of page 1 with the photo fitted inside it (aspect ratio
+  /// The title and the dynamic property/inspector details, below the
+  /// photo.
+  pw.Widget _buildCoverTitleAndDetails(ReportModel model) {
+    final title = model.propertyTitle ?? model.propertyTypeLabel;
+    final property = [
+      title,
+      if (model.blockTower != null && !title.contains(model.blockTower!))
+        model.blockTower!,
+      if (model.unitNumber != null && !title.contains(model.unitNumber!))
+        model.unitNumber!,
+    ].join(', ');
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Center(
+          child: _text(
+            'BUILDING DEFECT INSPECTION REPORT',
+            align: pw.TextAlign.center,
+            style: pw.TextStyle(
+              fontSize: 19,
+              fontWeight: pw.FontWeight.bold,
+              color: _accentColor,
+            ),
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Center(
+          child: _text(
+            property,
+            align: pw.TextAlign.center,
+            style: pw.TextStyle(fontSize: 12, color: _textColor),
+          ),
+        ),
+        pw.SizedBox(height: 12),
+        pw.Divider(color: _dividerColor, height: 1),
+        pw.SizedBox(height: 8),
+        if (model.propertyAddress != null)
+          _buildCoverRow('Address', model.propertyAddress!),
+        if (model.clientName != null)
+          _buildCoverRow('Purchaser / Owner', model.clientName!),
+        _buildCoverRow('Property type', model.propertyTypeLabel),
+        if (model.projectDeveloperName != null)
+          _buildCoverRow('Project / Developer', model.projectDeveloperName!),
+        _buildCoverRow(
+          'Inspection date',
+          _formatDateTime(model.inspectionDate),
+        ),
+        if (model.inspectorName != null)
+          _buildCoverRow('Prepared by', model.inspectorName!),
+        if (model.contactNumber != null)
+          _buildCoverRow('Contact', model.contactNumber!),
+        pw.SizedBox(height: 4),
+        _text(
+          'Report v${model.version} - ${_formatDate(model.reportDate ?? model.generatedAt)} '
+          '- ID ${model.sessionId}',
+          style: pw.TextStyle(fontSize: 8, color: _mutedColor),
+        ),
+      ],
+    );
+  }
+
+  /// The large Residence / Unit Photo at the top of the cover: a fixed,
+  /// full-width box with the photo fitted inside it (aspect ratio
   /// preserved, never stretched). Nothing is drawn — and no blank box is
   /// left behind — when there is no photo or it can't be read.
   List<pw.Widget> _buildResidencePhoto(ReportModel model) {
     final path = model.coverPhotoPath;
-    if (path == null || path.isEmpty) return const [];
+    if (path == null || path.isEmpty) return [pw.SizedBox(height: 24)];
     final pw.MemoryImage image;
     try {
       final file = File(path);
-      if (!file.existsSync()) return const [];
+      if (!file.existsSync()) return [pw.SizedBox(height: 24)];
       image = pw.MemoryImage(file.readAsBytesSync());
     } catch (_) {
-      return const [];
+      return [pw.SizedBox(height: 24)];
     }
     return [
       pw.Container(
@@ -163,17 +200,16 @@ class PdfReportRenderer implements ReportRenderer {
         decoration: pw.BoxDecoration(
           color: _findingBackground,
           border: pw.Border.all(color: _dividerColor),
-          borderRadius: pw.BorderRadius.circular(6),
         ),
-        padding: const pw.EdgeInsets.all(4),
+        padding: const pw.EdgeInsets.all(3),
         child: pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
       ),
-      pw.SizedBox(height: 16),
+      pw.SizedBox(height: 14),
     ];
   }
 
-  /// Height of the Residence / Unit Photo box on page 1, in points.
-  static const double _residencePhotoHeight = 220;
+  /// Height of the Residence / Unit Photo box on the cover, in points.
+  static const double _residencePhotoHeight = 290;
 
   pw.Widget _buildCoverRow(String label, String value) {
     return pw.Padding(
@@ -182,14 +218,20 @@ class PdfReportRenderer implements ReportRenderer {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.SizedBox(
-            width: 140,
+            width: 120,
             child: _text(
               label,
-              style: pw.TextStyle(color: _mutedColor, fontSize: 11),
+              style: pw.TextStyle(color: _mutedColor, fontSize: 10.5),
             ),
           ),
           pw.Expanded(
-            child: _text(value, style: const pw.TextStyle(fontSize: 11)),
+            child: _text(
+              value,
+              style: pw.TextStyle(
+                fontSize: 10.5,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -256,229 +298,187 @@ class PdfReportRenderer implements ReportRenderer {
     );
   }
 
-  /// One planned entry: the area heading (when this is the area's first
-  /// entry on the page), then the finding as one unbreakable block.
-  List<pw.Widget> _buildEntry(ReportPageEntry entry) {
+  // ---- defect table -------------------------------------------------
+  //
+  // Page content width is 523.3pt (A4 less 36pt margins). Columns, in
+  // points: No. 26 | Area / Element 88 | Finding 110 | Photo 116 |
+  // Recommendation 112 | Note 71. Estimated from the brief (no measured
+  // reference was available): see docs/report.md.
+  static const _colNo = 26.0;
+  static const _colArea = 88.0;
+  static const _colFinding = 110.0;
+  static const _colPhoto = 116.0;
+  static const _colRecommendation = 112.0;
+  static const _colNote = 71.0;
+
+  /// Every photo sits in the same box, fitted (never stretched).
+  static const _photoBoxWidth = 104.0;
+  static const _photoBoxHeight = 80.0;
+
+  pw.Widget _buildDefectTable(List<ReportPageEntry> page) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: _dividerColor, width: 0.6),
+      columnWidths: const {
+        0: pw.FixedColumnWidth(_colNo),
+        1: pw.FixedColumnWidth(_colArea),
+        2: pw.FixedColumnWidth(_colFinding),
+        3: pw.FixedColumnWidth(_colPhoto),
+        4: pw.FixedColumnWidth(_colRecommendation),
+        5: pw.FixedColumnWidth(_colNote),
+      },
+      children: [
+        _buildTableHeader(),
+        for (final entry in page) _buildTableRow(entry),
+      ],
+    );
+  }
+
+  pw.TableRow _buildTableHeader() {
+    pw.Widget cell(String label) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: _text(
+        label,
+        style: pw.TextStyle(
+          fontSize: 9,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+        ),
+      ),
+    );
+    return pw.TableRow(
+      repeat: true,
+      decoration: pw.BoxDecoration(color: _accentColor),
+      children: [
+        cell('No.'),
+        cell('Area / Element'),
+        cell('Finding'),
+        cell('Photo'),
+        cell('Recommendation'),
+        cell('Note'),
+      ],
+    );
+  }
+
+  pw.Widget _cell(pw.Widget child) =>
+      pw.Padding(padding: const pw.EdgeInsets.all(4), child: child);
+
+  pw.Widget _cellText(String? value, {pw.TextStyle? style}) => _cell(
+    _text(value ?? '', style: style ?? const pw.TextStyle(fontSize: 8.5)),
+  );
+
+  pw.TableRow _buildTableRow(ReportPageEntry entry) {
     final finding = entry.finding;
-    final photoRows = finding == null
-        ? const <List<String>>[]
-        : _photoRows(finding.evidenceFilePaths);
-    return [
-      if (entry.showAreaHeading && finding == null)
-        pw.Inseparable(child: _buildAreaHeading(entry)),
-      if (finding == null)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 10),
-          child: _text(
+    if (finding == null) {
+      return pw.TableRow(
+        children: [
+          _cellText(''),
+          _cellText(
+            entry.areaName,
+            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+          ),
+          _cellText(
             'No defects recorded.',
             style: pw.TextStyle(
-              fontSize: 10,
+              fontSize: 8.5,
               fontStyle: pw.FontStyle.italic,
               color: _mutedColor,
             ),
           ),
-        )
-      else ...[
-        // Column/Container would otherwise span pages and print a
-        // finding's text on one page and its photos on the next.
-        // Inseparable, with the area heading when there is one, so a
-        // heading is never stranded at the foot of a page.
-        pw.Inseparable(
-          child: pw.Column(
+          _cellText(''),
+          _cellText(''),
+          _cellText(entry.areaNote),
+        ],
+      );
+    }
+    final element = [
+      finding.elementName,
+      if (finding.componentName != null) finding.componentName!,
+    ].join(' - ');
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.top,
+      children: [
+        _cellText('${finding.number}'),
+        _cell(
+          pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (entry.showAreaHeading) _buildAreaHeading(entry),
-              _buildFinding(
-                finding,
-                photoRows.isEmpty ? null : photoRows.first,
+              _text(
+                entry.areaName,
+                style: pw.TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
+              pw.SizedBox(height: 2),
+              _text(element, style: const pw.TextStyle(fontSize: 8.5)),
+              if (entry.areaNote != null) ...[
+                pw.SizedBox(height: 2),
+                _text(
+                  'Area note: ${entry.areaNote}',
+                  style: pw.TextStyle(
+                    fontSize: 7,
+                    fontStyle: pw.FontStyle.italic,
+                    color: _mutedColor,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        // New findings have exactly one photo (one photo = one finding).
-        // A historical multi-photo finding with more than 3 continues in
-        // further rows; they follow it and never split a photo.
-        for (final row in photoRows.skip(1))
-          pw.Inseparable(
-            child: pw.Container(
-              color: _findingBackground,
-              padding: const pw.EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: _buildPhotoRow(row),
-            ),
-          ),
-        pw.SizedBox(height: 10),
+        _cellText(finding.defectType ?? 'Not specified'),
+        _cell(_buildPhotoCell(finding.evidenceFilePaths)),
+        _cellText(finding.recommendation),
+        _cellText(finding.notes),
       ],
-    ];
+    );
   }
 
-  pw.Widget _buildAreaHeading(ReportPageEntry entry) {
+  /// The Photo cell: one fixed box per photo. A new finding has exactly
+  /// one photo; a historical multi-photo finding stacks its photos, each
+  /// in the same box.
+  pw.Widget _buildPhotoCell(List<String> paths) {
+    if (paths.isEmpty) return pw.SizedBox(height: _photoBoxHeight);
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.SizedBox(height: 4),
-        _text(
-          entry.areaName,
-          style: pw.TextStyle(
-            fontSize: 14,
-            fontWeight: pw.FontWeight.bold,
-            color: _accentColor,
-          ),
-        ),
-        pw.Divider(color: _dividerColor, height: 8),
-        if (entry.areaNote != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 6),
-            child: _text(
-              'Note: ${entry.areaNote}',
-              style: pw.TextStyle(
-                fontSize: 9,
-                fontStyle: pw.FontStyle.italic,
-                color: _mutedColor,
-              ),
+        for (var i = 0; i < paths.length; i++) ...[
+          if (i > 0) pw.SizedBox(height: 4),
+          pw.Container(
+            width: _photoBoxWidth,
+            height: _photoBoxHeight,
+            alignment: pw.Alignment.center,
+            color: PdfColor.fromHex('#F3F4F6'),
+            child: _buildPhoto(
+              paths[i],
+              pw.Alignment.center,
+              maxWidth: _photoBoxWidth,
+              maxHeight: _photoBoxHeight,
             ),
           ),
-        pw.SizedBox(height: 4),
+        ],
       ],
     );
   }
 
-  /// Two-line heading — element, then component — followed by the
-  /// finding and recommendation, then the photos. No numbering, bullets
-  /// or icons.
-  pw.Widget _buildFinding(ReportFinding finding, List<String>? firstPhotos) {
-    final labelStyle = pw.TextStyle(
-      fontSize: 10,
-      fontWeight: pw.FontWeight.bold,
-      color: _textColor,
-    );
-    const bodyStyle = pw.TextStyle(fontSize: 10);
-    return pw.Container(
-      width: double.infinity,
-      padding: const pw.EdgeInsets.all(10),
-      color: _findingBackground,
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          _text(
-            finding.elementName,
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-              color: _textColor,
-            ),
-          ),
-          if (finding.componentName != null)
-            _text(
-              finding.componentName!,
-              style: pw.TextStyle(fontSize: 11, color: _textColor),
-            ),
-          pw.SizedBox(height: 6),
-          _labelled(
-            'Finding: ',
-            finding.defectType ?? 'Not specified',
-            labelStyle,
-            bodyStyle,
-          ),
-          if (finding.recommendation != null) ...[
-            pw.SizedBox(height: 3),
-            _labelled(
-              'Recommendation: ',
-              finding.recommendation!,
-              labelStyle,
-              bodyStyle,
-            ),
-          ],
-          if (finding.notes != null) ...[
-            pw.SizedBox(height: 3),
-            _text(
-              'Inspector note: ${finding.notes}',
-              style: pw.TextStyle(fontSize: 9, color: _mutedColor),
-            ),
-          ],
-          if (firstPhotos != null) ...[
-            pw.SizedBox(height: 8),
-            _buildPhotoRow(firstPhotos),
-          ],
-        ],
-      ),
-    );
-  }
-
-  pw.Widget _labelled(
-    String label,
-    String value,
-    pw.TextStyle labelStyle,
-    pw.TextStyle bodyStyle,
-  ) {
-    return pw.RichText(
-      text: pw.TextSpan(
-        children: [
-          pw.TextSpan(text: pdfSafeText(label), style: labelStyle),
-          pw.TextSpan(text: pdfSafeText(value), style: bodyStyle),
-        ],
-      ),
-    );
-  }
-
-  /// A generous estimate of one printed finding: heading, text lines
-  /// and photo rows (see [_buildPhotoRow] for the row heights).
+  /// A generous estimate of one printed table row: the photo box(es) or
+  /// the tallest text column, whichever is taller, plus padding.
   static double _estimatedFindingHeight(ReportFinding finding) {
-    double lines(String? text) =>
-        text == null ? 0 : 14.0 * (1 + text.length ~/ 90);
-    final rows = _photoRows(finding.evidenceFilePaths);
-    final photos = rows.fold<double>(
-      0,
-      (sum, row) =>
-          sum +
-          10 +
-          switch (row.length) {
-            1 => 170,
-            2 => 150,
-            _ => 115,
-          },
-    );
-    return 20 + // padding
-        30 + // element + component
-        6 +
-        lines(finding.defectType) +
-        lines(finding.recommendation) +
-        lines(finding.notes) +
-        photos +
-        10; // gap after the block
-  }
-
-  static List<List<String>> _photoRows(List<String> paths) => [
-    for (var i = 0; i < paths.length; i += 3)
-      paths.sublist(i, i + 3 > paths.length ? paths.length : i + 3),
-  ];
-
-  /// 1 photo: one large image. 2: side by side. 3: a row of three.
-  /// Every photo keeps its own aspect ratio (fitted, never cropped or
-  /// stretched).
-  pw.Widget _buildPhotoRow(List<String> paths) {
-    if (paths.length == 1) {
-      return _buildPhoto(
-        paths.single,
-        pw.Alignment.topLeft,
-        maxWidth: 260,
-        maxHeight: 170,
-      );
+    double textLines(String? text, double columnWidth) {
+      if (text == null || text.isEmpty) return 0;
+      final charsPerLine = ((columnWidth - 8) / 4.3).floor();
+      return 11.0 * (1 + text.length ~/ charsPerLine);
     }
-    final height = paths.length == 2 ? 150.0 : 115.0;
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < 3 && i < paths.length; i++) ...[
-          if (i > 0) pw.SizedBox(width: 8),
-          pw.Expanded(
-            child: pw.SizedBox(
-              height: height,
-              child: _buildPhoto(paths[i], pw.Alignment.center),
-            ),
-          ),
-        ],
-      ],
-    );
+
+    final photos = finding.evidenceFilePaths.isEmpty
+        ? _photoBoxHeight
+        : finding.evidenceFilePaths.length * (_photoBoxHeight + 4);
+    final text = [
+      textLines(finding.defectType, _colFinding),
+      textLines(finding.recommendation, _colRecommendation),
+      textLines(finding.notes, _colNote),
+      textLines('${finding.elementName} ${finding.componentName}', _colArea) +
+          14,
+    ].reduce((a, b) => a > b ? a : b);
+    return (photos > text ? photos : text) + 10;
   }
 
   /// With [maxWidth]/[maxHeight], the photo is sized to its own aspect

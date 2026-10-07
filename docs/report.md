@@ -321,3 +321,27 @@ Because `ReportModel` and `ReportRenderer` are decoupled, future work
 layout per property type, a second renderer such as HTML/DOCX) is an
 addition alongside `PdfReportRenderer`, not a rework of the report
 gate, the data model, persistence, or sharing.
+
+
+## Cover and defect table (2026-10-07)
+
+**Cover (page 1), top to bottom:** brand header, the large Residence / Unit
+Photo (full width, 290pt box, fitted — never stretched; nothing drawn if there
+is no photo), `BUILDING DEFECT INSPECTION REPORT`, property line, then Address,
+Purchaser / Owner, Property type, Project / Developer, Inspection date,
+Prepared by, Contact, a small version/ID line and the Inspection Summary.
+
+**Defect pages (page 2 on):** at most 5 findings per page, as a table with a
+repeated header row:
+
+| No. | Area / Element | Finding | Photo | Recommendation | Note |
+|---|---|---|---|---|---|
+| 26pt | 88pt | 110pt | 116pt | 112pt | 71pt |
+
+(content width 523.3pt = A4 less 36pt margins; photo box 104 x 80pt, aspect
+ratio preserved.) Each row is the finding's **final resolved** result — the
+inspector's choice over a stale AI result — with the catalogue's corrective
+action. **These dimensions are estimates from the written brief; no reference
+screenshots were supplied, so nothing has been measured or overlaid against a
+reference.** A reference page would let the column proportions, row heights,
+fonts and borders be measured and tuned.

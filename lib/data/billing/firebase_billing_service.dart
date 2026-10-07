@@ -169,6 +169,15 @@ Map<String, dynamic> buildAnalyseFindingPayload({
     'idempotencyKey': idempotencyKey,
     if (request.reanalysisAttempt > 0)
       'reanalysisAttempt': request.reanalysisAttempt,
+    if (request.reanalysisAttempt > 0 && request.previousAttempt != null)
+      'previousAttempt': {
+        if (request.previousAttempt!.needsReviewReason != null)
+          'needsReviewReason': request.previousAttempt!.needsReviewReason,
+        if (request.previousAttempt!.detectedComponent != null)
+          'detectedComponent': request.previousAttempt!.detectedComponent,
+        if (request.previousAttempt!.selectedEntryId != null)
+          'selectedEntryId': request.previousAttempt!.selectedEntryId,
+      },
   };
 }
 
@@ -282,20 +291,28 @@ AnalyseFindingResult parseAnalyseFindingResult(
       needsReview: needsReview || catalogueEntryId == null,
       catalogueEntryId: catalogueEntryId,
       defectTerm: _asStringOrNull(classificationRaw['defectTerm']),
-      isRelevantInspectionImage: classificationRaw['isRelevantInspectionImage'] is bool
+      isRelevantInspectionImage:
+          classificationRaw['isRelevantInspectionImage'] is bool
           ? classificationRaw['isRelevantInspectionImage'] as bool
           : null,
       imageUsable: classificationRaw['imageUsable'] is bool
           ? classificationRaw['imageUsable'] as bool
           : null,
       qualityIssues: [
-        for (final issue in (classificationRaw['qualityIssues'] as List?) ?? const [])
+        for (final issue
+            in (classificationRaw['qualityIssues'] as List?) ?? const [])
           if (issue is String) issue,
       ],
       detectedElement: _asStringOrNull(classificationRaw['detectedElement']),
-      detectedComponent: _asStringOrNull(classificationRaw['detectedComponent']),
-      noteImageAgreement: _asStringOrNull(classificationRaw['noteImageAgreement']),
-      needsReviewReason: _asStringOrNull(classificationRaw['needsReviewReason']),
+      detectedComponent: _asStringOrNull(
+        classificationRaw['detectedComponent'],
+      ),
+      noteImageAgreement: _asStringOrNull(
+        classificationRaw['noteImageAgreement'],
+      ),
+      needsReviewReason: _asStringOrNull(
+        classificationRaw['needsReviewReason'],
+      ),
       confidence: (classificationRaw['confidence'] as num?)?.toDouble(),
       shortReason: _asStringOrNull(classificationRaw['shortReason']),
       candidateEntryIds: rawCandidates is List

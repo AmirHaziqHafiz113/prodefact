@@ -153,6 +153,13 @@ const EXPANSIONS: Record<string, string> = {
   "renggang": "gap",
   "perangkap lantai": "floor trap",
   "perangkap": "trap",
+  "por": "poor",
+  "pur": "poor",
+  "peint": "paint",
+  "railng": "railing",
+  "railin": "railing",
+  "raling": "railing",
+  "railings": "railing",
   "flo": "floor",
 };
 

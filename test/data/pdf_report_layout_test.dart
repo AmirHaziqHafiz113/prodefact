@@ -239,23 +239,28 @@ void main() {
       }
     });
 
-    test('23 + 24. page 1 has the details and summary only; defects start '
-        'on page 2', () {
+    test('23 + 24. page 1 is the cover (title, details, summary); the '
+        'defect table starts on page 2', () {
       expect(pages.length, greaterThanOrEqualTo(3));
-      expect(pages[0], contains('Home Inspection Report'));
+      expect(pages[0], contains('BUILDING DEFECT INSPECTION REPORT'));
       expect(pages[0], contains('Inspection Summary'));
+      expect(pages[0], contains('Purchaser / Owner'));
       expect(pages[0], contains('Nur Aisyah'));
-      expect(pages[0], isNot(contains('Finding:')));
+      expect(pages[0], contains('Prepared by'));
+      expect(pages[0], isNot(contains('Recommendation')));
       expect(pages[0], isNot(contains('Living Room')));
       expect(pages[1], contains('Living Room'));
-      expect(pages[1], contains('Finding:'));
+      expect(pages[1], contains('Recommendation'));
     });
 
     test('25 + 26. no page has more than 5 findings', () {
       for (final page in pages.skip(1)) {
-        expect('Finding:'.allMatches(page).length, lessThanOrEqualTo(5));
+        expect(
+          'Defect description'.allMatches(page).length,
+          lessThanOrEqualTo(5),
+        );
       }
-      expect(pages.join().split('Finding:').length - 1, 7);
+      expect(pages.join().split('Defect description').length - 1, 7);
     });
 
     test('27 + 28. no numbering, bullets or icons', () {
@@ -273,20 +278,30 @@ void main() {
       expect(all, contains('Inspector\'s note... "leaking" - see photo'));
     });
 
-    test('31 + 32. the heading is Element then Component, followed by '
-        'Finding then Recommendation', () {
-      final page = pages[1];
-      final element = page.indexOf('Floor ');
-      final component = page.indexOf('Floor Tile');
-      final finding = page.indexOf('Finding:');
-      final recommendation = page.indexOf('Recommendation:');
-      expect(element, greaterThanOrEqualTo(0));
-      expect(component, greaterThan(element));
-      expect(finding, greaterThan(component));
-      expect(recommendation, greaterThan(finding));
-      // Two separate lines, not "Floor — Floor Tile".
-      expect(page, isNot(contains('Floor - Floor Tile')));
-    });
+    test(
+      '31 + 32. the table has the columns No. | Area / Element | Finding '
+      '| Photo | Recommendation | Note, in that order, and each row '
+      'carries its area, element - component, finding and recommendation',
+      () {
+        final page = pages[1];
+        var at = -1;
+        for (final column in [
+          'No.',
+          'Area / Element',
+          'Finding',
+          'Photo',
+          'Recommendation',
+          'Note',
+        ]) {
+          final next = page.indexOf(column, at + 1);
+          expect(next, greaterThan(at), reason: 'column $column out of order');
+          at = next;
+        }
+        expect(page, contains('Floor - Floor Tile'));
+        expect(page, contains('Defect description 1'));
+        expect(page, contains('Recommendation 1: hack out'));
+      },
+    );
 
     test('35 + 36. compact header from page 2 and a footer with Page X of Y '
         'on every page', () {
