@@ -263,9 +263,7 @@ void main() {
       // Drift's default DateTime storage is whole seconds, not
       // milliseconds — cross a full second so the difference shows up
       // regardless of that rounding.
-      await Future<void>.delayed(
-        const Duration(seconds: 1, milliseconds: 100),
-      );
+      await Future<void>.delayed(const Duration(seconds: 1, milliseconds: 100));
       await repository.saveInspectionNote(sessionId, 'A note');
       final after = (await repository.loadSession(sessionId))!.updatedAt;
       expect(after.isAfter(before), isTrue);

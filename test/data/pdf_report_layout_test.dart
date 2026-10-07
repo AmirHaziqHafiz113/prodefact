@@ -4,12 +4,11 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
-import 'package:prodefact/core/inspection/report/report_page_plan.dart';
 import 'package:prodefact/data/report/pdf_report_renderer.dart';
 import 'package:prodefact/data/report/pdf_safe_text.dart';
 
 /// Report format pass (2026-10-01): page 1 is details + summary only,
-/// defects from page 2 at most 5 per page, no numbering or symbols, a
+/// defects from page 2, no numbering or symbols, a
 /// two-line Element / Component heading, Finding and Recommendation,
 /// then photos.
 ///
@@ -136,78 +135,6 @@ List<String> _pageTexts(Uint8List bytes) {
 }
 
 void main() {
-  group('page plan', () {
-    test('25. at most 5 findings per page, in report order', () {
-      final pages = planDefectPages(_sampleModel());
-      final counts = [
-        for (final p in pages) p.where((e) => e.finding != null).length,
-      ];
-      expect(counts, [5, 2]);
-      final order = [
-        for (final p in pages)
-          for (final e in p)
-            if (e.finding != null) e.finding!.number,
-      ];
-      expect(order, [1, 2, 3, 4, 5, 6, 7]);
-    });
-
-    test('an area continuing onto the next page repeats its heading; its '
-        'note appears once; an empty area says "No defects recorded"', () {
-      final pages = planDefectPages(_sampleModel());
-      final first = pages[0];
-      expect(first.first.showAreaHeading, isTrue);
-      expect(first.first.areaNote, 'Inspected in daylight');
-      expect(first[1].showAreaHeading, isFalse);
-      final store = first.firstWhere((e) => e.areaName == 'Store');
-      expect(store.finding, isNull);
-      expect(store.showAreaHeading, isTrue);
-      final second = pages[1];
-      expect(second.first.areaName, 'Master Bathroom');
-      expect(second.first.showAreaHeading, isTrue);
-    });
-
-    test('37 + 38. with a height budget, a page ends before it would '
-        'overflow, and the next page repeats the area heading', () {
-      final pages = planDefectPages(
-        _sampleModel(),
-        findingHeight: (f) => 100.0 * f.evidenceFilePaths.length,
-        pageHeight: 350,
-        areaHeadingHeight: 20,
-      );
-      for (final page in pages) {
-        expect(page.first.showAreaHeading, isTrue);
-        expect(
-          page.where((e) => e.finding != null).length,
-          lessThanOrEqualTo(kMaxFindingsPerReportPage),
-        );
-      }
-      // Living Room's 1 + 2 photos fit together; its 3-photo finding
-      // starts a new page.
-      expect(pages[0].map((e) => e.finding?.number), [1, 2]);
-      expect(pages[1].first.finding!.number, 3);
-    });
-
-    test('a model with no inspected areas has no defect pages', () {
-      final model = _sampleModel();
-      expect(
-        planDefectPages(
-          ReportModel(
-            sessionId: model.sessionId,
-            propertyTypeLabel: model.propertyTypeLabel,
-            inspectionDate: model.inspectionDate,
-            generatedAt: model.generatedAt,
-            totalAreas: 0,
-            completedAreas: 0,
-            totalFindings: 0,
-            totalEvidence: 0,
-            areas: const [],
-          ),
-        ),
-        isEmpty,
-      );
-    });
-  });
-
   group('pdfSafeText (root cause of the "▯" boxes)', () {
     test('29. typography outside Latin-1 maps to plain equivalents', () {
       expect(pdfSafeText('Floor — Tile'), 'Floor - Tile');
@@ -253,13 +180,7 @@ void main() {
       expect(pages[1], contains('Recommendation'));
     });
 
-    test('25 + 26. no page has more than 5 findings', () {
-      for (final page in pages.skip(1)) {
-        expect(
-          'Defect description'.allMatches(page).length,
-          lessThanOrEqualTo(5),
-        );
-      }
+    test('25 + 26. every finding is printed exactly once, in order', () {
       expect(pages.join().split('Defect description').length - 1, 7);
     });
 

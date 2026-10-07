@@ -60,7 +60,7 @@ void main() {
     DefectCatalogue.instance.replaceCustomEntries(const []);
   });
 
-  test('cover: brand, then the large photo, then the title, then the '
+  test('cover: brand, then the title, then the large photo, then the '
       'dynamic details, then the summary — top to bottom', () async {
     final photo = writePng(dir, 'unit', 400, 300);
     final pdf = _pdf(
@@ -74,9 +74,9 @@ void main() {
     final purchaser = at('[(Purchaser)]TJ');
     final summary = at('[(Summary)]TJ');
     expect(brand, greaterThan(-1));
-    expect(image, greaterThan(brand));
-    expect(title, greaterThan(image), reason: 'photo is ABOVE the title');
-    expect(purchaser, greaterThan(title));
+    expect(title, greaterThan(brand));
+    expect(image, greaterThan(title), reason: 'photo is BELOW the title');
+    expect(purchaser, greaterThan(image));
     expect(summary, greaterThan(purchaser));
     for (final dynamicValue in [
       'Residensi',
@@ -154,8 +154,8 @@ void main() {
         }).toList();
     expect(placed, hasLength(greaterThanOrEqualTo(2)));
     for (final p in placed) {
-      expect(p.w, lessThanOrEqualTo(104.01));
-      expect(p.h, lessThanOrEqualTo(80.01));
+      expect(p.w, lessThanOrEqualTo(150.01));
+      expect(p.h, lessThanOrEqualTo(124.01));
     }
     final ratios = placed.map((p) => p.w / p.h).toList();
     expect(ratios.any((r) => (r - 2.0).abs() < 0.02), isTrue);

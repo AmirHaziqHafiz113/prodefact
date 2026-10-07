@@ -119,9 +119,7 @@ void main() {
       industry: Industry.homeInspection,
       assetTypeId: 'highRise',
       initialSections: [_bathroomSection()],
-      propertyDetails: const PropertyDetails(
-        contactNumber: '+60123456789',
-      ),
+      propertyDetails: const PropertyDetails(contactNumber: '+60123456789'),
     );
     final now = DateTime.now();
     await local.saveFinding(

@@ -5,9 +5,18 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/inspection/report/report_model.dart';
-import '../../core/inspection/report/report_page_plan.dart';
 import '../../core/inspection/report/report_renderer.dart';
 import 'pdf_safe_text.dart';
+
+/// One table row: an inspected area's finding, or (when [finding] is
+/// null) the area's "No defects recorded" line.
+class ReportPageEntry {
+  const ReportPageEntry({required this.areaName, this.areaNote, this.finding});
+
+  final String areaName;
+  final String? areaNote;
+  final ReportFinding? finding;
+}
 
 /// Renders a [ReportModel] to a professional Home Inspection PDF using
 /// `package:pdf`. This is the only file in the app that imports it —
@@ -35,9 +44,9 @@ class PdfReportRenderer implements ReportRenderer {
   Future<Uint8List> render(ReportModel model) async {
     final doc = pw.Document(compress: compress);
 
-    // Page 1 (cover): brand header, the large Residence / Unit Photo,
-    // the report title, then the property and inspector details and the
-    // Inspection Summary. Defects always start on page 2.
+    // Page 1 (cover): brand header, the report title, the large
+    // Residence / Unit Photo, the property and inspector details, then
+    // the Inspection Summary. Defects always start on page 2.
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -45,36 +54,34 @@ class PdfReportRenderer implements ReportRenderer {
         footer: _buildFooter,
         build: (context) => [
           _buildBrandHeader(model),
-          pw.SizedBox(height: 14),
-          ..._buildResidencePhoto(model),
-          _buildCoverTitleAndDetails(model),
-          pw.SizedBox(height: 14),
+          pw.SizedBox(height: 12),
+          _buildCoverTitle(model),
+          pw.SizedBox(height: 10),
+          _buildResidencePhoto(model),
+          pw.SizedBox(height: 10),
+          _buildCoverDetails(model),
+          pw.SizedBox(height: 10),
           _buildSummary(model),
         ],
       ),
     );
 
-    // One MultiPage per planned page of at most 5 findings, each a table
-    // (No. | Area / Element | Finding | Photo | Recommendation | Note).
-    // A table that outgrows its page continues on the next one with the
-    // header row repeated; a row is never split.
-    final pages = planDefectPages(
-      model,
-      findingHeight: _estimatedFindingHeight,
-      // A4 body below the compact header and above the footer, with a
-      // little slack so an estimate that runs short still fits.
-      pageHeight: PdfPageFormat.a4.height - _pageMargin.vertical - 90,
-      areaHeadingHeight: 44,
-      noDefectsHeight: 26,
-    );
-    for (final page in pages) {
+    // The defect table is ONE table in ONE flowing MultiPage: rows are
+    // packed until the next complete row genuinely cannot fit in what is
+    // left of the printable height, then the table continues on the next
+    // page with its header row repeated. A row is never split, and no
+    // height is estimated or reserved up front (the old planner capped a
+    // page at 5 findings and budgeted rows from a generous estimate,
+    // which left up to half of each page blank).
+    final entries = _tableEntries(model);
+    if (entries.isNotEmpty) {
       doc.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: _pageMargin,
           header: (context) => _buildRunningHeader(model),
           footer: _buildFooter,
-          build: (context) => [_buildDefectTable(page)],
+          build: (context) => [_buildDefectTable(entries)],
         ),
       );
     }
@@ -117,9 +124,8 @@ class PdfReportRenderer implements ReportRenderer {
     );
   }
 
-  /// The title and the dynamic property/inspector details, below the
-  /// photo.
-  pw.Widget _buildCoverTitleAndDetails(ReportModel model) {
+  /// The report title and the property line, under the brand header.
+  pw.Widget _buildCoverTitle(ReportModel model) {
     final title = model.propertyTitle ?? model.propertyTypeLabel;
     final property = [
       title,
@@ -129,7 +135,6 @@ class PdfReportRenderer implements ReportRenderer {
         model.unitNumber!,
     ].join(', ');
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Center(
           child: _text(
@@ -150,7 +155,15 @@ class PdfReportRenderer implements ReportRenderer {
             style: pw.TextStyle(fontSize: 12, color: _textColor),
           ),
         ),
-        pw.SizedBox(height: 12),
+      ],
+    );
+  }
+
+  /// The dynamic property/inspector details, below the photo.
+  pw.Widget _buildCoverDetails(ReportModel model) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
         pw.Divider(color: _dividerColor, height: 1),
         pw.SizedBox(height: 8),
         if (model.propertyAddress != null)
@@ -178,38 +191,47 @@ class PdfReportRenderer implements ReportRenderer {
     );
   }
 
-  /// The large Residence / Unit Photo at the top of the cover: a fixed,
-  /// full-width box with the photo fitted inside it (aspect ratio
-  /// preserved, never stretched). Nothing is drawn — and no blank box is
-  /// left behind — when there is no photo or it can't be read.
-  List<pw.Widget> _buildResidencePhoto(ReportModel model) {
+  /// The large Residence / Unit Photo: a fixed, full-width box with the
+  /// photo fitted inside it (aspect ratio preserved, never stretched). With
+  /// no photo — or one that can't be read — the same box is kept as a clean
+  /// placeholder so the cover layout stays balanced.
+  pw.Widget _buildResidencePhoto(ReportModel model) {
+    pw.Widget? photo;
     final path = model.coverPhotoPath;
-    if (path == null || path.isEmpty) return [pw.SizedBox(height: 24)];
-    final pw.MemoryImage image;
-    try {
-      final file = File(path);
-      if (!file.existsSync()) return [pw.SizedBox(height: 24)];
-      image = pw.MemoryImage(file.readAsBytesSync());
-    } catch (_) {
-      return [pw.SizedBox(height: 24)];
+    if (path != null && path.isNotEmpty) {
+      try {
+        final file = File(path);
+        if (file.existsSync()) {
+          photo = pw.Image(
+            pw.MemoryImage(file.readAsBytesSync()),
+            fit: pw.BoxFit.contain,
+          );
+        }
+      } catch (_) {
+        photo = null;
+      }
     }
-    return [
-      pw.Container(
-        width: double.infinity,
-        height: _residencePhotoHeight,
-        decoration: pw.BoxDecoration(
-          color: _findingBackground,
-          border: pw.Border.all(color: _dividerColor),
-        ),
-        padding: const pw.EdgeInsets.all(3),
-        child: pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
+    return pw.Container(
+      width: double.infinity,
+      height: _residencePhotoHeight,
+      alignment: pw.Alignment.center,
+      decoration: pw.BoxDecoration(
+        color: _findingBackground,
+        border: pw.Border.all(color: _dividerColor),
       ),
-      pw.SizedBox(height: 14),
-    ];
+      padding: const pw.EdgeInsets.all(3),
+      child:
+          photo ??
+          _text(
+            'Residence / Unit Photo',
+            style: pw.TextStyle(fontSize: 11, color: _mutedColor),
+          ),
+    );
   }
 
   /// Height of the Residence / Unit Photo box on the cover, in points.
-  static const double _residencePhotoHeight = 290;
+  /// The box is the full content width (523pt), so it is 523 x 420.
+  static const double _residencePhotoHeight = 420;
 
   pw.Widget _buildCoverRow(String label, String value) {
     return pw.Padding(
@@ -301,21 +323,48 @@ class PdfReportRenderer implements ReportRenderer {
   // ---- defect table -------------------------------------------------
   //
   // Page content width is 523.3pt (A4 less 36pt margins). Columns, in
-  // points: No. 26 | Area / Element 88 | Finding 110 | Photo 116 |
-  // Recommendation 112 | Note 71. Estimated from the brief (no measured
-  // reference was available): see docs/report.md.
-  static const _colNo = 26.0;
-  static const _colArea = 88.0;
-  static const _colFinding = 110.0;
-  static const _colPhoto = 116.0;
-  static const _colRecommendation = 112.0;
-  static const _colNote = 71.0;
+  // points: No. 30 | Area / Element 74 | Finding 94 | Photo 160 |
+  // Recommendation 106 | Note 59. The photo column is the widest: the
+  // photos are what a reviewer checks.
+  static const _colNo = 30.0;
+  static const _colArea = 74.0;
+  static const _colFinding = 94.0;
+  static const _colPhoto = 160.0;
+  static const _colRecommendation = 106.0;
+  static const _colNote = 59.0;
 
-  /// Every photo sits in the same box, fitted (never stretched).
-  static const _photoBoxWidth = 104.0;
-  static const _photoBoxHeight = 80.0;
+  static const _bodyFontSize = 9.5;
 
-  pw.Widget _buildDefectTable(List<ReportPageEntry> page) {
+  /// Every photo sits in the same box, fitted (never stretched). With the
+  /// cell padding a one-photo row is ~135pt tall, so a page holds about
+  /// five rows.
+  static const _photoBoxWidth = 150.0;
+  static const _photoBoxHeight = 124.0;
+
+  /// The table's rows, in report order: one per finding, or one
+  /// "No defects recorded" row for an inspected area without findings.
+  /// An area's note rides on its first row.
+  List<ReportPageEntry> _tableEntries(ReportModel model) {
+    final entries = <ReportPageEntry>[];
+    for (final area in model.areas) {
+      if (area.findings.isEmpty) {
+        entries.add(ReportPageEntry(areaName: area.name, areaNote: area.note));
+        continue;
+      }
+      for (var i = 0; i < area.findings.length; i++) {
+        entries.add(
+          ReportPageEntry(
+            areaName: area.name,
+            areaNote: i == 0 ? area.note : null,
+            finding: area.findings[i],
+          ),
+        );
+      }
+    }
+    return entries;
+  }
+
+  pw.Widget _buildDefectTable(List<ReportPageEntry> entries) {
     return pw.Table(
       border: pw.TableBorder.all(color: _dividerColor, width: 0.6),
       columnWidths: const {
@@ -328,18 +377,18 @@ class PdfReportRenderer implements ReportRenderer {
       },
       children: [
         _buildTableHeader(),
-        for (final entry in page) _buildTableRow(entry),
+        for (final entry in entries) _buildTableRow(entry),
       ],
     );
   }
 
   pw.TableRow _buildTableHeader() {
     pw.Widget cell(String label) => pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 6),
       child: _text(
         label,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: 9.5,
           fontWeight: pw.FontWeight.bold,
           color: PdfColors.white,
         ),
@@ -360,10 +409,13 @@ class PdfReportRenderer implements ReportRenderer {
   }
 
   pw.Widget _cell(pw.Widget child) =>
-      pw.Padding(padding: const pw.EdgeInsets.all(4), child: child);
+      pw.Padding(padding: const pw.EdgeInsets.all(5), child: child);
 
   pw.Widget _cellText(String? value, {pw.TextStyle? style}) => _cell(
-    _text(value ?? '', style: style ?? const pw.TextStyle(fontSize: 8.5)),
+    _text(
+      value ?? '',
+      style: style ?? const pw.TextStyle(fontSize: _bodyFontSize),
+    ),
   );
 
   pw.TableRow _buildTableRow(ReportPageEntry entry) {
@@ -374,12 +426,15 @@ class PdfReportRenderer implements ReportRenderer {
           _cellText(''),
           _cellText(
             entry.areaName,
-            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
+            style: pw.TextStyle(
+              fontSize: _bodyFontSize,
+              fontWeight: pw.FontWeight.bold,
+            ),
           ),
           _cellText(
             'No defects recorded.',
             style: pw.TextStyle(
-              fontSize: 8.5,
+              fontSize: _bodyFontSize,
               fontStyle: pw.FontStyle.italic,
               color: _mutedColor,
             ),
@@ -405,18 +460,21 @@ class PdfReportRenderer implements ReportRenderer {
               _text(
                 entry.areaName,
                 style: pw.TextStyle(
-                  fontSize: 8.5,
+                  fontSize: _bodyFontSize,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
               pw.SizedBox(height: 2),
-              _text(element, style: const pw.TextStyle(fontSize: 8.5)),
+              _text(
+                element,
+                style: const pw.TextStyle(fontSize: _bodyFontSize),
+              ),
               if (entry.areaNote != null) ...[
                 pw.SizedBox(height: 2),
                 _text(
                   'Area note: ${entry.areaNote}',
                   style: pw.TextStyle(
-                    fontSize: 7,
+                    fontSize: 7.5,
                     fontStyle: pw.FontStyle.italic,
                     color: _mutedColor,
                   ),
@@ -457,28 +515,6 @@ class PdfReportRenderer implements ReportRenderer {
         ],
       ],
     );
-  }
-
-  /// A generous estimate of one printed table row: the photo box(es) or
-  /// the tallest text column, whichever is taller, plus padding.
-  static double _estimatedFindingHeight(ReportFinding finding) {
-    double textLines(String? text, double columnWidth) {
-      if (text == null || text.isEmpty) return 0;
-      final charsPerLine = ((columnWidth - 8) / 4.3).floor();
-      return 11.0 * (1 + text.length ~/ charsPerLine);
-    }
-
-    final photos = finding.evidenceFilePaths.isEmpty
-        ? _photoBoxHeight
-        : finding.evidenceFilePaths.length * (_photoBoxHeight + 4);
-    final text = [
-      textLines(finding.defectType, _colFinding),
-      textLines(finding.recommendation, _colRecommendation),
-      textLines(finding.notes, _colNote),
-      textLines('${finding.elementName} ${finding.componentName}', _colArea) +
-          14,
-    ].reduce((a, b) => a > b ? a : b);
-    return (photos > text ? photos : text) + 10;
   }
 
   /// With [maxWidth]/[maxHeight], the photo is sized to its own aspect
