@@ -6,10 +6,12 @@ import '../../features/auth/presentation/sign_in_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/home_inspection/presentation/screens/ai_review_overview_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_configuration_screen.dart';
+import '../../features/home_inspection/presentation/screens/areas_screen.dart';
 import '../../features/home_inspection/presentation/screens/area_inspection_screen.dart';
+import '../../features/home_inspection/presentation/screens/finding_detail_screen.dart';
 import '../../features/home_inspection/presentation/screens/home_dashboard_screen.dart';
 import '../../features/home_inspection/presentation/screens/house_pass_screen.dart';
-import '../../features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import '../../features/home_inspection/presentation/screens/inspection_overview_screen.dart';
 import '../../features/home_inspection/presentation/screens/photo_guide_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/profile_screen.dart';
@@ -17,6 +19,7 @@ import '../../features/home_inspection/presentation/screens/property_details_scr
 import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
 import '../../features/home_inspection/presentation/screens/report_details_screen.dart';
 import '../../features/home_inspection/presentation/screens/report_screen.dart';
+import '../../features/home_inspection/presentation/screens/review_inbox_screen.dart';
 import '../../features/home_inspection/presentation/screens/review_setup_screen.dart';
 import '../../features/home_inspection/presentation/screens/top_up_screen.dart';
 import '../../features/home_inspection/presentation/screens/wallet_screen.dart';
@@ -54,14 +57,10 @@ GoRouter buildAppRouter(WidgetRef ref) {
   return GoRouter(
     // Starts on the splash screen — see its own doc comment and the
     // `redirect` logic below, which routes away from it the instant
-    // there's something real to show (immediately, in local-only mode;
-    // the moment `authStateProvider` resolves, once Firebase is
-    // configured). The Inspections tab (not Home) is still the actual
-    // landing screen after that — this preserves the app's existing
-    // "the dashboard is the inspections list" behavior exactly; Home is
-    // an additional aggregate/wallet-glance tab, one tap away, not a
-    // replacement for it. See docs/commercial_model.md ("Routing
-    // audit").
+    // there's something real to show. Home is the landing screen: the
+    // at-a-glance starting point (active inspection, what needs review,
+    // latest report), with Inspections one tap away for managing every
+    // job. See docs/ux_architecture.md.
     initialLocation: SplashScreen.routePath,
     refreshListenable: GoRouterRefreshStream(
       ref.read(authServiceProvider).authStateChanges(),
@@ -79,7 +78,7 @@ GoRouter buildAppRouter(WidgetRef ref) {
       // between the OS launching the app and this first frame; nothing
       // here holds it open artificially.
       if (!ref.read(firebaseReadyProvider)) {
-        return onSplash ? InspectionSessionsScreen.routePath : null;
+        return onSplash ? HomeDashboardScreen.routePath : null;
       }
 
       final isSignedIn = ref.read(authServiceProvider).currentUser != null;
@@ -88,12 +87,12 @@ GoRouter buildAppRouter(WidgetRef ref) {
 
       if (onSplash) {
         return isSignedIn
-            ? InspectionSessionsScreen.routePath
+            ? HomeDashboardScreen.routePath
             : SignInScreen.routePath;
       }
       if (!isSignedIn && isGatedRoute) return SignInScreen.routePath;
       if (isSignedIn && goingToSignIn) {
-        return InspectionSessionsScreen.routePath;
+        return HomeDashboardScreen.routePath;
       }
       return null;
     },
@@ -129,8 +128,8 @@ GoRouter buildAppRouter(WidgetRef ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: WalletScreen.routePath,
-                builder: (context, state) => const WalletScreen(),
+                path: ReviewInboxScreen.routePath,
+                builder: (context, state) => const ReviewInboxScreen(),
               ),
             ],
           ),
@@ -143,6 +142,10 @@ GoRouter buildAppRouter(WidgetRef ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: WalletScreen.routePath,
+        builder: (context, state) => const WalletScreen(),
       ),
       GoRoute(
         path: TopUpScreen.routePath,
@@ -165,8 +168,12 @@ GoRouter buildAppRouter(WidgetRef ref) {
         builder: (context, state) => const ReviewSetupScreen(),
       ),
       GoRoute(
-        path: InspectionQueueScreen.routePath,
-        builder: (context, state) => const InspectionQueueScreen(),
+        path: InspectionOverviewScreen.routePath,
+        builder: (context, state) => const InspectionOverviewScreen(),
+      ),
+      GoRoute(
+        path: AreasScreen.routePath,
+        builder: (context, state) => const AreasScreen(),
       ),
       GoRoute(
         path: PhotoGuideScreen.routePath,
@@ -181,9 +188,16 @@ GoRouter buildAppRouter(WidgetRef ref) {
         ),
       ),
       GoRoute(
-        path: '${InspectionQueueScreen.routePath}/:sectionId',
+        path: '${AreaInspectionScreen.routePathPrefix}/:sectionId',
+        builder: (context, state) => AreaInspectionScreen(
+          sectionId: state.pathParameters['sectionId']!,
+          autoCapture: state.uri.queryParameters['capture'] == '1',
+        ),
+      ),
+      GoRoute(
+        path: '${FindingDetailScreen.routePathPrefix}/:findingId',
         builder: (context, state) =>
-            AreaInspectionScreen(sectionId: state.pathParameters['sectionId']!),
+            FindingDetailScreen(findingId: state.pathParameters['findingId']!),
       ),
       GoRoute(
         path: AiReviewOverviewScreen.routePath,

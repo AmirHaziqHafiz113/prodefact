@@ -37,3 +37,13 @@ final attentionSessionsProvider =
       final summaries = ref.watch(sessionSummariesProvider).value ?? const [];
       return summaries.where((s) => s.needsAttention).toList();
     });
+
+/// The real, non-fabricated count of evidence photos across every
+/// session still waiting to reach the cloud (`pendingSyncCount` — see
+/// its doc for what "waiting" means). Shared by Home's "Needs
+/// attention" section so it agrees with the per-session sync strip
+/// the Inspections queue already shows.
+final totalPendingSyncCountProvider = Provider.autoDispose<int>((ref) {
+  final summaries = ref.watch(sessionSummariesProvider).value ?? const [];
+  return summaries.fold<int>(0, (sum, s) => sum + s.pendingSyncCount);
+});

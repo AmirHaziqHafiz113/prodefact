@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
-import 'package:prodefact/app/router/app_shell_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/wallet_screen.dart';
 
 import '../support/test_repository.dart';
@@ -24,12 +23,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBottomNav),
-        matching: find.text('Wallet'),
-      ),
-    );
+    // Wallet opens from Home's credits card (no longer a tab).
+    await tester.tap(find.byKey(const ValueKey('home-credits')));
     await tester.pumpAndSettle();
 
     expect(find.byType(WalletScreen), findsOneWidget);

@@ -201,6 +201,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Confirmed findings sit in the collapsed "Resolved" group.
+    await tester.tap(find.byKey(const ValueKey('review-show-resolved')));
+    await tester.pumpAndSettle();
 
     expect(find.text('Accepted automatically'), findsOneWidget);
     expect(find.text('Auto-accepted'), findsOneWidget);

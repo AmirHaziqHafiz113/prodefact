@@ -35,7 +35,7 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('High Rise')));
   await tester.pumpAndSettle();
@@ -85,7 +85,7 @@ Future<ProviderContainer> _pumpToAiReview(WidgetTester tester) async {
   final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
   navigator.pop();
   await tester.pumpAndSettle();
-  expect(find.text('Physical Inspection'), findsOneWidget);
+  expect(find.text('Inspection Overview'), findsOneWidget);
 
   final statusNotifier = container.read(sectionStatusesProvider.notifier);
   for (final s in queue) {
@@ -131,13 +131,15 @@ void main() {
       );
       navigator.pop();
       await tester.pumpAndSettle();
-      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(find.text('Inspection Overview'), findsOneWidget);
 
-      await tester.tap(_within(find.text('Complete Physical Inspection')));
+      // The site visit is done and a finding waits for a decision, so
+      // the Overview's one primary action is Review Findings.
+      await tester.tap(
+        _within(find.widgetWithText(FilledButton, 'Review Findings')),
+      );
       await tester.pumpAndSettle();
-      // Confirm the completion summary dialog.
-      await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
-      await tester.pumpAndSettle();
+      expect(find.text('AI Review'), findsOneWidget);
 
       final reloadedSession = container.read(activeSessionProvider)!;
       expect(reloadedSession.aiSuggestions, hasLength(1));

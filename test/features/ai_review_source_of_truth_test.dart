@@ -86,7 +86,8 @@ void main() {
       arrange: (backend, ids) => backend.fail.add(ids[1]),
     );
 
-    expect(find.textContaining('Waiting on AI (1)'), findsOneWidget);
+    // Exceptions only: the failed finding is the one needing a decision.
+    expect(find.textContaining('Needs your decision (1)'), findsOneWidget);
     expect(find.byKey(ValueKey('pending-finding-${ids[0]}')), findsNothing);
     expect(find.byKey(ValueKey('pending-finding-${ids[2]}')), findsNothing);
     expect(find.byKey(ValueKey('pending-finding-${ids[1]}')), findsOneWidget);

@@ -402,6 +402,12 @@ class DriftInspectionRepository implements InspectionRepository {
       'GROUP BY session_id',
       sessionIds,
     );
+    final findingsTotal = await _countPerSession(
+      'SELECT session_id, COUNT(*) as c FROM finding_rows '
+      'WHERE session_id IN (${_placeholders(sessionIds.length)}) '
+      'GROUP BY session_id',
+      sessionIds,
+    );
     final pendingSync = await _countPerSession(
       'SELECT f.session_id as session_id, COUNT(*) as c '
       'FROM evidence_rows e '
@@ -431,6 +437,10 @@ class DriftInspectionRepository implements InspectionRepository {
             propertyTitle: row.propertyTitle,
             propertyAddress: row.propertyAddress,
             unitNumber: row.unitNumber,
+            findingsCount: findingsTotal[row.id] ?? 0,
+            inspectionDate: row.inspectionDate,
+            coverPhotoPath: _reportMetadataFromJson(row.reportMetadataJson)
+                ?.coverPhotoPath,
           ),
         )
         .toList();

@@ -191,6 +191,11 @@ void main() {
       ),
     );
     await tester.pump();
+    // Settled, so it's in the collapsed "Resolved" group — not the
+    // needs-a-decision list.
+    expect(find.textContaining('Needs your decision'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('review-show-resolved')));
+    await tester.pump();
     final entry = DefectCatalogue.instance.byId('wall.wall_tile.04')!;
     expect(find.textContaining(entry.defectDescription), findsWidgets);
   });

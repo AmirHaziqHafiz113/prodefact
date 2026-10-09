@@ -3,18 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../core/inspection/entities/sync_status.dart';
 import '../app_colors.dart';
 import '../app_metrics.dart';
-import 'app_mini_progress_line.dart';
 import 'app_property_illustration.dart';
+import 'app_property_photo.dart';
 import 'sync_status_pill.dart';
 
-/// A substantially redesigned inspection/property row — replaces a
-/// plain text-stacked list item with: a property illustration, a
-/// coloured status-accent edge, and (in full mode) three compact real
-/// progress indicators (Physical/AI/Review) plus a sync pill. Used by
-/// both the Inspections list (full) and Home's recent-inspections list
-/// (compact — no progress bars, no overflow menu) so the two screens
-/// share one visual language for "a property" instead of two
-/// different ad hoc row designs.
+/// One property/inspection job on the Inspections list: the residence
+/// photo (or drawn illustration), title, address, date, a progress bar,
+/// finding and unresolved counts, one status chip, and sync state when
+/// it matters. Built from caller-supplied values so this design-system
+/// widget never depends on feature-layer status enums.
 class AppInspectionCard extends StatelessWidget {
   const AppInspectionCard({
     super.key,
@@ -22,172 +19,174 @@ class AppInspectionCard extends StatelessWidget {
     required this.subtitle,
     required this.illustrationKind,
     required this.statusPill,
-    required this.accentColor,
     required this.onTap,
+    this.photoPath,
+    this.dateLabel,
+    this.progress,
+    this.progressLabel,
+    this.findingsCount = 0,
+    this.unresolvedCount = 0,
     this.syncStatus,
     this.pendingSyncCount = 0,
-    this.aiFraction,
-    this.aiFractionLabel,
-    this.reviewFraction,
-    this.reviewFractionLabel,
-    this.physicalComplete,
     this.trailing,
-    this.dense = false,
   });
 
   final String title;
   final String? subtitle;
   final AppPropertyIllustrationKind illustrationKind;
+  final String? photoPath;
 
-  /// The session's status pill — built by the caller (e.g.
-  /// `SessionLifecyclePill`), so this shared design-system widget
-  /// never depends on the feature-layer `InspectionStatus` enum or its
-  /// label/icon/color mapping.
+  /// The session's status chip, built by the caller.
   final Widget statusPill;
-
-  /// The colour behind [statusPill] — reused for the row's left accent
-  /// edge so status is visible before reading any text.
-  final Color accentColor;
   final VoidCallback onTap;
 
+  /// "9 Oct 2026" — the inspection date (or creation date).
+  final String? dateLabel;
+
+  /// Real progress (0.0–1.0) and its label; null hides the bar rather
+  /// than showing a fabricated 0%.
+  final double? progress;
+  final String? progressLabel;
+
+  final int findingsCount;
+
+  /// Findings waiting on the inspector (pending review or failed).
+  final int unresolvedCount;
+
+  /// The session's sync state (null hides it).
   final SyncStatus? syncStatus;
   final int pendingSyncCount;
 
-  /// Real AI-processed fraction (0.0–1.0) and its "X/Y" label — null
-  /// hides the row entirely rather than showing a fabricated 0%.
-  final double? aiFraction;
-  final String? aiFractionLabel;
-  final double? reviewFraction;
-  final String? reviewFractionLabel;
-
-  /// Whether physical inspection is complete — a real, if coarse,
-  /// binary fact from the session's own lifecycle status (a per-area
-  /// fraction isn't available at list-summary granularity without an
-  /// expensive per-card detail load — see `InspectionSessionSummary`'s
-  /// own doc comment on why it deliberately omits that). Null hides
-  /// the row.
-  final bool? physicalComplete;
-
-  /// An overflow menu or other trailing action — omitted in [dense]
-  /// mode (Home's recent list has no per-row actions).
+  /// An overflow menu.
   final Widget? trailing;
-
-  /// Compact mode for Home's recent-inspections list: illustration,
-  /// title/subtitle, and a status pill only — no progress bars, no
-  /// sync pill, no trailing action.
-  final bool dense;
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: IntrinsicHeight(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.md,
+          ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // A coloured status-accent edge — the row's status is
-              // visible even at a glance/scroll, before reading text.
-              Container(width: 4, color: accentColor),
+              AppPropertyPhoto(
+                photoPath: photoPath,
+                kind: illustrationKind,
+                width: 76,
+                height: 76,
+              ),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.all(
-                    dense ? AppSpacing.md : AppSpacing.lg,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AppPropertyIllustration(
-                        kind: illustrationKind,
-                        size: dense ? 48 : 56,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium,
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty)
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall,
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                statusPill,
-                              ],
-                            ),
-                            if (subtitle != null && subtitle!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  subtitle!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            if (!dense) ...[
-                              const SizedBox(height: AppSpacing.sm),
-                              if (physicalComplete != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: AppMiniProgressLine(
-                                    label: 'Phys',
-                                    value: physicalComplete! ? 1 : 0,
-                                    fractionLabel: physicalComplete!
-                                        ? 'Complete'
-                                        : 'In progress',
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              if (aiFraction != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: AppMiniProgressLine(
-                                    label: 'AI',
-                                    value: aiFraction!,
-                                    fractionLabel: aiFractionLabel ?? '',
-                                    color: AppColors.info,
-                                  ),
-                                ),
-                              if (reviewFraction != null)
-                                AppMiniProgressLine(
-                                  label: 'Rev',
-                                  value: reviewFraction!,
-                                  fractionLabel: reviewFractionLabel ?? '',
-                                  color: AppColors.plumbing,
-                                ),
-                              if (syncStatus != null) ...[
-                                const SizedBox(height: AppSpacing.sm),
-                                SyncStatusPill(
-                                  status: syncStatus!,
-                                  dense: true,
-                                  pendingCount: pendingSyncCount,
-                                ),
-                              ],
-                            ],
-                          ],
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        statusPill,
+                        if (dateLabel != null)
+                          _Meta(icon: Icons.event_outlined, text: dateLabel!),
+                      ],
+                    ),
+                    if (progress != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: AppColors.surfaceMuted,
                         ),
                       ),
-                      if (trailing != null) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        trailing!,
-                      ],
                     ],
-                  ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.md,
+                      runSpacing: 2,
+                      children: [
+                        if (progressLabel != null)
+                          _Meta(icon: Icons.timeline, text: progressLabel!),
+                        _Meta(
+                          icon: Icons.photo_camera_outlined,
+                          text:
+                              '$findingsCount finding'
+                              '${findingsCount == 1 ? '' : 's'}',
+                        ),
+                        if (unresolvedCount > 0)
+                          _Meta(
+                            icon: Icons.help_outline,
+                            text: '$unresolvedCount unresolved',
+                            color: AppColors.warning,
+                          ),
+                      ],
+                    ),
+                    if (syncStatus != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      SyncStatusPill(
+                        status: syncStatus!,
+                        dense: true,
+                        pendingCount: pendingSyncCount,
+                      ),
+                    ],
+                  ],
                 ),
               ),
+              ?trailing,
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Meta extends StatelessWidget {
+  const _Meta({
+    required this.icon,
+    required this.text,
+    this.color = AppColors.textSecondary,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+        ),
+      ],
     );
   }
 }

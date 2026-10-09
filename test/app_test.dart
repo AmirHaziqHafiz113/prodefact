@@ -20,7 +20,7 @@ void main() {
     expect(find.text('Inspections'), findsWidgets);
     expect(find.text('No inspections yet'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('New Inspection'));
+    await tester.tap(find.byTooltip('Capture'));
     await tester.pumpAndSettle();
 
     expect(
@@ -40,7 +40,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('New Inspection'));
+      await tester.tap(find.byTooltip('Capture'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Landed'));

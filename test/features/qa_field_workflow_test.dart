@@ -7,7 +7,8 @@ import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/billing/fake_billing_service.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/area_inspection_screen.dart';
-import 'package:prodefact/features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/areas_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/inspection_overview_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/wallet_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
@@ -180,7 +181,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: InspectionQueueScreen()),
+          child: const MaterialApp(home: InspectionOverviewScreen()),
         ),
       );
       await tester.pumpAndSettle();
@@ -256,7 +257,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: InspectionQueueScreen()),
+          child: const MaterialApp(home: AreasScreen()),
         ),
       );
       await tester.pumpAndSettle();

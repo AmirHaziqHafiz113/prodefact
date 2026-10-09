@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
-import 'package:prodefact/features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/inspection_overview_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/new_inspection_draft_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
@@ -26,7 +26,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: InspectionQueueScreen()),
+        child: const MaterialApp(home: InspectionOverviewScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -70,7 +70,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: InspectionQueueScreen()),
+          child: const MaterialApp(home: InspectionOverviewScreen()),
         ),
       );
       await tester.pumpAndSettle();

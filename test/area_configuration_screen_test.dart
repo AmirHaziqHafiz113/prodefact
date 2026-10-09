@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
+import 'package:prodefact/app/router/app_shell_screen.dart';
+import 'package:prodefact/app/theme/design_system.dart';
 
 import 'support/test_repository.dart';
 import 'support/photo_guide_helper.dart';
@@ -12,7 +14,7 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
 
   await tester.tap(find.text('High Rise'));
@@ -204,7 +206,7 @@ void main() {
 
     await _reviewAndStart(tester);
 
-    expect(find.text('Physical Inspection'), findsOneWidget);
+    expect(find.text('Inspection Overview'), findsOneWidget);
   });
 
   testWidgets(
@@ -229,7 +231,7 @@ void main() {
 
       await _reviewAndStart(tester);
 
-      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(find.text('Inspection Overview'), findsOneWidget);
       expect(_within(find.text('Kitchen')), findsNothing);
 
       // Once started, the setup draft is gone — popping back out of
@@ -252,7 +254,7 @@ void main() {
       await tester.tap(find.text('Test Property'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(find.text('Inspection Overview'), findsOneWidget);
       expect(_within(find.text('Kitchen')), findsNothing);
     },
   );
@@ -291,7 +293,7 @@ void main() {
     await tester.pumpAndSettle();
     await passPhotoGuide(tester);
 
-    expect(find.text('Physical Inspection'), findsOneWidget);
+    expect(find.text('Inspection Overview'), findsOneWidget);
 
     // Only one inspection was actually created — pop all the way
     // back to the dashboard (queue -> review setup -> areas -> basic
@@ -304,6 +306,13 @@ void main() {
       navigator.pop();
     }
     await tester.pumpAndSettle();
-    expect(find.text('In Progress'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBottomNav),
+        matching: find.text('Inspections'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AppInspectionCard), findsOneWidget);
   });
 }

@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_build_info.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../data/local/database_providers.dart';
 import '../../../../data/remote/remote_providers.dart';
 import '../../../../core/inspection/inspection_domain.dart';
-import '../../providers/session_list_providers.dart';
+import '../../../auth/presentation/sign_in_screen.dart';
+import '../../providers/custom_catalogue_providers.dart';
 import '../../providers/user_profile_providers.dart';
-import '../widgets/attention_sheet.dart';
+import '../../providers/wallet_providers.dart';
+import '../widgets/app_bottom_sheet.dart';
+import 'photo_guide_screen.dart';
+import 'wallet_screen.dart';
 
-/// The signed-in inspector's profile: identity (from Firebase Auth,
-/// read-only), on-device company/inspector-name prefill data (editable —
-/// see `UserProfile`), AI defaults, and sign out. No Firebase technical
+/// Everything that belongs to the inspector and their company, grouped:
+/// Account, Inspector & company (report branding prefill — see
+/// `UserProfile`), AI Analysis Preference, Custom Catalogue, Wallet &
+/// usage, App, and sign out. Identity comes from Firebase Auth
+/// (read-only). No Firebase technical
 /// identifiers (uid, tokens) are ever shown — only the email a real
 /// person recognizes as their own.
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -43,7 +50,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final authState = ref.watch(authStateProvider);
     final user = authState.value;
     final profileAsync = ref.watch(userProfileProvider);
-    final attentionCount = ref.watch(attentionSessionsProvider).length;
+    final firebaseReady = ref.watch(firebaseReadyProvider);
+    final customCount = ref
+        .watch(customCatalogueProvider)
+        .value
+        ?.where((d) => !d.archived)
+        .length;
+    final balance =
+        ref.watch(walletBalanceProvider).value ??
+        ref.watch(walletCacheProvider).value?.balanceCredits;
 
     profileAsync.whenData((profile) {
       if (!_prefilled) {
@@ -63,10 +78,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
-            AppTopBar(
-              attentionCount: attentionCount,
-              onAttentionTap: () => showAttentionSheet(context, ref),
-            ),
+            Text('Profile', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: AppSpacing.lg),
             // A soft branded identity surface — elevated above a plain
             // header row without going as dark/urgent as Home/Wallet's
@@ -81,7 +93,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   colors: [AppColors.successBg, AppColors.surfaceAlt],
                 ),
                 borderRadius: BorderRadius.circular(AppRadius.xl),
-                border: Border.all(color: AppColors.outline),
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
@@ -148,39 +159,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
-            // The one place the AI level is chosen: it applies silently
-            // to every analysis (never asked per finding, at upload, or
-            // in the approval dialog). Saved as soon as it is tapped.
-            _SectionCard(
-              icon: Icons.psychology_outlined,
-              title: 'AI Analysis Preference',
-              subtitle: 'Used for every finding you analyse',
-              child: Column(
-                children: [
-                  for (final level in AiLevel.values)
-                    ListTile(
-                      key: ValueKey('ai-pref-${level.name}'),
-                      contentPadding: EdgeInsets.zero,
-                      selected:
-                          (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level,
-                      leading: Icon(
-                        (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
-                      ),
-                      title: Text(_aiLevelLabel(level)),
-                      subtitle: Text(_aiLevelPreferenceCopy(level)),
-                      onTap: () => _setAiPreference(level),
-                    ),
-                ],
+            if (user == null && firebaseReady) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: AppActionRow(
+                  key: const ValueKey('profile-sign-in'),
+                  icon: Icons.login,
+                  title: 'Sign in to sync',
+                  subtitle:
+                      'Back up inspections and use them on another device',
+                  onTap: () => context.push(SignInScreen.routePath),
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: AppSpacing.lg),
             _SectionCard(
               icon: Icons.description_outlined,
-              title: 'Report Settings',
-              subtitle: 'Manage your default report information',
+              title: 'Inspector & company',
+              subtitle: 'Prefilled on every new inspection and report',
               child: Column(
                 children: [
                   TextField(
@@ -218,6 +215,66 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            // The one place the AI level is chosen: it applies silently
+            // to every analysis (never asked per finding, at upload, or
+            // in the approval dialog). Saved as soon as it is tapped.
+            _SectionCard(
+              icon: Icons.psychology_outlined,
+              title: 'AI Analysis Preference',
+              subtitle: 'Used for every finding you analyse',
+              child: Column(
+                children: [
+                  for (final level in AiLevel.values)
+                    ListTile(
+                      key: ValueKey('ai-pref-${level.name}'),
+                      contentPadding: EdgeInsets.zero,
+                      selected:
+                          (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level,
+                      leading: Icon(
+                        (_defaultAiLevel ?? kFieldAnalysisAiLevel) == level
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                      ),
+                      title: Text(_aiLevelLabel(level)),
+                      subtitle: Text(_aiLevelPreferenceCopy(level)),
+                      onTap: () => _setAiPreference(level),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _GroupLabel('Account & tools'),
+            AppGroupedList(
+              children: [
+                AppActionRow(
+                  key: const ValueKey('profile-wallet'),
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Wallet & usage',
+                  subtitle: balance == null
+                      ? 'AI credits, top up, House Pass'
+                      : '$balance credits · top up, usage, House Pass',
+                  onTap: () => context.push(WalletScreen.routePath),
+                ),
+                AppActionRow(
+                  key: const ValueKey('profile-custom-catalogue'),
+                  icon: Icons.library_add_outlined,
+                  title: 'Custom Catalogue',
+                  subtitle: customCount == null
+                      ? 'Your company\'s own defect entries'
+                      : '$customCount custom '
+                            'entr${customCount == 1 ? 'y' : 'ies'}',
+                  onTap: () => _showCustomCatalogue(context),
+                ),
+                AppActionRow(
+                  key: const ValueKey('profile-photo-guide'),
+                  icon: Icons.photo_camera_back_outlined,
+                  title: 'Photo guide',
+                  subtitle: 'Tips for photos AI can read',
+                  onTap: () => context.push(PhotoGuideScreen.routePath),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.xl),
             // QA build identifier: lets testers prove exactly which APK a
@@ -381,4 +438,87 @@ class _SectionCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xs,
+        AppSpacing.sm,
+        0,
+        AppSpacing.sm,
+      ),
+      child: Text(
+        text.toUpperCase(),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: AppColors.textSecondary,
+          letterSpacing: 0.8,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// The company's custom defect entries, read-only. Entries are added
+/// where they are needed — "Add New" in the defect selector — so the
+/// inspector never has to leave a finding to create one.
+Future<void> _showCustomCatalogue(BuildContext context) {
+  return showAppBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => Consumer(
+      builder: (context, ref, _) {
+        final entries =
+            ref
+                .watch(customCatalogueProvider)
+                .value
+                ?.where((d) => !d.archived)
+                .toList() ??
+            const [];
+        return AppSheetFrame(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Custom Catalogue',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Add an entry with "Add New" in any finding\'s defect '
+                'selector. Custom entries are never sent to AI.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (entries.isEmpty)
+                const AppEmptyView(
+                  icon: Icons.library_add_outlined,
+                  title: 'No custom entries yet',
+                  message:
+                      'When the catalogue lacks a defect you need, add it '
+                      'from the defect selector on a finding.',
+                )
+              else
+                for (final entry in entries)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.label_outline),
+                    title: Text(entry.defectDescription),
+                    subtitle: Text(
+                      '${entry.elementName} · ${entry.componentName}',
+                    ),
+                  ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 }

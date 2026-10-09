@@ -5,23 +5,9 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import '../screens/area_inspection_screen.dart' show FindingAiStatusLine;
+import 'finding_status_presentation.dart';
 import 'reanalyse_and_candidates.dart';
 import 'related_defect_selector.dart';
-
-Color _toneColor(FindingTone tone) => switch (tone) {
-  FindingTone.green => AppColors.success,
-  FindingTone.orange => AppColors.warning,
-  FindingTone.red => AppColors.danger,
-};
-
-String _toneLabel(FindingResolution resolution) => switch (resolution.state) {
-  FindingResolutionState.autoAccepted => 'Accepted by AI',
-  FindingResolutionState.confirmedByInspector => 'Confirmed',
-  FindingResolutionState.processing => 'In progress',
-  FindingResolutionState.needsReview => 'Needs your choice',
-  FindingResolutionState.unresolved => 'Unresolved',
-  FindingResolutionState.failed => 'Needs attention',
-};
 
 /// Asks before deleting a finding (photo + classification). Returns
 /// whether it was deleted.
@@ -67,10 +53,15 @@ class FindingResolutionPanel extends ConsumerWidget {
     super.key,
     required this.finding,
     required this.suggestion,
+    this.showStatus = true,
   });
 
   final Finding finding;
   final AiSuggestion? suggestion;
+
+  /// Whether to lead with the finding's status chip — off where the
+  /// host card already shows it (the Area finding card's header).
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -105,29 +96,25 @@ class FindingResolutionPanel extends ConsumerWidget {
       key: ValueKey('finding-panel-${finding.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
-              key: ValueKey('finding-tone-${finding.id}-${tone.name}'),
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: _toneColor(tone),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                _toneLabel(resolution),
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium
-                    ?.copyWith(color: _toneColor(tone)),
-              ),
-            ),
-          ],
+        // The tone key stays on every card (tests and the report gate
+        // read it), whether or not the chip itself is shown here.
+        KeyedSubtree(
+          key: ValueKey('finding-tone-${finding.id}-${tone.name}'),
+          child: showStatus
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                  child: Builder(
+                    builder: (context) {
+                      final (status, label) = findingStatusOf(
+                        finding,
+                        suggestion,
+                      );
+                      return AppStatusChip(status: status, label: label);
+                    },
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
-        const SizedBox(height: 4),
         if (resolution.isResolved && shownEntry != null)
           _ResultBlock(
             entry: shownEntry,
@@ -241,7 +228,7 @@ class _ResultBlock extends StatelessWidget {
             defectDescription: entry.defectDescription,
             term: term,
           ),
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: Theme.of(context).textTheme.titleSmall,
         ),
         Text(
           '${entry.mainElementName} · ${entry.componentName}',

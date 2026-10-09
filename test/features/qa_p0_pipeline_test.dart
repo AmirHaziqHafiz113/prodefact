@@ -9,7 +9,7 @@ import 'package:prodefact/data/remote/remote_providers.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/ai_analysis_approval_dialog.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/ai_review_overview_screen.dart';
-import 'package:prodefact/features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/inspection_overview_screen.dart';
 import 'package:prodefact/features/home_inspection/presentation/screens/report_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
@@ -218,12 +218,17 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: InspectionQueueScreen()),
+          child: const MaterialApp(home: InspectionOverviewScreen()),
         ),
       );
       await tester.pump();
-      final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
+      // A quiet secondary action while areas remain open; never
+      // disabled by AI still running.
+      final button = tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: find.text('Complete Physical Inspection'),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        ),
       );
       expect(button.onPressed, isNotNull);
     }
@@ -323,7 +328,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.textContaining('Waiting on AI (2)'), findsOneWidget);
+      // Exceptions only: the failed finding needs a decision; the queued
+      // one is summarised as still being analysed.
+      expect(find.textContaining('Needs your decision (1)'), findsOneWidget);
+      expect(find.byKey(const ValueKey('review-in-flight')), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Classify Manually'), findsOneWidget);
       expect(

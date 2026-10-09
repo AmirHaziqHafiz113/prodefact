@@ -19,7 +19,7 @@ Future<void> _pumpToBasicDetails(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('High Rise'));
   await tester.pumpAndSettle();

@@ -23,7 +23,9 @@ import 'photo_viewer_screen.dart';
 import 'top_up_screen.dart';
 import 'photo_guide_screen.dart';
 import '../widgets/finding_resolution_panel.dart';
+import '../widgets/finding_status_presentation.dart';
 import '../widgets/reanalyse_and_candidates.dart';
+import 'finding_detail_screen.dart';
 
 /// Lets the inspector pick where a piece of evidence comes from —
 /// Camera or Gallery/Photos — before it enters the *exact same*
@@ -68,9 +70,20 @@ Future<EvidenceSource?> chooseEvidenceSource(BuildContext context) {
 /// the background — the inspector can immediately take the next photo
 /// without waiting for it.
 class AreaInspectionScreen extends ConsumerStatefulWidget {
-  const AreaInspectionScreen({required this.sectionId, super.key});
+  const AreaInspectionScreen({
+    required this.sectionId,
+    this.autoCapture = false,
+    super.key,
+  });
+
+  /// `/home-inspection/inspection/:sectionId` — see `areaFindingsLocation`.
+  static const routePathPrefix = '/home-inspection/inspection';
 
   final String sectionId;
+
+  /// Opens the camera as soon as the screen appears — the "+" quick
+  /// capture path (inspection and area already chosen).
+  final bool autoCapture;
 
   @override
   ConsumerState<AreaInspectionScreen> createState() =>
@@ -88,6 +101,17 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
   // make it count, or appear in the report as "No defects recorded". An
   // area becomes started when a finding or area note is recorded, and
   // completed only through "Mark Area Complete".
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoCapture) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _takePhoto(widget.sectionId, source: EvidenceSource.camera);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,42 +155,41 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
-          AppSpacing.md,
+          AppSpacing.sm,
           AppSpacing.lg,
-          120,
+          AppSpacing.xl,
         ),
         children: [
           _AreaHeader(section: section, findings: areaFindings),
-          const SizedBox(height: AppSpacing.lg),
-          if (section.note != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.sticky_note_2_outlined,
-                      size: 16,
-                      color: AppColors.textMuted,
+          if (section.note != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      section.note!,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        section.note!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ],
+          const SizedBox(height: AppSpacing.md),
           // One clear action instead of the old Not started / In
           // progress / Completed selector, which looked like a filter
           // but only relabelled the area (QA #25). "In progress" now
@@ -184,71 +207,59 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
                 .setStatus(section.id, SectionStatus.inProgress),
           ),
           const SizedBox(height: AppSpacing.xl),
-          AppSectionHeader(title: 'Saved findings (${areaFindings.length})'),
+          AppSectionHeader(title: 'Findings (${areaFindings.length})'),
           if (areaFindings.length > 1)
             Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: _FindingSortControl(
                 value: _sort,
                 onChanged: (sort) => setState(() => _sort = sort),
               ),
             ),
           if (areaFindings.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-              child: Text(
-                'No findings recorded yet. Tap "Take Defect Photo" below '
-                'whenever you spot a defect.',
-              ),
+            const AppEmptyView(
+              icon: Icons.add_a_photo_outlined,
+              title: 'No findings in this area yet',
+              message:
+                  'Tap "Take Defect Photo" whenever you spot a defect. '
+                  'Each photo becomes its own finding.',
             )
           else
             for (final unit in orderFindings(areaFindings, sort: _sort))
               Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: unit.isGroup
                     ? _CaptureBatchGroup(
                         unit: unit,
-                        cardFor: (finding) => _FindingCard(
-                          finding: finding,
-                          onCaptureAnother: _isCapturing
-                              ? null
-                              : () => _takePhoto(section.id),
-                        ),
+                        cardFor: (finding) => _FindingCard(finding: finding),
                       )
-                    : _FindingCard(
-                        finding: unit.findings.single,
-                        onCaptureAnother: _isCapturing
-                            ? null
-                            : () => _takePhoto(section.id),
-                      ),
+                    : _FindingCard(finding: unit.findings.single),
               ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: FilledButton.icon(
-            onPressed: _isCapturing ? null : () => _takePhoto(section.id),
-            icon: _isCapturing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.photo_camera),
-            label: Text(
-              areaFindings.isEmpty
-                  ? 'Take Defect Photo'
-                  : 'Take Another Defect Photo',
-            ),
+      bottomNavigationBar: AppPrimaryActionBar(
+        primary: FilledButton.icon(
+          onPressed: _isCapturing ? null : () => _takePhoto(section.id),
+          icon: _isCapturing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.photo_camera),
+          label: Text(
+            areaFindings.isEmpty
+                ? 'Take Defect Photo'
+                : 'Take Another Defect Photo',
           ),
         ),
       ),
     );
   }
 
-  Future<void> _takePhoto(String sectionId) async {
-    final source = await chooseEvidenceSource(context);
+  /// [source] skips the Camera/Gallery choice (quick capture).
+  Future<void> _takePhoto(String sectionId, {EvidenceSource? source}) async {
+    source ??= await chooseEvidenceSource(context);
     if (source == null || !mounted) return; // cancelled the source picker
 
     final notifier = ref.read(activeSessionProvider.notifier);
@@ -383,61 +394,75 @@ class _AreaCompletionControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final isComplete = status == SectionStatus.completed;
     final isStarted = hasFindings || status == SectionStatus.inProgress;
-    final (label, icon, color) = isComplete
-        ? ('Area completed', Icons.check_circle, AppColors.success)
+    final (label, appStatus) = isComplete
+        ? ('Area completed', AppStatus.completed)
         : isStarted
-        ? ('Area in progress', Icons.timelapse, AppColors.warning)
+        ? ('Area in progress', AppStatus.inProgress)
         : (
             'Not started · optional if this unit has no such area',
-            Icons.circle_outlined,
-            AppColors.textSecondary,
+            AppStatus.notStarted,
           );
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: color),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(color: color),
-                  ),
-                ),
-              ],
+    final style = appStatusStyle(appStatus);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: style.background,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        children: [
+          Icon(style.icon, size: 20, color: style.foreground),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: style.foreground,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            if (isComplete)
-              OutlinedButton.icon(
-                onPressed: onReopen,
-                icon: const Icon(Icons.undo),
-                label: const Text('Reopen Area'),
-              )
-            else
-              OutlinedButton.icon(
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          if (isComplete)
+            TextButton.icon(
+              onPressed: onReopen,
+              icon: const Icon(Icons.undo, size: 18),
+              label: const Text('Reopen Area'),
+            )
+          else
+            Flexible(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  backgroundColor: AppColors.surface,
+                ),
                 onPressed: onMarkComplete,
-                icon: const Icon(Icons.check),
+                icon: const Icon(Icons.check, size: 18),
                 label: Text(
                   hasFindings
                       ? 'Mark Area Complete'
                       : 'No Defects · Mark Area Complete',
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// The area identity strip — real finding/pending-review counts plus
-/// the plumbing-first and needs-attention badges, matching the same
-/// card language used on the Inspection Overview's own area cards.
+/// The area identity strip — finding count, open review count and the
+/// plumbing-first badge.
 class _AreaHeader extends StatelessWidget {
   const _AreaHeader({required this.section, required this.findings});
 
@@ -453,11 +478,19 @@ class _AreaHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppFallbackThumbnail(
-          icon: section.isPlumbing
-              ? Icons.plumbing_outlined
-              : Icons.chair_outlined,
-          size: 64,
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: (section.isPlumbing ? AppColors.plumbing : AppColors.primary)
+                .withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Icon(
+            section.isPlumbing ? Icons.plumbing_outlined : Icons.chair_outlined,
+            size: 26,
+            color: section.isPlumbing ? AppColors.plumbing : AppColors.primary,
+          ),
         ),
         const SizedBox(width: AppSpacing.md),
         Expanded(
@@ -465,20 +498,16 @@ class _AreaHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                section.name,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              Text(
                 pendingReview == 0
                     ? '${findings.length} finding${findings.length == 1 ? '' : 's'}'
                     : '${findings.length} finding${findings.length == 1 ? '' : 's'} '
                           '· $pendingReview pending review',
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
                 children: [
                   if (section.isPlumbing)
                     const StatusPill(
@@ -489,12 +518,9 @@ class _AreaHeader extends StatelessWidget {
                       dense: true,
                     ),
                   if (pendingReview > 0)
-                    StatusPill(
+                    const AppStatusChip(
+                      status: AppStatus.needsReview,
                       label: 'Needs Attention',
-                      icon: Icons.priority_high,
-                      foreground: AppColors.danger,
-                      background: AppColors.dangerBg,
-                      dense: true,
                     ),
                 ],
               ),
@@ -975,13 +1001,14 @@ class AiImageQualityNote extends StatelessWidget {
 
 enum _FindingAction { editNote, reanalyse, remove }
 
+/// One finding in the area list: its photo large enough to judge, the
+/// inspector's note, and the shared resolution panel (result, defect
+/// choice, Reanalyse / Reject / Delete). The header opens Finding
+/// Detail; the photo opens the full-screen viewer.
 class _FindingCard extends ConsumerWidget {
-  const _FindingCard({required this.finding, required this.onCaptureAnother});
+  const _FindingCard({required this.finding});
 
   final Finding finding;
-
-  /// Starts a fresh capture in this area — a new finding.
-  final VoidCallback? onCaptureAnother;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -989,106 +1016,128 @@ class _FindingCard extends ConsumerWidget {
         .watch(activeSessionProvider)
         ?.aiSuggestions
         .firstWhereOrNull((s) => s.findingId == finding.id);
+    final (status, label) = findingStatusOf(finding, suggestion);
+    void openDetail() => context.push(findingDetailLocation(finding.id));
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _FindingPhotoStrip(finding: finding),
-                  const SizedBox(height: AppSpacing.sm),
-                  if (finding.defectNote != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        finding.defectNote!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
+      key: ValueKey('finding-card-${finding.id}'),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FindingPhoto(finding: finding),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.xs,
+              AppSpacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: AppStatusChip(status: status, label: label),
                       ),
                     ),
-                  FindingResolutionPanel(
-                    finding: finding,
-                    suggestion: suggestion,
-                  ),
-                  if (aiImageQualityNote(suggestion) case final note?)
-                    AiImageQualityNote(text: note),
-                  // One photo = one finding: another photo — even of
-                  // this same defect — is captured as a NEW finding,
-                  // never added to this one.
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: ValueKey('add-defect-photo-${finding.id}'),
-                      onPressed: onCaptureAnother,
-                      icon: const Icon(Icons.add_a_photo_outlined),
-                      label: const Text('Add another defect photo'),
+                    TextButton(
+                      key: ValueKey('finding-details-${finding.id}'),
+                      onPressed: openDetail,
+                      child: const Text('Details'),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuButton<_FindingAction>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (action) => switch (action) {
-                _FindingAction.editNote => _editNote(context, ref),
-                _FindingAction.reanalyse => showReanalyseDialog(
-                  context: context,
-                  ref: ref,
-                  finding: finding,
+                    PopupMenuButton<_FindingAction>(
+                      icon: const Icon(Icons.more_vert),
+                      tooltip: 'More actions',
+                      onSelected: (action) => switch (action) {
+                        _FindingAction.editNote => editFindingNote(
+                          context,
+                          ref,
+                          finding,
+                        ),
+                        _FindingAction.reanalyse => showReanalyseDialog(
+                          context: context,
+                          ref: ref,
+                          finding: finding,
+                        ),
+                        _FindingAction.remove => confirmAndDeleteFinding(
+                          context,
+                          ref,
+                          finding,
+                        ),
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: _FindingAction.editNote,
+                          child: ListTile(
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Edit note'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        // Any finding with a photo can be analysed again
+                        // on request — passed, needs review, failed or
+                        // corrected — except while AI is already working
+                        // on it.
+                        PopupMenuItem(
+                          value: _FindingAction.reanalyse,
+                          enabled:
+                              finding.isAiEligible &&
+                              !aiFindingStatusIsInFlight(finding.aiStatus),
+                          child: const ListTile(
+                            leading: Icon(Icons.refresh),
+                            title: Text('Reanalyse'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: _FindingAction.remove,
+                          child: ListTile(
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Delete finding'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                _FindingAction.remove => confirmAndDeleteFinding(
-                  context,
-                  ref,
-                  finding,
-                ),
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: _FindingAction.editNote,
-                  child: ListTile(
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Edit note'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                // Any finding with a photo can be analysed again on
-                // request — passed, needs review, failed or corrected —
-                // except while AI is already working on it.
-                PopupMenuItem(
-                  value: _FindingAction.reanalyse,
-                  enabled:
-                      finding.isAiEligible &&
-                      !aiFindingStatusIsInFlight(finding.aiStatus),
-                  child: const ListTile(
-                    leading: Icon(Icons.refresh),
-                    title: Text('Reanalyse'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: _FindingAction.remove,
-                  child: ListTile(
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('Delete finding'),
-                    contentPadding: EdgeInsets.zero,
+                Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (finding.defectNote != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                          child: Text(
+                            finding.defectNote!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      FindingResolutionPanel(
+                        finding: finding,
+                        suggestion: suggestion,
+                        showStatus: false,
+                      ),
+                      if (aiImageQualityNote(suggestion) case final note?)
+                        AiImageQualityNote(text: note),
+                    ],
                   ),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  Future<void> _editNote(BuildContext context, WidgetRef ref) =>
-      editFindingNote(context, ref, finding);
 }
 
 /// Edits a finding's quick defect note (QA #16). With Auto Analyse on,
@@ -1137,11 +1186,11 @@ Future<void> editFindingNote(
       );
 }
 
-/// Every photo of one defect ticket as a strip of thumbnails (QA #20).
-/// Thumbnails are small square crops for scanning; tapping one opens
-/// the full, uncropped photos (QA #18/#19).
-class _FindingPhotoStrip extends StatelessWidget {
-  const _FindingPhotoStrip({required this.finding});
+/// A finding's photo, full card width and tall enough to judge on site
+/// (cropped to fill; tapping opens the full, uncropped photo — QA
+/// #18/#19). A legacy finding with several photos shows a "+N" badge.
+class _FindingPhoto extends StatelessWidget {
+  const _FindingPhoto({required this.finding});
 
   final Finding finding;
 
@@ -1150,58 +1199,86 @@ class _FindingPhotoStrip extends StatelessWidget {
     final photos = finding.evidence;
     if (photos.isEmpty) {
       return const SizedBox(
-        width: 72,
-        height: 72,
+        height: 120,
         child: ColoredBox(
-          color: AppColors.surfaceAlt,
-          child: Icon(Icons.photo_outlined),
+          color: AppColors.surfaceMuted,
+          child: Icon(Icons.photo_outlined, color: AppColors.textMuted),
         ),
       );
     }
-    return SizedBox(
-      height: 72,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: photos.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-        itemBuilder: (context, i) {
-          final photo = photos[i];
-          return InkWell(
-            key: ValueKey('finding-photo-${photo.id}'),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            onTap: () => showFindingPhotos(
-              context,
-              findingId: finding.id,
-              initialIndex: i,
+    final photo = photos.first;
+    return InkWell(
+      key: ValueKey('finding-photo-${photo.id}'),
+      onTap: () =>
+          showFindingPhotos(context, findingId: finding.id, initialIndex: 0),
+      child: SizedBox(
+        height: 180,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.file(
+              File(photo.displayFilePath),
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => const ColoredBox(
+                color: AppColors.surfaceMuted,
+                child: Icon(Icons.photo_outlined, color: AppColors.textMuted),
+              ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: Stack(
+            Positioned(
+              right: AppSpacing.sm,
+              bottom: AppSpacing.sm,
+              child: Row(
                 children: [
-                  SizedBox(
-                    width: 72,
-                    height: 72,
-                    child: Image.file(
-                      File(photo.displayFilePath),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const ColoredBox(
-                            color: AppColors.surfaceAlt,
-                            child: Icon(Icons.photo_outlined),
-                          ),
+                  if (photo.isAnnotated) const _PhotoBadge(icon: Icons.draw),
+                  if (photos.length > 1) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    _PhotoBadge(
+                      icon: Icons.photo_library_outlined,
+                      label: '+${photos.length - 1}',
                     ),
-                  ),
-                  if (photo.isAnnotated)
-                    const Positioned(
-                      right: 4,
-                      bottom: 4,
-                      child: Icon(Icons.draw, size: 16, color: Colors.white),
-                    ),
+                  ],
+                  const SizedBox(width: AppSpacing.xs),
+                  const _PhotoBadge(icon: Icons.open_in_full),
                 ],
               ),
             ),
-          );
-        },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoBadge extends StatelessWidget {
+  const _PhotoBadge({required this.icon, this.label});
+
+  final IconData icon;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          if (label != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

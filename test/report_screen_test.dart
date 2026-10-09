@@ -40,7 +40,7 @@ Future<ProviderContainer> _pumpToReportScreen(
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
   await tester.tap(_within(find.text('High Rise')));
   await tester.pumpAndSettle();

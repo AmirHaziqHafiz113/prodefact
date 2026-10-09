@@ -9,25 +9,39 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
 import 'ai_suggestion_review_dialog.dart';
+import '../widgets/finding_status_presentation.dart';
 import '../widgets/reanalyse_and_candidates.dart';
 import '../widgets/related_defect_selector.dart';
 import 'area_inspection_screen.dart'
     show AiImageQualityNote, FindingAiStatusLine;
+import 'finding_detail_screen.dart';
 import 'report_screen.dart';
 
-/// Overview of AI's progressive classification work across every
-/// finding in the inspection, and where the inspector reviews each
-/// result (Accept / Change / Reject). AI has already been running in
-/// the background per finding — see `docs/ai_provider_architecture.md`
-/// — so there is no "Start AI Analysis" button here any more; this
-/// screen only surfaces progress and review actions.
-class AiReviewOverviewScreen extends ConsumerWidget {
+/// The inspector's review inbox for the open inspection — exceptions
+/// only. It shows the findings that need a decision: a pending AI
+/// suggestion (low confidence, note/image conflict, several candidates),
+/// a failed analysis, a rejected (unresolved) result, or a finding
+/// still waiting for its note. Confirmed findings don't clutter it; they
+/// sit in a collapsed "Resolved" group where they can still be changed.
+/// Findings still being analysed are summarised in one line, and show
+/// up here only if they come back needing the inspector. Area Findings
+/// remains the place to see everything — see docs/ux_architecture.md.
+class AiReviewOverviewScreen extends ConsumerStatefulWidget {
   const AiReviewOverviewScreen({super.key});
 
   static const routePath = '/home-inspection/complete';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AiReviewOverviewScreen> createState() =>
+      _AiReviewOverviewScreenState();
+}
+
+class _AiReviewOverviewScreenState
+    extends ConsumerState<AiReviewOverviewScreen> {
+  bool _showResolved = false;
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(activeSessionProvider);
 
     if (session == null) {
@@ -45,21 +59,26 @@ class AiReviewOverviewScreen extends ConsumerWidget {
     // Only suggestions of findings that still exist — a deleted
     // finding (or any orphan) never shows here or counts.
     final suggestions = activeSuggestionsOf(session);
-    // Findings AI hasn't produced a suggestion for yet (queued,
-    // analysing, failed, or waiting for a note/approval). Previously
-    // these were not shown here at all, so a failed or stuck analysis
-    // left a page with nothing to tap (QA #33).
-    final suggestedIds = {for (final s in suggestions) s.findingId};
-    // Ordered by AI progress (analysing, then waiting, then failed),
-    // newest first within each.
-    final withoutSuggestion = [
+    final suggestionByFinding = {for (final s in suggestions) s.findingId: s};
+    // Ordered by AI progress, newest first within each.
+    final ordered = [
       for (final unit in orderFindings(
-        session.findings
-            .where((f) => f.isAiEligible && !suggestedIds.contains(f.id))
-            .toList(),
+        session.findings.where((f) => f.isAiEligible).toList(),
       ))
         ...unit.findings,
     ];
+    final exceptions = ordered
+        .where((f) => findingNeedsAttention(f, suggestionByFinding[f.id]))
+        .toList();
+    final resolvedSuggestions = suggestions
+        .where(
+          (s) =>
+              !exceptions.any((f) => f.id == s.findingId) &&
+              session.findings.any(
+                (f) => f.id == s.findingId && resolutionOf(f, s).isResolved,
+              ),
+        )
+        .toList();
     final outstanding = ReportReadiness.of(session).summary;
     final pendingNote = outstanding == null
         ? null
@@ -70,9 +89,9 @@ class AiReviewOverviewScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
-          AppSpacing.md,
+          AppSpacing.sm,
           AppSpacing.lg,
-          96,
+          AppSpacing.xl,
         ),
         children: [
           Card(
@@ -81,67 +100,164 @@ class AiReviewOverviewScreen extends ConsumerWidget {
               child: _StatusPanel(processing: processing, review: review),
             ),
           ),
-          if (withoutSuggestion.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.lg),
-            AppSectionHeader(
-              title: 'Waiting on AI (${withoutSuggestion.length})',
-              subtitle: 'Each finding shows what happens next.',
+          if (processing.inFlight > 0) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              key: const ValueKey('review-in-flight'),
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '${processing.inFlight} '
+                    'finding${processing.inFlight == 1 ? '' : 's'} still '
+                    'being analysed — '
+                    '${processing.inFlight == 1 ? 'it appears' : 'they appear'}'
+                    ' here only if you need to decide.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
             ),
-            for (final finding in withoutSuggestion)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _PendingFindingCard(session: session, finding: finding),
-              ),
           ],
-          if (suggestions.isEmpty && withoutSuggestion.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: AppSpacing.lg),
-              child: Text(
-                'No findings have photos yet, so there is nothing for AI '
-                'to review.',
-              ),
+          const SizedBox(height: AppSpacing.lg),
+          if (processing.totalEligible == 0)
+            const AppEmptyView(
+              icon: Icons.photo_camera_outlined,
+              title: 'Nothing to review yet',
+              message:
+                  'No findings have photos yet, so there is nothing for AI '
+                  'to review.',
             )
-          else if (suggestions.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.lg),
-            for (final section in session.sections.where((s) => s.isIncluded))
-              ..._sectionGroup(context, session, section, suggestions),
-            // A suggestion whose finding's area was since excluded/removed
-            // from the draft still needs to be reviewable — never
-            // silently dropped from this screen just because its area
-            // no longer appears in the configured list.
-            ..._ungroupedSuggestions(session, suggestions),
+          else if (exceptions.isEmpty)
+            AppEmptyView(
+              icon: Icons.task_alt,
+              title: 'Nothing needs your review',
+              message: processing.inFlight > 0
+                  ? 'Every analysed finding is settled. Findings still '
+                        'being analysed will appear here only if they need '
+                        'you.'
+                  : 'Every finding has a confirmed defect.',
+            )
+          else ...[
+            AppSectionHeader(
+              title: 'Needs your decision (${exceptions.length})',
+              subtitle: 'Settle each one before generating the report.',
+            ),
+            ..._groupedByArea(context, session, exceptions, (finding) {
+              final suggestion = suggestionByFinding[finding.id];
+              return suggestion == null
+                  ? _PendingFindingCard(session: session, finding: finding)
+                  : _SuggestionCard(session: session, suggestion: suggestion);
+            }),
+          ],
+          if (resolvedSuggestions.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: const ValueKey('review-show-resolved'),
+                onTap: () => setState(() => _showResolved = !_showResolved),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: AppColors.success),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Resolved (${resolvedSuggestions.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Text(
+                        _showResolved ? 'Hide' : 'Show',
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: AppColors.primary),
+                      ),
+                      Icon(
+                        _showResolved ? Icons.expand_less : Icons.expand_more,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (_showResolved) ...[
+              const SizedBox(height: AppSpacing.md),
+              for (final suggestion in resolvedSuggestions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: _SuggestionCard(
+                    session: session,
+                    suggestion: suggestion,
+                  ),
+                ),
+            ],
           ],
         ],
       ),
       // Always tappable (QA #32/#33): AI and review gate report
       // *generation*, which the Report screen enforces and explains —
       // never the way forward from this screen.
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (pendingNote != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: Text(
-                    pendingNote,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              FilledButton(
-                onPressed: () => context.push(ReportScreen.routePath),
-                child: const Text('Continue to Report'),
-              ),
-            ],
-          ),
+      bottomNavigationBar: AppPrimaryActionBar(
+        hint: pendingNote,
+        primary: FilledButton(
+          onPressed: () => context.push(ReportScreen.routePath),
+          child: const Text('Continue to Report'),
         ),
       ),
     );
   }
+}
+
+/// [findings] as cards under area headings, in configured area order;
+/// a finding whose area was since removed is still listed (never
+/// silently dropped).
+List<Widget> _groupedByArea(
+  BuildContext context,
+  InspectionSession session,
+  List<Finding> findings,
+  Widget Function(Finding finding) cardFor,
+) {
+  final widgets = <Widget>[];
+  final shown = <String>{};
+  for (final section in session.sections.where((s) => s.isIncluded)) {
+    final inArea = findings.where((f) => f.sectionId == section.id).toList();
+    if (inArea.isEmpty) continue;
+    widgets.add(
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Text(
+          section.name,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ),
+    );
+    for (final finding in inArea) {
+      shown.add(finding.id);
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: cardFor(finding),
+        ),
+      );
+    }
+  }
+  for (final finding in findings.where((f) => !shown.contains(f.id))) {
+    widgets.add(
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: cardFor(finding),
+      ),
+    );
+  }
+  return widgets;
 }
 
 /// A finding with no AI suggestion yet: its photo, note, and live AI
@@ -224,62 +340,6 @@ class _PendingFindingCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// One area's worth of suggestion cards, headed by the area name — see
-/// `docs/home_inspection_product_flow.md` ("AI Review UX"). Returns an
-/// empty list (no header rendered) for an area with no AI-eligible
-/// findings yet.
-List<Widget> _sectionGroup(
-  BuildContext context,
-  InspectionSession session,
-  Section section,
-  List<AiSuggestion> suggestions,
-) {
-  final sectionSuggestions = suggestions.where((s) {
-    final finding = session.findings.firstWhereOrNull(
-      (f) => f.id == s.findingId,
-    );
-    return finding?.sectionId == section.id;
-  }).toList();
-  if (sectionSuggestions.isEmpty) return const [];
-
-  return [
-    Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Text(section.name, style: Theme.of(context).textTheme.titleMedium),
-    ),
-    for (final suggestion in sectionSuggestions)
-      Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-        child: _SuggestionCard(session: session, suggestion: suggestion),
-      ),
-  ];
-}
-
-List<Widget> _ungroupedSuggestions(
-  InspectionSession session,
-  List<AiSuggestion> suggestions,
-) {
-  final includedIds = session.sections
-      .where((s) => s.isIncluded)
-      .map((s) => s.id)
-      .toSet();
-  final orphaned = suggestions.where((s) {
-    final finding = session.findings.firstWhereOrNull(
-      (f) => f.id == s.findingId,
-    );
-    return finding == null || !includedIds.contains(finding.sectionId);
-  }).toList();
-  if (orphaned.isEmpty) return const [];
-
-  return [
-    for (final suggestion in orphaned)
-      Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-        child: _SuggestionCard(session: session, suggestion: suggestion),
-      ),
-  ];
 }
 
 class _StatusPanel extends StatelessWidget {
@@ -398,16 +458,20 @@ class _SuggestionCard extends ConsumerWidget {
             if (finding != null && finding.evidence.isNotEmpty) ...[
               // Whole photo, own orientation (QA #18): letterboxed, never
               // cropped. Shows the inspector's markup when there is one.
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: SizedBox(
-                    height: 180,
-                    width: double.infinity,
-                    child: Image.file(
-                      File(finding.evidence.first.displayFilePath),
-                      fit: BoxFit.contain,
+              InkWell(
+                key: ValueKey('review-open-finding-${finding.id}'),
+                onTap: () => context.push(findingDetailLocation(finding.id)),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: ColoredBox(
+                    color: Colors.black,
+                    child: SizedBox(
+                      height: 200,
+                      width: double.infinity,
+                      child: Image.file(
+                        File(finding.evidence.first.displayFilePath),
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
@@ -721,32 +785,15 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, icon, fg, bg) = switch (status) {
-      AiSuggestionStatus.pending => (
-        'Pending',
-        Icons.hourglass_empty,
-        AppColors.warning,
-        AppColors.warningBg,
-      ),
+    final (appStatus, label) = switch (status) {
+      AiSuggestionStatus.pending => (AppStatus.needsReview, 'Pending'),
       AiSuggestionStatus.accepted => (
+        AppStatus.confirmed,
         automatic ? 'Auto-accepted' : 'Accepted',
-        Icons.check_circle_outline,
-        AppColors.success,
-        AppColors.successBg,
       ),
-      AiSuggestionStatus.edited => (
-        'Changed',
-        Icons.edit_outlined,
-        AppColors.info,
-        AppColors.infoBg,
-      ),
-      AiSuggestionStatus.rejected => (
-        'Unresolved',
-        Icons.cancel_outlined,
-        AppColors.danger,
-        AppColors.dangerBg,
-      ),
+      AiSuggestionStatus.edited => (AppStatus.confirmed, 'Changed'),
+      AiSuggestionStatus.rejected => (AppStatus.rejected, 'Unresolved'),
     };
-    return StatusPill(label: label, icon: icon, foreground: fg, background: bg);
+    return AppStatusChip(status: appStatus, label: label, dense: false);
   }
 }

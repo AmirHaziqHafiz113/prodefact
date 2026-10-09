@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/home_inspection/presentation/screens/property_type_selection_screen.dart';
+import '../../features/home_inspection/presentation/widgets/capture_entry_sheet.dart';
+import '../../features/home_inspection/providers/session_list_providers.dart';
 import '../theme/design_system.dart';
 
-/// The authenticated bottom-navigation shell: Home / Inspections / +
-/// / Wallet / Profile — see docs/commercial_model.md and
-/// docs/ui_design_system.md ("Navigation"). Wraps the four real
-/// [StatefulShellRoute] branches (Home, Inspections, Wallet, Profile);
-/// the "+" destination isn't a branch at all — it always pushes
-/// straight into the existing New Inspection flow, exactly what the
-/// dashboard's/Inspections' own "New Inspection" actions already do,
-/// so there's only one New Inspection entry point to keep consistent.
+/// The authenticated bottom-navigation shell: Home / Inspections / + /
+/// Review / Profile — see docs/ux_architecture.md. Wraps the four real
+/// [StatefulShellRoute] branches; the "+" destination isn't a branch:
+/// it starts the capture flow ([startCaptureFlow] — pick an open
+/// inspection and area, then the camera; or New Inspection when nothing
+/// is open). Review carries a real count badge of inspections waiting on
+/// the inspector. Wallet is no longer a tab: it opens from Home's credits
+/// card and from Profile.
 ///
 /// Only screens reached via the bottom nav show it — the New
-/// Inspection setup flow, physical inspection, AI review, and the
-/// report all push on top of this shell and intentionally hide it
-/// while the inspector is in a focused task (see the routing audit in
-/// docs/commercial_model.md).
-class AppShellScreen extends StatelessWidget {
+/// Inspection setup flow, the inspection itself, AI review and the
+/// report all push on top of this shell and hide it while the inspector
+/// is in a focused task.
+class AppShellScreen extends ConsumerWidget {
   const AppShellScreen({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
@@ -26,27 +27,33 @@ class AppShellScreen extends StatelessWidget {
   static const _addTabIndex = 2;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reviewCount = ref.watch(attentionSessionsProvider).length;
     return Scaffold(
       body: navigationShell,
       extendBody: true,
       bottomNavigationBar: AppBottomNav(
         selectedIndex: _destinationIndexFor(navigationShell.currentIndex),
+        reviewBadgeCount: reviewCount,
         onDestinationSelected: (index) =>
-            _onDestinationSelected(context, index),
+            _onDestinationSelected(context, ref, index),
       ),
     );
   }
 
-  /// Maps a branch index (0..3 — Home/Inspections/Wallet/Profile) to
+  /// Maps a branch index (0..3 — Home/Inspections/Review/Profile) to
   /// its visual destination index (0,1,3,4 — index 2 is "+", not a
   /// branch).
   int _destinationIndexFor(int branchIndex) =>
       branchIndex < _addTabIndex ? branchIndex : branchIndex + 1;
 
-  void _onDestinationSelected(BuildContext context, int destinationIndex) {
+  void _onDestinationSelected(
+    BuildContext context,
+    WidgetRef ref,
+    int destinationIndex,
+  ) {
     if (destinationIndex == _addTabIndex) {
-      context.push(PropertyTypeSelectionScreen.routePath);
+      startCaptureFlow(context, ref);
       return;
     }
     final branchIndex = destinationIndex < _addTabIndex
@@ -69,10 +76,16 @@ class AppBottomNav extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onDestinationSelected,
+    this.reviewBadgeCount = 0,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
+
+  /// Inspections waiting on the inspector — badges the Review tab.
+  final int reviewBadgeCount;
+
+  static const _reviewIndex = 3;
 
   static const _destinations = [
     (icon: Icons.home_outlined, selectedIcon: Icons.home, label: 'Home'),
@@ -81,11 +94,11 @@ class AppBottomNav extends StatelessWidget {
       selectedIcon: Icons.assignment,
       label: 'Inspections',
     ),
-    (icon: Icons.add, selectedIcon: Icons.add, label: 'New Inspection'),
+    (icon: Icons.add, selectedIcon: Icons.add, label: 'Capture'),
     (
-      icon: Icons.account_balance_wallet_outlined,
-      selectedIcon: Icons.account_balance_wallet,
-      label: 'Wallet',
+      icon: Icons.rate_review_outlined,
+      selectedIcon: Icons.rate_review,
+      label: 'Review',
     ),
     (icon: Icons.person_outline, selectedIcon: Icons.person, label: 'Profile'),
   ];
@@ -100,15 +113,14 @@ class AppBottomNav extends StatelessWidget {
         AppSpacing.sm,
       ),
       child: Container(
-        height: 64,
+        height: 68,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.xl),
-          border: Border.all(color: AppColors.outline),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textPrimary.withValues(alpha: 0.08),
+              color: AppColors.textPrimary.withValues(alpha: 0.12),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -128,6 +140,7 @@ class AppBottomNav extends StatelessWidget {
                             ? _destinations[i].selectedIcon
                             : _destinations[i].icon,
                         label: _destinations[i].label,
+                        badgeCount: i == _reviewIndex ? reviewBadgeCount : 0,
                         selected: selectedIndex == i,
                         onTap: () => onDestinationSelected(i),
                       ),
@@ -145,11 +158,13 @@ class _NavDestination extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
+  final int badgeCount;
   final VoidCallback onTap;
 
   @override
@@ -175,7 +190,12 @@ class _NavDestination extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 22),
+              Badge(
+                isLabelVisible: badgeCount > 0,
+                label: Text('$badgeCount'),
+                backgroundColor: AppColors.warning,
+                child: Icon(icon, color: color, size: 24),
+              ),
               const SizedBox(height: 2),
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -184,7 +204,7 @@ class _NavDestination extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: color,
                   ),
@@ -199,8 +219,8 @@ class _NavDestination extends StatelessWidget {
 }
 
 /// The center "+" — visually raised above the bar (a filled circle
-/// that overflows the bar's top edge), matching the reference mockups'
-/// treatment of "New Inspection" as a global action rather than a tab.
+/// that overflows the bar's top edge): the global capture action rather
+/// than a tab.
 class _AddDestination extends StatelessWidget {
   const _AddDestination({required this.selected, required this.onTap});
 
@@ -213,7 +233,7 @@ class _AddDestination extends StatelessWidget {
       child: Transform.translate(
         offset: const Offset(0, -14),
         child: Tooltip(
-          message: 'New Inspection',
+          message: 'Capture',
           child: Material(
             color: AppColors.primary,
             shape: const CircleBorder(),
@@ -222,9 +242,9 @@ class _AddDestination extends StatelessWidget {
               onTap: onTap,
               customBorder: const CircleBorder(),
               child: const SizedBox(
-                width: 52,
-                height: 52,
-                child: Icon(Icons.add, color: Colors.white, size: 28),
+                width: 58,
+                height: 58,
+                child: Icon(Icons.add_a_photo, color: Colors.white, size: 26),
               ),
             ),
           ),

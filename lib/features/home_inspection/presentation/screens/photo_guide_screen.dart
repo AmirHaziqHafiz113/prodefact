@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
-import 'inspection_queue_screen.dart';
+import 'inspection_overview_screen.dart';
 
 /// "How to capture a good defect photo" — shown once when a NEW
 /// inspection starts (between setup and the inspection itself), never
@@ -116,7 +116,7 @@ class PhotoGuideScreen extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: FilledButton(
             onPressed: () => startsInspection
-                ? context.pushReplacement(InspectionQueueScreen.routePath)
+                ? context.pushReplacement(InspectionOverviewScreen.routePath)
                 : Navigator.of(context).maybePop(),
             child: Text(startsInspection ? 'Start Inspection' : 'Got It'),
           ),

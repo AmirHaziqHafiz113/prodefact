@@ -74,8 +74,8 @@ Future<void> _assertNoOverflowAcrossTextScales(
 }
 
 void main() {
-  testWidgets('Home / Inspections / Wallet / Profile tabs never overflow at '
-      'narrow, standard, or large phone widths', (tester) async {
+  testWidgets('Home / Inspections / Review / Profile tabs and Wallet never '
+      'overflow at narrow, standard, or large phone widths', (tester) async {
     addTearDown(tester.view.reset);
     tester.view.physicalSize = const Size(390, 2600);
     tester.view.devicePixelRatio = 1.0;
@@ -84,27 +84,27 @@ void main() {
       ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),
     );
     await tester.pumpAndSettle();
-    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Inspections');
-    await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Inspections');
+    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Home');
+    await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Home');
 
     final bottomNav = find.byType(AppBottomNav);
     Finder inNav(String label) =>
         find.descendant(of: bottomNav, matching: find.text(label));
 
+    for (final tab in ['Inspections', 'Review', 'Profile']) {
+      await tester.tap(inNav(tab));
+      await tester.pumpAndSettle();
+      await _assertNoOverflowAcrossWidths(tester, screenLabel: tab);
+      await _assertNoOverflowAcrossTextScales(tester, screenLabel: tab);
+    }
+
+    // Wallet is a pushed screen, opened from Home's credits card.
     await tester.tap(inNav('Home'));
     await tester.pumpAndSettle();
-    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Home');
-    await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Home');
-
-    await tester.tap(inNav('Wallet'));
+    await tester.tap(find.byKey(const ValueKey('home-credits')));
     await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Wallet');
     await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Wallet');
-
-    await tester.tap(inNav('Profile'));
-    await tester.pumpAndSettle();
-    await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Profile');
-    await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Profile');
   });
 
   testWidgets('the full New Inspection wizard, physical inspection, AI review, '
@@ -128,7 +128,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('New Inspection'));
+    await tester.tap(find.byTooltip('Capture'));
     await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Property Type');
 

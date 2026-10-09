@@ -44,7 +44,7 @@ Future<ProviderContainer> _startNewInspection(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
   await tester.tap(_scaffold(find.text('High Rise')));
   await tester.pumpAndSettle();
@@ -124,7 +124,7 @@ void main() {
       expect(find.textContaining('no required angle'), findsOneWidget);
 
       await _continueFromGuide(tester);
-      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(find.text('Inspection Overview'), findsOneWidget);
       expect(find.byType(PhotoGuideScreen), findsNothing);
 
       await _openFirstArea(tester, container);

@@ -563,6 +563,11 @@ code path yet (no subscription/expiry concept exists to drive them).
 
 ## Routing audit
 
+> Superseded by `docs/ux_architecture.md` (2026-10): Home is now the
+> landing screen, Wallet is a pushed screen, and the bottom nav is
+> Home / Inspections / + / Review / Profile. The notes below are kept
+> for history.
+
 - The dashboard (Inspections tab) — not Home — remains the app's actual
   landing screen after sign-in/launch, preserving the pre-existing
   "the dashboard is the inspections list" behavior exactly; Home is an

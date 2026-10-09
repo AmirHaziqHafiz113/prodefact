@@ -60,7 +60,7 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byTooltip('New Inspection'));
+  await tester.tap(find.byTooltip('Capture'));
   await tester.pumpAndSettle();
 
   await tester.tap(_within(find.text('High Rise')));
@@ -80,8 +80,16 @@ Future<ProviderContainer> _pumpToInspectionQueue(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await passPhotoGuide(tester);
 
-  expect(find.text('Physical Inspection'), findsOneWidget);
+  expect(find.text('Inspection Overview'), findsOneWidget);
   return container;
+}
+
+/// Opens the Areas screen from the Inspection Overview — where each
+/// area's own status chip lives.
+Future<void> _openAreas(WidgetTester tester) async {
+  await tester.tap(_within(find.byKey(const ValueKey('overview-areas'))));
+  await tester.pumpAndSettle();
+  expect(_within(find.text('Areas')), findsWidgets);
 }
 
 void _popRoute(WidgetTester tester) {
@@ -99,6 +107,7 @@ void main() {
     await tester.pumpAndSettle();
     _popRoute(tester);
     await tester.pumpAndSettle();
+    await _openAreas(tester);
 
     expect(_within(find.text('In progress')), findsNothing);
     final session = container.read(activeSessionProvider)!;
@@ -116,6 +125,7 @@ void main() {
     await _takePhotoAndSave(tester, 'Cracked tile');
     _popRoute(tester);
     await tester.pumpAndSettle();
+    await _openAreas(tester);
 
     expect(_within(find.text('In progress')), findsOneWidget);
   });
@@ -134,10 +144,10 @@ void main() {
 
       expect(_within(find.text('Cracked tile')), findsOneWidget);
 
-      // Navigate back to the queue, then forward again.
+      // Navigate back to the overview, then forward again.
       _popRoute(tester);
       await tester.pumpAndSettle();
-      expect(find.text('Physical Inspection'), findsOneWidget);
+      expect(find.text('Inspection Overview'), findsOneWidget);
 
       await tester.tap(_within(find.text(firstAreaName)));
       await tester.pumpAndSettle();
@@ -147,8 +157,8 @@ void main() {
   );
 
   testWidgets(
-    '6. "Add another defect photo" (formerly "Add angle") never appends to '
-    'the existing finding: the new photo becomes a NEW finding',
+    '6. "Take Another Defect Photo" (formerly "Add angle") never appends '
+    'to the existing finding: the new photo becomes a NEW finding',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
       final firstAreaName = container.read(inspectionQueueProvider).first.name;
@@ -159,7 +169,7 @@ void main() {
       await _takePhotoAndSave(tester, 'Leaking tap');
       expect(_within(find.text('Add angle')), findsNothing);
 
-      await tester.tap(_within(find.text('Add another defect photo')));
+      await tester.tap(_within(find.text('Take Another Defect Photo')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
@@ -192,8 +202,7 @@ void main() {
     await _takePhotoAndSave(tester, 'Original text');
     expect(_within(find.text('Original text')), findsOneWidget);
 
-    // Edit note/Remove now live behind the finding card's overflow menu
-    // — only "Add another defect photo" stays a direct button.
+    // Edit note/Remove live behind the finding card's overflow menu.
     await tester.tap(_within(find.byIcon(Icons.more_vert)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit note'));
@@ -213,10 +222,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-delete-finding')));
     await tester.pumpAndSettle();
     expect(find.text('Edited text'), findsNothing);
-    expect(
-      _within(find.textContaining('No findings recorded yet')),
-      findsOneWidget,
-    );
+    expect(_within(find.text('No findings in this area yet')), findsOneWidget);
   });
 
   testWidgets('"No Defects · Mark Area Complete" completes an area with no '
@@ -233,22 +239,18 @@ void main() {
 
     _popRoute(tester);
     await tester.pumpAndSettle();
+    await _openAreas(tester);
 
     expect(_within(find.text('Completed')), findsOneWidget);
   });
 
   testWidgets(
-    'Complete Physical Inspection is disabled only until one area has been '
+    'Complete Physical Inspection is offered only once one area has been '
     'inspected; untouched suggested areas never block it (QA #13/#21)',
     (tester) async {
       final container = await _pumpToInspectionQueue(tester);
 
-      var button = tester.widget<FilledButton>(
-        _within(
-          find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
-        ),
-      );
-      expect(button.onPressed, isNull);
+      expect(_within(find.text('Complete Physical Inspection')), findsNothing);
 
       final queue = container.read(inspectionQueueProvider);
       container
@@ -256,9 +258,10 @@ void main() {
           .setStatus(queue.first.id, SectionStatus.completed);
       await tester.pumpAndSettle();
 
-      button = tester.widget<FilledButton>(
-        _within(
-          find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
+      final button = tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: _within(find.text('Complete Physical Inspection')),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
         ),
       );
       expect(button.onPressed, isNotNull);
@@ -280,11 +283,7 @@ void main() {
       _popRoute(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        _within(
-          find.widgetWithText(FilledButton, 'Complete Physical Inspection'),
-        ),
-      );
+      await tester.tap(_within(find.text('Complete Physical Inspection')));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('${queue.length - 1} suggested areas not visited'),

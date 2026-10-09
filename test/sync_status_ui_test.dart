@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
+import 'package:prodefact/app/router/app_shell_screen.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 
@@ -34,6 +35,14 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const ProDefactApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Home is the landing screen; the sessions list is the Inspections tab.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBottomNav),
+        matching: find.text('Inspections'),
       ),
     );
     await tester.pumpAndSettle();

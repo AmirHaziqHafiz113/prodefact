@@ -177,6 +177,9 @@ class InspectionSessionSummary {
     this.propertyTitle,
     this.propertyAddress,
     this.unitNumber,
+    this.findingsCount = 0,
+    this.inspectionDate,
+    this.coverPhotoPath,
   });
 
   final String id;
@@ -215,7 +218,22 @@ class InspectionSessionSummary {
   final String? propertyAddress;
   final String? unitNumber;
 
+  /// Every finding recorded in this session (with or without a photo).
+  final int findingsCount;
+
+  /// The setup's inspection date, when one was entered.
+  final DateTime? inspectionDate;
+
+  /// The report's optional Residence / Unit Photo (a local file path),
+  /// read from the stored report metadata — shown on inspection cards
+  /// when present. See `ReportMetadata.coverPhotoPath`.
+  final String? coverPhotoPath;
+
   bool get isComplete => status != InspectionStatus.inProgress;
+
+  /// Started but nothing recorded yet.
+  bool get isDraft =>
+      status == InspectionStatus.inProgress && findingsCount == 0;
 
   /// Whether this session has something the inspector should look at:
   /// an AI suggestion pending review, or a failed classification safe

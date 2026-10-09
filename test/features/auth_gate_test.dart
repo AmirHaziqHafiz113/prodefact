@@ -5,7 +5,7 @@ import 'package:prodefact/app/app.dart';
 import 'package:prodefact/data/remote/remote_providers.dart';
 import 'package:prodefact/features/auth/presentation/sign_in_screen.dart';
 import 'package:prodefact/features/auth/presentation/splash_screen.dart';
-import 'package:prodefact/features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/home_dashboard_screen.dart';
 
 import '../support/fake_auth_service.dart';
 import '../support/test_repository.dart';
@@ -38,7 +38,7 @@ void main() {
       // In immediately, before it ever builds. The splash screen
       // (the router's actual initial route) never lingers either.
       expect(find.byType(SplashScreen), findsNothing);
-      expect(find.byType(InspectionSessionsScreen), findsNothing);
+      expect(find.byType(HomeDashboardScreen), findsNothing);
       expect(find.text('Sign in'), findsWidgets);
     },
   );
@@ -66,16 +66,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(InspectionSessionsScreen), findsOneWidget);
+      expect(find.byType(HomeDashboardScreen), findsOneWidget);
 
       // Manually navigating to Sign In while already signed in bounces
       // straight back to the dashboard rather than showing the form.
-      final context = tester.element(find.byType(InspectionSessionsScreen));
+      final context = tester.element(find.byType(HomeDashboardScreen));
       GoRouter.of(context).push(SignInScreen.routePath);
       await tester.pumpAndSettle();
 
       expect(find.byType(SignInScreen), findsNothing);
-      expect(find.byType(InspectionSessionsScreen), findsOneWidget);
+      expect(find.byType(HomeDashboardScreen), findsOneWidget);
     },
   );
 
@@ -95,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SplashScreen), findsNothing);
-    expect(find.byType(InspectionSessionsScreen), findsOneWidget);
+    expect(find.byType(HomeDashboardScreen), findsOneWidget);
     expect(find.byType(SignInScreen), findsNothing);
   });
 }

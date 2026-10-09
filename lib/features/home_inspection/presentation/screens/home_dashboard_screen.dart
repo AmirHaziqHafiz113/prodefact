@@ -7,28 +7,32 @@ import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
 import '../../../../data/remote/remote_providers.dart';
-import '../../config/property_type.dart';
 import '../../providers/session_detail_providers.dart';
 import '../../providers/session_list_providers.dart';
 import '../../providers/user_profile_providers.dart';
 import '../../providers/wallet_providers.dart';
-import '../widgets/attention_sheet.dart';
 import '../widgets/session_navigation.dart';
 import '../widgets/session_status_presentation.dart';
 import 'inspection_sessions_screen.dart';
 import 'profile_screen.dart';
+import 'property_type_selection_screen.dart';
+import 'review_inbox_screen.dart';
 import 'top_up_screen.dart';
 import 'wallet_screen.dart';
 
-/// The Home tab: a greeting, a compact Credits summary, the single
-/// most relevant active inspection shown as a rich progress hero, real
-/// "needs attention" items, and a couple of recent inspections — with
-/// inspection work still the primary entry point (New Inspection stays
-/// one tap away via the shared "+" action, never duplicated here).
-/// Every figure here comes from the same data the Inspections list and
-/// Wallet screen already show; nothing is fabricated for this
-/// dashboard. See docs/commercial_model.md and
-/// docs/ui_design_system.md.
+/// The Home tab — the at-a-glance starting point, NOT another
+/// inspections list. Each block has its own destination:
+///
+/// - the active inspection → **Continue Inspection** (its Overview);
+/// - **Needs review** rows → that inspection's AI Review (the Review tab
+///   when there are several);
+/// - **Latest report** → that inspection's Report;
+/// - **Start New Inspection** → New Inspection setup;
+/// - the credits card → Wallet;
+/// - **View all inspections** → the Inspections tab.
+///
+/// Every figure comes from the same real data the other screens show.
+/// See docs/ux_architecture.md.
 class HomeDashboardScreen extends ConsumerWidget {
   const HomeDashboardScreen({super.key});
 
@@ -37,54 +41,56 @@ class HomeDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summariesAsync = ref.watch(sessionSummariesProvider);
-    final balanceAsync = ref.watch(walletBalanceProvider);
-    final cacheAsync = ref.watch(walletCacheProvider);
-    final configAsync = ref.watch(commercialConfigProvider);
     final authState = ref.watch(authStateProvider);
     final profileAsync = ref.watch(userProfileProvider);
-    final attention = ref.watch(attentionSessionsProvider);
 
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          children: [
-            AppTopBar(
-              attentionCount: attention.length,
-              onAttentionTap: () => showAttentionSheet(context, ref),
-              displayName: profileAsync.value?.inspectorName,
-              email: authState.value?.email,
-              onAvatarTap: () => context.push(ProfileScreen.routePath),
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(sessionSummariesProvider),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              120,
             ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              _greeting(profileAsync.value?.inspectorName),
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            Text(
-              "Let's keep your inspections moving.",
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            _CreditsCard(
-              balanceAsync: balanceAsync,
-              cacheAsync: cacheAsync,
-              creditsPerMyr: configAsync.value?.creditsPerMyr,
-              onTopUp: () => context.push(TopUpScreen.routePath),
-              onViewUsage: () => context.go(WalletScreen.routePath),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            summariesAsync.when(
-              loading: () => const AppSkeletonCardList(count: 1),
-              error: (error, stackTrace) => AppErrorView(
-                message: 'Could not load your inspections.',
-                onRetry: () => ref.invalidate(sessionSummariesProvider),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _greeting(profileAsync.value?.inspectorName),
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        Text(
+                          formatInspectionDate(DateTime.now()),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  AppAvatar(
+                    displayName: profileAsync.value?.inspectorName,
+                    email: authState.value?.email,
+                    onTap: () => context.go(ProfileScreen.routePath),
+                  ),
+                ],
               ),
-              data: (sessions) =>
-                  _HomeBody(sessions: sessions, attention: attention),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.xl),
+              summariesAsync.when(
+                loading: () => const AppSkeletonCardList(count: 2),
+                error: (error, stackTrace) => AppErrorView(
+                  message: 'Could not load your inspections.',
+                  onRetry: () => ref.invalidate(sessionSummariesProvider),
+                ),
+                data: (sessions) => _HomeBody(sessions: sessions),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -104,40 +110,415 @@ class HomeDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _CreditsCard extends StatelessWidget {
-  const _CreditsCard({
-    required this.balanceAsync,
-    required this.cacheAsync,
-    required this.creditsPerMyr,
-    required this.onTopUp,
-    required this.onViewUsage,
-  });
+class _HomeBody extends ConsumerWidget {
+  const _HomeBody({required this.sessions});
 
-  final AsyncValue<int> balanceAsync;
-  final AsyncValue<WalletCache?> cacheAsync;
-  final int? creditsPerMyr;
-  final VoidCallback onTopUp;
-  final VoidCallback onViewUsage;
+  final List<InspectionSessionSummary> sessions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final attention = ref.watch(attentionSessionsProvider);
+    final pendingSyncCount = ref.watch(totalPendingSyncCountProvider);
+
+    final byRecent = [...sessions]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final active = byRecent.firstWhereOrNull(
+      (s) => s.status == InspectionStatus.inProgress,
+    );
+    final latestReport = byRecent.firstWhereOrNull(
+      (s) =>
+          s.status == InspectionStatus.reported ||
+          s.status == InspectionStatus.aiReviewComplete,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (sessions.isEmpty)
+          const _WelcomeCard()
+        else if (active != null)
+          _ActiveInspectionHero(summary: active)
+        else
+          const _NoActiveCard(),
+        if (active != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          OutlinedButton.icon(
+            key: const ValueKey('home-start-new'),
+            onPressed: () =>
+                context.push(PropertyTypeSelectionScreen.routePath),
+            icon: const Icon(Icons.add_home_work_outlined),
+            label: const Text('Start New Inspection'),
+          ),
+        ],
+        if (attention.isNotEmpty || pendingSyncCount > 0) ...[
+          const SizedBox(height: AppSpacing.xl),
+          AppSectionHeader(
+            title: 'Needs attention',
+            trailing: attention.length > 1
+                ? TextButton(
+                    onPressed: () => context.go(ReviewInboxScreen.routePath),
+                    child: const Text('Review inbox'),
+                  )
+                : null,
+          ),
+          AppGroupedList(
+            children: [
+              for (final summary in attention.take(3))
+                _AttentionRow(summary: summary),
+              if (pendingSyncCount > 0)
+                _SyncPendingRow(count: pendingSyncCount),
+            ],
+          ),
+        ],
+        if (latestReport != null) ...[
+          const SizedBox(height: AppSpacing.xl),
+          const AppSectionHeader(title: 'Latest report'),
+          _LatestReportCard(summary: latestReport),
+        ],
+        const SizedBox(height: AppSpacing.xl),
+        const _CreditsCard(),
+        if (sessions.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.lg),
+          TextButton.icon(
+            key: const ValueKey('home-view-all'),
+            onPressed: () => context.go(InspectionSessionsScreen.routePath),
+            icon: const Icon(Icons.list_alt_outlined),
+            label: Text('View all inspections (${sessions.length})'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// First run: what the app is for and the one thing to do.
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard();
 
   @override
   Widget build(BuildContext context) {
-    final resolvedBalance =
-        balanceAsync.value ?? cacheAsync.value?.balanceCredits;
-    // Compact by design — this is a secondary summary, not Home's hero;
-    // the active inspection below (when there is one) carries that role.
-    // The row itself opens Wallet ("View Usage"); Top Up is the one
-    // explicit button, so it never has to compete with a second one.
-    // A soft brand-tinted surface (not the full dark hero treatment)
-    // gives it real financial-product presence without competing with
-    // the Active Inspection hero below.
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.successBg,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+    return AppHeroCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.fact_check_outlined, size: 36),
+          const SizedBox(height: AppSpacing.md),
+          const Text(
+            'No inspections yet',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          const Text(
+            'Set up a property, walk each area, and photograph defects — '
+            'AI classifies every photo while you keep working.',
+            style: TextStyle(color: AppColors.onHeroSecondary, fontSize: 14),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          _HeroButton(
+            key: const ValueKey('home-start-first'),
+            label: 'Start New Inspection',
+            icon: Icons.add_home_work_outlined,
+            onPressed: () =>
+                context.push(PropertyTypeSelectionScreen.routePath),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _NoActiveCard extends StatelessWidget {
+  const _NoActiveCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.task_alt, color: AppColors.success),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'No inspection in progress',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            FilledButton.icon(
+              key: const ValueKey('home-start-new'),
+              onPressed: () =>
+                  context.push(PropertyTypeSelectionScreen.routePath),
+              icon: const Icon(Icons.add_home_work_outlined),
+              label: const Text('Start New Inspection'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A white button for the dark hero surface.
+class _HeroButton extends StatelessWidget {
+  const _HeroButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.primaryDark,
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+      ),
+    );
+  }
+}
+
+/// The most recently updated in-progress inspection: photo, identity,
+/// real area progress, and Continue Inspection (→ its Overview).
+class _ActiveInspectionHero extends ConsumerWidget {
+  const _ActiveInspectionHero({required this.summary});
+
+  final InspectionSessionSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detail = ref.watch(sessionDetailProvider(summary.id)).value;
+    final physical = detail == null ? null : PhysicalProgress.of(detail);
+    final subtitle = [
+      if (summary.unitNumber?.isNotEmpty == true) 'Unit ${summary.unitNumber}',
+      summary.propertyAddress,
+    ].whereType<String>().join(' · ');
+
+    // The whole card and its button share ONE destination: the
+    // inspection's Overview.
+    return InkWell(
+      key: const ValueKey('home-active-hero'),
+      borderRadius: BorderRadius.circular(AppRadius.xl),
+      onTap: () => resumeAndOpenInspection(context, ref, summary.id),
+      child: AppHeroCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'CONTINUE WHERE YOU LEFT OFF',
+              style: TextStyle(
+                color: AppColors.onHeroMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                AppPropertyPhoto(
+                  photoPath: summary.coverPhotoPath,
+                  kind: illustrationKindFor(summary.assetTypeId),
+                  width: 64,
+                  height: 64,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        summaryTitle(summary),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.onHero,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.onHeroSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      Text(
+                        'Updated ${formatRelativeTime(summary.updatedAt)}',
+                        style: const TextStyle(
+                          color: AppColors.onHeroMuted,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: LinearProgressIndicator(
+                value: physical?.fraction ?? 0,
+                minHeight: 8,
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                valueColor: const AlwaysStoppedAnimation(Colors.white),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              [
+                physical == null
+                    ? 'Loading progress…'
+                    : physical.totalAreas == 0
+                    ? 'No areas started yet'
+                    : '${physical.completed} of ${physical.totalAreas} areas '
+                          'complete',
+                '${summary.findingsCount} finding'
+                    '${summary.findingsCount == 1 ? '' : 's'}',
+                if (summary.aiPendingReviewCount > 0)
+                  '${summary.aiPendingReviewCount} to review',
+              ].join(' · '),
+              style: const TextStyle(
+                color: AppColors.onHeroSecondary,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _HeroButton(
+              key: const ValueKey('home-continue'),
+              label: 'Continue Inspection',
+              icon: Icons.arrow_forward,
+              onPressed: () =>
+                  resumeAndOpenInspection(context, ref, summary.id),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One inspection waiting on the inspector — opens its AI Review
+/// (only the findings that need a decision), not its Overview.
+class _AttentionRow extends ConsumerWidget {
+  const _AttentionRow({required this.summary});
+
+  final InspectionSessionSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isFailed = summary.aiFailedFindingsCount > 0;
+    final message = isFailed
+        ? '${summary.aiFailedFindingsCount} AI ${summary.aiFailedFindingsCount == 1 ? 'analysis' : 'analyses'} failed'
+        : '${summary.aiPendingReviewCount} finding${summary.aiPendingReviewCount == 1 ? '' : 's'} pending review';
+
+    return AppActionRow(
+      key: ValueKey('home-attention-${summary.id}'),
+      icon: isFailed ? Icons.error_outline : Icons.rate_review_outlined,
+      iconColor: isFailed ? AppColors.danger : AppColors.warning,
+      title: summaryTitle(summary),
+      subtitle: message,
+      onTap: () => resumeAndOpenReview(context, ref, summary.id),
+    );
+  }
+}
+
+/// The aggregate "N items waiting to sync" row — real evidence-photo
+/// counts from [totalPendingSyncCountProvider], matching the wording
+/// and cloud icon the per-session sync strip already uses. Opens the
+/// Inspections list (each card carries its own sync state and a "Sync
+/// now" action) since it isn't tied to a single session.
+class _SyncPendingRow extends StatelessWidget {
+  const _SyncPendingRow({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppActionRow(
+      icon: Icons.cloud_sync_outlined,
+      iconColor: AppColors.warning,
+      title: '$count item${count == 1 ? '' : 's'} waiting to sync',
+      subtitle: 'Saved on this device — syncs when online',
+      onTap: () => context.go(InspectionSessionsScreen.routePath),
+    );
+  }
+}
+
+/// The most recent inspection with a report (or one ready to generate)
+/// — opens the existing Report screen for it.
+class _LatestReportCard extends ConsumerWidget {
+  const _LatestReportCard({required this.summary});
+
+  final InspectionSessionSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final generated = summary.status == InspectionStatus.reported;
+    return Card(
+      key: const ValueKey('home-latest-report'),
+      clipBehavior: Clip.antiAlias,
+      child: AppActionRow(
+        icon: Icons.picture_as_pdf_outlined,
+        iconColor: generated ? AppColors.success : AppColors.info,
+        title: summaryTitle(summary),
+        subtitle: generated
+            ? 'Report generated · ${formatRelativeTime(summary.updatedAt)}'
+            : 'Report ready to generate',
+        trailing: AppStatusChip(
+          status: generated ? AppStatus.completed : AppStatus.reportReady,
+          label: generated ? 'Completed' : 'Ready',
+        ),
+        onTap: () => resumeAndOpenReport(context, ref, summary.id),
+      ),
+    );
+  }
+}
+
+/// A compact usage/balance card: the row opens Wallet; Top Up is its one
+/// button.
+class _CreditsCard extends ConsumerWidget {
+  const _CreditsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final balanceAsync = ref.watch(walletBalanceProvider);
+    final cache = ref.watch(walletCacheProvider).value;
+    final creditsPerMyr = ref
+        .watch(commercialConfigProvider)
+        .value
+        ?.creditsPerMyr;
+    final balance = balanceAsync.value ?? cache?.balanceCredits;
+
+    return Card(
+      key: const ValueKey('home-credits'),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onViewUsage,
+        onTap: () => context.push(WalletScreen.routePath),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
@@ -148,15 +529,11 @@ class _CreditsCard extends StatelessWidget {
               Container(
                 width: 40,
                 height: 40,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: const Icon(
-                  Icons.bolt_rounded,
-                  size: 20,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.bolt_rounded, color: AppColors.primary),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -164,32 +541,24 @@ class _CreditsCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'AI CREDITS',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.primaryDark,
-                        letterSpacing: 0.6,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      'AI credits',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    resolvedBalance == null
+                    balance == null
                         ? Text(
                             balanceAsync.hasError ? 'Unavailable' : 'Loading…',
                             style: Theme.of(context).textTheme.titleMedium,
                           )
                         : AppAnimatedNumber(
-                            value: resolvedBalance,
+                            value: balance,
                             suffix: ' credits',
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: AppColors.primaryDark,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
-                    if (resolvedBalance != null &&
+                    if (balance != null &&
                         creditsPerMyr != null &&
-                        creditsPerMyr! > 0)
+                        creditsPerMyr > 0)
                       Text(
-                        '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)}',
+                        '≈ RM${(balance / creditsPerMyr).toStringAsFixed(2)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                   ],
@@ -198,343 +567,17 @@ class _CreditsCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 36),
+                  minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
+                    horizontal: AppSpacing.lg,
                   ),
                 ),
-                onPressed: onTopUp,
+                onPressed: () => context.push(TopUpScreen.routePath),
                 child: const Text('Top Up'),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HomeBody extends ConsumerWidget {
-  const _HomeBody({required this.sessions, required this.attention});
-
-  final List<InspectionSessionSummary> sessions;
-  final List<InspectionSessionSummary> attention;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (sessions.isEmpty) {
-      return const AppEmptyView(
-        icon: Icons.fact_check_outlined,
-        title: 'No inspections yet',
-        message: 'Start your first inspection with the + button below.',
-      );
-    }
-
-    final activeSessions = sessions.where((s) => !s.isComplete).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final mostRelevant = activeSessions.firstOrNull;
-
-    final recent = [...sessions]
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final recentExcludingHero = recent
-        .where((s) => s.id != mostRelevant?.id)
-        .take(3)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (mostRelevant != null)
-          _ActiveInspectionHero(summary: mostRelevant)
-        else
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    color: AppColors.success,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Expanded(
-                    child: Text('No active inspection right now.'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (attention.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.xl),
-          AppSectionHeader(
-            title: 'Needs attention',
-            trailing: TextButton(
-              onPressed: () => showAttentionSheet(context, ref),
-              child: const Text('View all'),
-            ),
-          ),
-          AppGroupedList(
-            children: [
-              for (final summary in attention.take(2))
-                _AttentionListRow(summary: summary),
-            ],
-          ),
-        ],
-        if (recentExcludingHero.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.xl),
-          AppSectionHeader(
-            title: 'Recent inspections',
-            trailing: TextButton(
-              onPressed: () => context.go(InspectionSessionsScreen.routePath),
-              child: const Text('View all'),
-            ),
-          ),
-          for (final summary in recentExcludingHero)
-            _RecentInspectionTile(summary: summary),
-        ],
-      ],
-    );
-  }
-}
-
-/// A short, human relative timestamp ("2h ago", "Just now") — real
-/// data (`summary.updatedAt`), never an estimate.
-String _relativeTime(DateTime dateTime) {
-  final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  final local = dateTime.toLocal();
-  return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
-      '${local.day.toString().padLeft(2, '0')}';
-}
-
-class _ActiveInspectionHero extends ConsumerWidget {
-  const _ActiveInspectionHero({required this.summary});
-
-  final InspectionSessionSummary summary;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(sessionDetailProvider(summary.id));
-    final propertyType = PropertyType.values.firstWhereOrNull(
-      (p) => p.name == summary.assetTypeId,
-    );
-    final title = summary.propertyTitle?.isNotEmpty == true
-        ? summary.propertyTitle!
-        : (propertyType?.label ?? summary.assetTypeId);
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.xl),
-      onTap: () => resumeAndOpenInspection(context, ref, summary.id),
-      child: AppHeroCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                AppPropertyIllustration(
-                  kind: propertyType == PropertyType.landed
-                      ? AppPropertyIllustrationKind.landed
-                      : AppPropertyIllustrationKind.highRise,
-                  size: 48,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(color: AppColors.onHero),
-                      ),
-                      Text(
-                        [
-                          summary.unitNumber,
-                          propertyType?.label,
-                        ].whereType<String>().join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.onHeroSecondary,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                      Text(
-                        'Updated ${_relativeTime(summary.updatedAt)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.onHeroMuted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                const Flexible(child: SessionLifecyclePillWhite()),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            detailAsync.maybeWhen(
-              data: (session) {
-                if (session == null) return const SizedBox.shrink();
-                final physical = PhysicalProgress.of(session);
-                final ai = AiProcessingProgress.of(session);
-                final review = AiReviewProgress.of(session);
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    AppRingProgress(
-                      value: physical.fraction,
-                      label:
-                          'Physical\n${physical.completed} of ${physical.totalAreas}',
-                      color: Colors.white,
-                      size: 76,
-                    ),
-                    AppRingProgress(
-                      value: ai.fraction,
-                      label:
-                          'AI Analysed\n${ai.processed} of ${ai.totalEligible}',
-                      color: Colors.white70,
-                      size: 76,
-                    ),
-                    AppRingProgress(
-                      value: review.fraction,
-                      label: 'Reviewed\n${review.resolved} of ${review.total}',
-                      color: Colors.white70,
-                      size: 76,
-                    ),
-                  ],
-                );
-              },
-              orElse: () => const SizedBox(
-                height: 76,
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// [SessionLifecyclePill] doesn't fit a dark hero background (its
-/// background tints assume the light surface) — this renders the same
-/// [sessionLifecyclePresentation] label with a translucent-white pill
-/// instead, only used on [_ActiveInspectionHero]. An in-progress
-/// session is the only status this hero ever actually shows (it only
-/// ever renders for `!isComplete` summaries), so a single fixed label
-/// is correct here rather than the full four-way switch.
-class SessionLifecyclePillWhite extends StatelessWidget {
-  const SessionLifecyclePillWhite({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: const Text(
-        'In Progress',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 12.5,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _AttentionListRow extends ConsumerWidget {
-  const _AttentionListRow({required this.summary});
-
-  final InspectionSessionSummary summary;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final propertyType = PropertyType.values.firstWhereOrNull(
-      (p) => p.name == summary.assetTypeId,
-    );
-    final title = summary.propertyTitle?.isNotEmpty == true
-        ? summary.propertyTitle!
-        : (propertyType?.label ?? summary.assetTypeId);
-    final isFailed = summary.aiFailedFindingsCount > 0;
-    final message = isFailed
-        ? '${summary.aiFailedFindingsCount} AI ${summary.aiFailedFindingsCount == 1 ? 'analysis' : 'analyses'} failed'
-        : '${summary.aiPendingReviewCount} finding${summary.aiPendingReviewCount == 1 ? '' : 's'} pending review';
-
-    final color = isFailed ? AppColors.danger : AppColors.warning;
-    return ListTile(
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          isFailed ? Icons.error_outline : Icons.rate_review_outlined,
-          size: 18,
-          color: color,
-        ),
-      ),
-      title: Text(title),
-      subtitle: Text(message),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => resumeAndOpenInspection(context, ref, summary.id),
-    );
-  }
-}
-
-class _RecentInspectionTile extends ConsumerWidget {
-  const _RecentInspectionTile({required this.summary});
-
-  final InspectionSessionSummary summary;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final propertyType = PropertyType.values.firstWhereOrNull(
-      (p) => p.name == summary.assetTypeId,
-    );
-    final title = summary.propertyTitle?.isNotEmpty == true
-        ? summary.propertyTitle!
-        : (propertyType?.label ?? summary.assetTypeId);
-    final (_, _, accentColor, _) = sessionLifecyclePresentation(summary.status);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AppInspectionCard(
-        title: title,
-        subtitle: [
-          summary.propertyAddress,
-          '${propertyType?.label ?? ''} · ${_relativeTime(summary.updatedAt)}',
-        ].whereType<String>().join(' · '),
-        illustrationKind: propertyType == PropertyType.landed
-            ? AppPropertyIllustrationKind.landed
-            : AppPropertyIllustrationKind.highRise,
-        statusPill: SessionLifecyclePill(status: summary.status),
-        accentColor: accentColor,
-        dense: true,
-        onTap: () => resumeAndOpenInspection(context, ref, summary.id),
       ),
     );
   }

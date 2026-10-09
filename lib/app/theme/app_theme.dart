@@ -32,7 +32,7 @@ abstract final class AppTheme {
         color: AppColors.textPrimary,
       ),
       headlineMedium: TextStyle(
-        fontSize: 24,
+        fontSize: 26,
         fontWeight: displayFontWeight,
         letterSpacing: -0.2,
         color: AppColors.textPrimary,
@@ -43,7 +43,7 @@ abstract final class AppTheme {
         color: AppColors.textPrimary,
       ),
       titleLarge: TextStyle(
-        fontSize: 18,
+        fontSize: 19,
         fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
@@ -59,7 +59,8 @@ abstract final class AppTheme {
       ),
       bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimary),
       bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-      bodySmall: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+      // 13sp minimum and the darker secondary tone: readable outdoors.
+      bodySmall: TextStyle(fontSize: 13, color: AppColors.textSecondary),
       labelLarge: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
@@ -82,13 +83,15 @@ abstract final class AppTheme {
         centerTitle: false,
         titleTextStyle: textTheme.titleLarge,
       ),
+      // Borderless white surfaces lifted by a soft shadow, rather than
+      // an outline on every card (docs/ux_architecture.md §3).
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        elevation: 0,
+        elevation: 1.5,
+        shadowColor: AppColors.textPrimary.withValues(alpha: 0.18),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          side: const BorderSide(color: AppColors.outline),
         ),
         margin: EdgeInsets.zero,
       ),

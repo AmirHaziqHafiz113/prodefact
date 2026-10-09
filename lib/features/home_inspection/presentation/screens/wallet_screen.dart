@@ -5,16 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../../../data/billing/billing_providers.dart';
-import '../../../../data/remote/remote_providers.dart';
 import '../../providers/session_list_providers.dart';
-import '../../providers/user_profile_providers.dart';
 import '../../providers/wallet_providers.dart';
-import '../widgets/attention_sheet.dart';
 import 'house_pass_screen.dart';
-import 'profile_screen.dart';
 import 'top_up_screen.dart';
 
-/// The Wallet tab: real Credits balance, this-month usage stats, a
+/// Wallet (opened from Home's credits card and from Profile — no longer
+/// a bottom-nav tab): real Credits balance, this-month usage stats, a
 /// real-data usage-over-time graph, a human-readable activity feed,
 /// and a plain-language explanation of the two real commercial modes
 /// (Flex Credits / House Pass) — see docs/commercial_model.md. Nothing
@@ -32,29 +29,24 @@ class WalletScreen extends ConsumerWidget {
     final cacheAsync = ref.watch(walletCacheProvider);
     final transactionsAsync = ref.watch(walletTransactionsProvider);
     final configAsync = ref.watch(commercialConfigProvider);
-    final authState = ref.watch(authStateProvider);
-    final profileAsync = ref.watch(userProfileProvider);
-    final attentionCount = ref.watch(attentionSessionsProvider).length;
 
     return Scaffold(
+      appBar: AppBar(title: const Text('Wallet')),
       body: SafeArea(
+        top: false,
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(walletBalanceProvider);
             ref.invalidate(walletTransactionsProvider);
           },
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.xl,
+            ),
             children: [
-              AppTopBar(
-                attentionCount: attentionCount,
-                onAttentionTap: () => showAttentionSheet(context, ref),
-                displayName: profileAsync.value?.inspectorName,
-                email: authState.value?.email,
-                onAvatarTap: () => context.push(ProfileScreen.routePath),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('Wallet', style: Theme.of(context).textTheme.headlineMedium),
               Text(
                 'Manage your AI credits and usage.',
                 style: Theme.of(context).textTheme.bodyMedium,

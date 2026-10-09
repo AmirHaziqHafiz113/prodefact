@@ -214,6 +214,10 @@ void main() {
       ),
     );
     await tester.pump();
+    // A confident result is settled: it's in the collapsed "Resolved"
+    // group, where Reanalyse is still offered.
+    await tester.tap(find.byKey(const ValueKey('review-show-resolved')));
+    await tester.pump();
 
     await tester.tap(find.text('Reanalyse'));
     await tester.pumpAndSettle();

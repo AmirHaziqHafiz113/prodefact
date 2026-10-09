@@ -5,10 +5,24 @@ import 'package:prodefact/app/app.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 
+import 'package:prodefact/app/router/app_shell_screen.dart';
+
 import 'support/test_repository.dart';
 import 'support/photo_guide_helper.dart';
 
 import 'package:prodefact/features/home_inspection/presentation/screens/photo_guide_screen.dart';
+
+/// Home is the landing screen; these tests are about the Inspections
+/// tab, so they switch to it first.
+Future<void> _openInspectionsTab(WidgetTester tester) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byType(AppBottomNav),
+      matching: find.text('Inspections'),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
   testWidgets(
@@ -31,7 +45,7 @@ void main() {
       // Pick a property type, then back out *without* tapping
       // "Start Inspection" — this used to leave a phantom inspection
       // on the dashboard; it must not anymore.
-      await tester.tap(find.byTooltip('New Inspection'));
+      await tester.tap(find.byTooltip('Capture'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('High Rise'));
       await tester.pumpAndSettle();
@@ -63,7 +77,7 @@ void main() {
 
     expect(find.text('No inspections yet'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('New Inspection'));
+    await tester.tap(find.byTooltip('Capture'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('High Rise'));
     await tester.pumpAndSettle();
@@ -77,7 +91,7 @@ void main() {
     await tester.pumpAndSettle();
     await passPhotoGuide(tester);
 
-    expect(find.text('Physical Inspection'), findsOneWidget);
+    expect(find.text('Inspection Overview'), findsOneWidget);
 
     // Back out of the created inspection to the dashboard — property
     // type -> basic details -> area configuration -> review setup ->
@@ -89,15 +103,17 @@ void main() {
       navigator.pop();
     }
     await tester.pumpAndSettle();
+    await _openInspectionsTab(tester);
 
     expect(find.text('No inspections yet'), findsNothing);
     expect(find.text('Test Property'), findsOneWidget);
-    expect(find.text('In Progress'), findsOneWidget);
+    // Started but nothing recorded yet.
+    expect(find.text('Draft'), findsWidgets);
 
     await tester.tap(find.text('Test Property'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Physical Inspection'), findsOneWidget);
+    expect(find.text('Inspection Overview'), findsOneWidget);
     // 2. Resuming never shows the photo guide again.
     expect(find.byType(PhotoGuideScreen), findsNothing);
   });
@@ -144,6 +160,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openInspectionsTab(tester);
 
       expect(find.text('Residensi Vista'), findsOneWidget);
       expect(find.text('Taman Sinar House'), findsOneWidget);
@@ -201,6 +218,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openInspectionsTab(tester);
 
       // Never a bare "Completed"/"Unfinished" binary — a session that's
       // merely physically done (no report yet) gets its own label. Only

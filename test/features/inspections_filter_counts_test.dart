@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prodefact/app/app.dart';
+import 'package:prodefact/app/router/app_shell_screen.dart';
 import 'package:prodefact/app/theme/design_system.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database_providers.dart';
 
 import '../support/test_repository.dart';
 
-/// The Inspections summary strip is one grouped/bordered row of inline
-/// metrics, not three separate count cards
-/// (docs/prodefact_design_system.md §9, mission §8 "SUMMARY").
+/// The Inspections screen has no separate metric strip any more — its
+/// filter chips already carry the real counts, so the same numbers are
+/// never shown twice (docs/ux_architecture.md).
 void main() {
   testWidgets(
-    'the summary strip shows real active/needs-review/completed counts',
+    'the filter chips carry real counts, and no duplicate metric strip is '
+    'shown',
     (tester) async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -50,28 +52,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The dashboard tab is the initial landing screen. The strip is
-      // one bordered container of three inline metrics — never three
-      // separate count cards.
-      final metrics = tester
-          .widgetList<AppMetricCard>(find.byType(AppMetricCard))
-          .toList();
-      expect(metrics.map((m) => m.label), [
-        'Active',
-        'Needs Review',
-        'Completed',
-      ]);
-      // Two real active inspections, zero needing review, one real
-      // completed inspection — never a fabricated count.
-      expect(metrics.map((m) => m.value), ['2', '0', '1']);
-
-      expect(
-        find.ancestor(
-          of: find.byType(AppMetricCard).first,
-          matching: find.byType(Card),
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppBottomNav),
+          matching: find.text('Inspections'),
         ),
-        findsNothing,
       );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppMetricCard), findsNothing);
+      // Two real in-progress inspections (both still drafts — nothing
+      // recorded), none needing review, one real completed inspection.
+      for (final label in [
+        'All (3)',
+        'Draft (2)',
+        'Active (2)',
+        'Needs Review (0)',
+        'Report Ready (0)',
+        'Completed (1)',
+      ]) {
+        expect(find.widgetWithText(ChoiceChip, label), findsOneWidget);
+      }
     },
   );
 }

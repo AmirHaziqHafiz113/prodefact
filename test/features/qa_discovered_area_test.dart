@@ -10,7 +10,7 @@ import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';
 import 'package:prodefact/features/home_inspection/config/home_inspection_config.dart';
 import 'package:prodefact/features/home_inspection/config/property_type.dart';
-import 'package:prodefact/features/home_inspection/presentation/screens/inspection_queue_screen.dart';
+import 'package:prodefact/features/home_inspection/presentation/screens/areas_screen.dart';
 import 'package:prodefact/features/home_inspection/providers/active_session_providers.dart';
 import 'package:prodefact/features/home_inspection/providers/physical_inspection_providers.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -167,7 +167,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: InspectionQueueScreen()),
+        child: const MaterialApp(home: AreasScreen()),
       ),
     );
     await tester.pumpAndSettle();
