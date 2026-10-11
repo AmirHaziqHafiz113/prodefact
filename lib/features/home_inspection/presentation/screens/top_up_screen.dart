@@ -9,7 +9,7 @@ import '../../../../data/billing/billing_providers.dart';
 import '../../providers/wallet_providers.dart';
 import '../widgets/commercial_error_presentation.dart';
 
-/// Top Up: choose an RM amount, see the Credits it buys, and create a
+/// Top Up: choose an RM amount, see the Tokens it buys, and create a
 /// payment intent. **No real payment gateway is configured for this
 /// project** (see docs/commercial_model.md, "Payment architecture") —
 /// completing a top-up via [BillingService.confirmSandboxPayment] is
@@ -83,7 +83,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
               ChoiceChip(
                 label: Text(
                   'RM${package.myr.toStringAsFixed(0)} · '
-                  '${package.credits} Credits',
+                  '${formatTokens(package.tokens)}',
                 ),
                 selected: _selectedMyr == package.myr,
                 onSelected: (_) => setState(() {
@@ -106,7 +106,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          '${config.creditsPerMyr} Credits per RM1 — the exact amount is '
+          '${formatTokenCount(config.tokensPerMyr)} Tokens = RM1 — the exact amount is '
           'confirmed by the server, never calculated on this device.',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: AppColors.textMuted),
@@ -141,7 +141,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
         children: [
           AppSectionHeader(
             title: 'RM${intent.amountMyr.toStringAsFixed(0)} top-up',
-            subtitle: 'You will receive ${intent.creditsAmount} Credits',
+            subtitle: 'You will receive ${formatTokens(intent.tokensAmount)}',
           ),
           const SizedBox(height: AppSpacing.lg),
           if (_error != null) ...[
@@ -251,8 +251,8 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Added ${confirmation.creditsAdded} Credits. New balance: '
-            '${confirmation.newBalance}.',
+            'Added ${formatTokens(confirmation.tokensAdded)}. New balance: '
+            '${formatTokens(confirmation.newBalance)}.',
           ),
         ),
       );

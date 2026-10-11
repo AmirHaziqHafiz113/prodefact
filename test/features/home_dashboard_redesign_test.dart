@@ -8,13 +8,13 @@ import 'package:prodefact/features/home_inspection/presentation/screens/wallet_s
 
 import '../support/test_repository.dart';
 
-/// Home's Credits summary is compact and secondary to the active
+/// Home's Tokens summary is compact and secondary to the active
 /// inspection hero (docs/prodefact_design_system.md §19/§31 via the
-/// mission's "AI CREDITS" section): tapping the row opens Wallet, with
+/// mission's "TOKENS" section): tapping the row opens Wallet, with
 /// a single "Top Up" button rather than two competing filled actions.
 void main() {
   testWidgets(
-    'tapping the Credits summary opens Wallet, and Top Up is the only '
+    'tapping the Tokens summary opens Wallet, and Top Up is the only '
     'button on the row',
     (tester) async {
       final container = ProviderContainer(overrides: testOverrides());
@@ -41,7 +41,7 @@ void main() {
       expect(find.text('Usage'), findsNothing);
       expect(find.text('View Usage'), findsNothing);
 
-      await tester.tap(find.text('500 credits'));
+      await tester.tap(find.text('5,000,000 Tokens'));
       await tester.pumpAndSettle();
 
       expect(find.byType(WalletScreen), findsOneWidget);

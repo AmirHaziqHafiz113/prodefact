@@ -119,8 +119,8 @@ void main() {
   });
 
   testWidgets(
-    'search narrows the list by title/unit, and the In Progress filter '
-    'excludes a completed inspection',
+    'Active and Past are separate: a completed inspection is only under '
+    'Past, and search narrows each list by title/unit',
     (tester) async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -162,25 +162,28 @@ void main() {
       await tester.pumpAndSettle();
       await _openInspectionsTab(tester);
 
+      // Active never lists the completed job.
+      expect(find.text('Active (1)'), findsOneWidget);
+      expect(find.text('Past (1)'), findsOneWidget);
       expect(find.text('Residensi Vista'), findsOneWidget);
-      expect(find.text('Taman Sinar House'), findsOneWidget);
+      expect(find.text('Taman Sinar House'), findsNothing);
+      // Each chip shows its real count (QA #25) — over active work only.
+      expect(find.widgetWithText(ChoiceChip, 'All (1)'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'In progress (1)'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'A-12-08');
       await tester.pumpAndSettle();
-
       expect(find.text('Residensi Vista'), findsOneWidget);
-      expect(find.text('Taman Sinar House'), findsNothing);
 
       await tester.enterText(find.byType(TextField), '');
       await tester.pumpAndSettle();
-      // Each chip shows its real count (QA #25).
-      expect(find.widgetWithText(ChoiceChip, 'All (2)'), findsOneWidget);
-      expect(find.widgetWithText(ChoiceChip, 'Completed (1)'), findsOneWidget);
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Active (1)'));
+      await tester.tap(find.text('Past (1)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Residensi Vista'), findsOneWidget);
-      expect(find.text('Taman Sinar House'), findsNothing);
+      // Past lists only the completed job.
+      expect(find.text('Taman Sinar House'), findsOneWidget);
+      expect(find.text('Residensi Vista'), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
     },
   );
 
@@ -221,12 +224,13 @@ void main() {
       await _openInspectionsTab(tester);
 
       // Never a bare "Completed"/"Unfinished" binary — a session that's
-      // merely physically done (no report yet) gets its own label. Only
-      // the reported session's own pill contributes "Completed" text
-      // beyond the dashboard's "Completed" filter chip, hence >= 1
-      // rather than exactly 1.
+      // merely physically done (no report yet) gets its own label in
+      // Active; only a reported one reads "Completed", under Past.
       expect(find.text('AI Processing'), findsOneWidget);
-      expect(find.text('Completed'), findsWidgets);
+      expect(find.text('Completed'), findsNothing);
+      await tester.tap(find.text('Past (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Completed'), findsOneWidget);
     },
   );
 }

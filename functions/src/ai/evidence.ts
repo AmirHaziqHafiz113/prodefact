@@ -138,6 +138,7 @@ export async function resolveEvidenceImage(params: {
       evidenceId,
       mimeType: "image/jpeg",
       base64: normalized.toString("base64"),
+      sourceBytes: bytes.length,
     };
   } catch {
     // Any failure (Firestore/Storage error, corrupted image, etc.) —

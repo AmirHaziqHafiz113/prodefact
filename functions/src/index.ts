@@ -87,7 +87,7 @@ export const classifyFinding = onCall(
 /**
  * `estimateFindingAnalysis` — the price-check step Flutter calls before
  * ever showing an "Analyse" button, so the inspector always approves a
- * real (if conservative) Credits figure before AI ever runs. See
+ * real (if conservative) Token figure before AI ever runs. See
  * `billing/handle_estimate_finding_analysis.ts`.
  */
 export const estimateFindingAnalysis = onCall(
@@ -102,7 +102,7 @@ export const estimateFindingAnalysis = onCall(
 
 /**
  * `analyseFinding` — the priced AI-classification callable: reserves
- * the estimated Credits, runs AI exactly once per idempotencyKey,
+ * the estimated Tokens, runs AI exactly once per idempotencyKey,
  * settles the real charge (or releases the reservation in full on
  * failure), and never runs unless the inspector already approved the
  * estimate from `estimateFindingAnalysis`. See

@@ -86,14 +86,11 @@ class _Header extends StatelessWidget {
   }
 }
 
-enum _DashboardFilter {
-  all,
-  draft,
-  inProgress,
-  needsReview,
-  reportReady,
-  completed,
-}
+/// Active work vs. completed history — never the same job in both.
+enum _InspectionsTab { active, past }
+
+/// Filters within Active (completed jobs live under Past instead).
+enum _DashboardFilter { all, draft, inProgress, needsReview, reportReady }
 
 bool _matches(_DashboardFilter filter, InspectionSessionSummary s) =>
     switch (filter) {
@@ -104,7 +101,6 @@ bool _matches(_DashboardFilter filter, InspectionSessionSummary s) =>
       _DashboardFilter.needsReview => s.needsAttention,
       _DashboardFilter.reportReady =>
         s.status == InspectionStatus.aiReviewComplete,
-      _DashboardFilter.completed => s.status == InspectionStatus.reported,
     };
 
 class _DashboardBody extends ConsumerStatefulWidget {
@@ -120,6 +116,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   final _searchController = TextEditingController();
   String _query = '';
   _DashboardFilter _filter = _DashboardFilter.all;
+  _InspectionsTab _tab = _InspectionsTab.active;
 
   @override
   void dispose() {
@@ -148,10 +145,18 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     }
 
     final searched = sessions.where(matchesQuery).toList();
-    final filtered = searched.where((s) => _matches(_filter, s)).toList();
+    final active = searched.where((s) => !s.isPast).toList();
+    // Past is completed history, newest completion first.
+    final past = searched.where((s) => s.isPast).toList()
+      ..sort(
+        (a, b) => (b.completedAt ?? b.updatedAt).compareTo(
+          a.completedAt ?? a.updatedAt,
+        ),
+      );
+    final filtered = active.where((s) => _matches(_filter, s)).toList();
     final filterCounts = {
       for (final option in _DashboardFilter.values)
-        option: searched.where((s) => _matches(option, s)).length,
+        option: active.where((s) => _matches(option, s)).length,
     };
 
     return ListView(
@@ -183,24 +188,52 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final option in _DashboardFilter.values) ...[
-                  ChoiceChip(
-                    key: ValueKey('session-filter-${option.name}'),
-                    label: Text(
-                      '${_filterLabel(option)} (${filterCounts[option]})',
-                    ),
-                    selected: _filter == option,
-                    onSelected: (_) => setState(() => _filter = option),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<_InspectionsTab>(
+              key: const ValueKey('inspections-tabs'),
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: _InspectionsTab.active,
+                  label: Text(
+                    'Active (${active.length})',
+                    key: const ValueKey('inspections-tab-active'),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
+                ),
+                ButtonSegment(
+                  value: _InspectionsTab.past,
+                  label: Text(
+                    'Past (${past.length})',
+                    key: const ValueKey('inspections-tab-past'),
+                  ),
+                ),
               ],
+              selected: {_tab},
+              onSelectionChanged: (selection) =>
+                  setState(() => _tab = selection.single),
             ),
           ),
+          const SizedBox(height: AppSpacing.md),
+          if (_tab == _InspectionsTab.active)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final option in _DashboardFilter.values) ...[
+                    ChoiceChip(
+                      key: ValueKey('session-filter-${option.name}'),
+                      label: Text(
+                        '${_filterLabel(option)} (${filterCounts[option]})',
+                      ),
+                      selected: _filter == option,
+                      onSelected: (_) => setState(() => _filter = option),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                ],
+              ),
+            ),
           const SizedBox(height: AppSpacing.lg),
         ],
         if (sessions.isEmpty)
@@ -213,6 +246,19 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             actionLabel: 'Start New Inspection',
             onAction: () => context.push(PropertyTypeSelectionScreen.routePath),
           )
+        else if (_tab == _InspectionsTab.past)
+          if (past.isEmpty)
+            AppEmptyView(
+              icon: Icons.history,
+              title: _query.isEmpty
+                  ? 'No completed inspections yet'
+                  : 'No matching past inspections',
+              message: _query.isEmpty
+                  ? 'An inspection moves here once its report is generated.'
+                  : 'Nothing matches "$_query". Try a different search.',
+            )
+          else
+            for (final summary in past) _PastSessionCard(summary: summary)
         else if (filtered.isEmpty)
           AppEmptyView(
             icon: Icons.search_off_outlined,
@@ -239,15 +285,11 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   String _filterLabel(_DashboardFilter filter) => switch (filter) {
     _DashboardFilter.all => 'All',
     _DashboardFilter.draft => 'Draft',
-    // Deliberately "Active", not "In Progress" — the latter is also the
-    // matching sessions' own status chip label, and having the exact
-    // same string do double duty as both a filter chip and a status
-    // label makes narrowing a `find.text(...)` lookup in tests
-    // ambiguous.
-    _DashboardFilter.inProgress => 'Active',
+    // Lower-case "In progress" — distinct from the status chip's own
+    // "In Progress" label, so a `find.text(...)` lookup stays unambiguous.
+    _DashboardFilter.inProgress => 'In progress',
     _DashboardFilter.needsReview => 'Needs Review',
     _DashboardFilter.reportReady => 'Report Ready',
-    _DashboardFilter.completed => 'Completed',
   };
 }
 
@@ -403,3 +445,103 @@ class _SessionCard extends ConsumerWidget {
 }
 
 enum _SessionAction { sync, delete }
+
+/// A completed inspection in Past: photo, property, inspection and
+/// completed dates, findings, report status and who it was for. Opens the
+/// read-only Past Inspection Detail.
+class _PastSessionCard extends ConsumerWidget {
+  const _PastSessionCard({required this.summary});
+
+  final InspectionSessionSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final people = [
+      if (summary.inspectorName?.isNotEmpty == true)
+        'Inspector ${summary.inspectorName}',
+      if (summary.clientName?.isNotEmpty == true)
+        'Client ${summary.clientName}',
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Card(
+        key: ValueKey('past-card-${summary.id}'),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => resumeAndOpenInspection(context, ref, summary.id),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppPropertyPhoto(
+                  photoPath: summary.coverPhotoPath,
+                  kind: illustrationKindFor(summary.assetTypeId),
+                  width: 76,
+                  height: 76,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        summaryTitle(summary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (summary.propertyAddress?.isNotEmpty == true)
+                        Text(
+                          summary.propertyAddress!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Inspected '
+                        '${formatInspectionDate(summary.inspectionDate ?? summary.createdAt)}'
+                        '${summary.completedAt == null ? '' : ' · completed ${formatInspectionDate(summary.completedAt!)}'}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          AppStatusChip(
+                            status: AppStatus.completed,
+                            label: summary.reportVersion == null
+                                ? 'Completed'
+                                : 'Report v${summary.reportVersion}',
+                          ),
+                          Text(
+                            '${summary.findingsCount} finding'
+                            '${summary.findingsCount == 1 ? '' : 's'}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      if (people.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
+                          child: Text(
+                            people,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

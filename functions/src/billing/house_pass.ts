@@ -101,7 +101,7 @@ export function hasRemainingAllowance(pass: HousePass): boolean {
  * analysis — called only once that analysis actually completes, so a
  * failed analysis never consumes allowance. Flips the pass to
  * `allowanceReached` (not `expired`/`cancelled`) the moment the limit
- * is hit, so the UI can offer "Continue with Flex Credits" immediately
+ * is hit, so the UI can offer "Continue with pay-as-you-go Tokens" immediately
  * — see docs/commercial_model.md ("If allowance is exhausted").
  *
  * Idempotent per [usageKey] (the analysis job's idempotency key): the

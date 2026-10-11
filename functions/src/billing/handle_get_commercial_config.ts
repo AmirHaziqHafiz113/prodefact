@@ -1,12 +1,14 @@
 import {HttpsError} from "firebase-functions/v2/https";
 import type {Firestore} from "firebase-admin/firestore";
 import {loadPricingConfig} from "./pricing_config";
-import {estimateMaxCredits, myrToCredits} from "./pricing";
+import {estimateMaxTokens, myrToTokens} from "./pricing";
 import {AiLevel} from "./types";
+import {TOKENS_PER_MYR} from "./tokens";
+import {migrateLegacyWallet} from "./wallet";
 
 /**
  * The customer-safe subset of the pricing config — labels, the
- * Credits/MYR conversion, top-up package amounts, and House Pass
+ * Tokens/MYR conversion, top-up package amounts, and House Pass
  * headline price, but never a provider name, model id, or internal
  * provider cost rate. Powers the Wallet/Top Up/Choose AI Plan screens
  * without Flutter ever reading `pricing/config` directly.
@@ -23,20 +25,23 @@ export async function handleGetCommercialConfig(params: {
   }
 
   const config = await loadPricingConfig(firestore);
+  // Called on every app start: converts a legacy Credits wallet to
+  // Tokens (same RM value) so the app reads Tokens straight away.
+  await migrateLegacyWallet(firestore, auth.uid, config.legacyCreditsPerMyr);
   const levels: AiLevel[] = ["fast", "smart", "expert"];
 
   return {
-    creditsPerMyr: config.creditsPerMyr,
-    lowBalanceThresholdCredits: config.lowBalanceThresholdCredits,
+    tokensPerMyr: TOKENS_PER_MYR,
+    lowBalanceThresholdTokens: config.lowBalanceThresholdTokens,
     topUpPackages: config.topUpPackagesMyr.map((myr) => ({
       myr,
-      credits: myrToCredits(myr, config),
+      tokens: myrToTokens(myr),
     })),
     aiLevels: levels.map((level) => ({
       id: level,
       label: config.aiLevels[level].label,
       description: config.aiLevels[level].description,
-      maximumCredits: estimateMaxCredits(level, config),
+      maximumTokens: estimateMaxTokens(level, config),
     })),
     housePass: {
       enabled: config.housePass.enabled,

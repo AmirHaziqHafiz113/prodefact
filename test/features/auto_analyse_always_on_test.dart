@@ -20,7 +20,7 @@ import '../support/test_repository.dart';
 
 /// Counts every analysis the fake backend actually runs.
 class _CountingBilling extends FakeBillingService {
-  _CountingBilling() : super(initialBalanceCredits: 10000);
+  _CountingBilling() : super(initialBalanceTokens: 100000000);
 
   int analyses = 0;
 

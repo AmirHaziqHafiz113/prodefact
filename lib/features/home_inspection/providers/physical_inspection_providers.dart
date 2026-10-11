@@ -122,3 +122,11 @@ class InspectionFindings extends Notifier<List<Finding>> {
 
 final inspectionFindingsProvider =
     NotifierProvider<InspectionFindings, List<Finding>>(InspectionFindings.new);
+
+/// Whether the open inspection is a completed (reported) one — viewed
+/// read-only from Past Inspections. Completed inspections can't be
+/// edited yet (no reopen/revision flow), so capture, notes, defect
+/// changes, Reanalyse, Reject and Delete are all hidden while true.
+final inspectionReadOnlyProvider = Provider<bool>((ref) {
+  return ref.watch(activeSessionProvider)?.status == InspectionStatus.reported;
+});

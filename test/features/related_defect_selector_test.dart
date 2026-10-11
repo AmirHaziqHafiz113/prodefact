@@ -20,7 +20,7 @@ import '../support/test_repository.dart';
 enum _Mode { confident, fail }
 
 class _Backend extends FakeBillingService {
-  _Backend() : super(initialBalanceCredits: 100000);
+  _Backend() : super(initialBalanceTokens: 1000000000);
 
   _Mode mode = _Mode.confident;
   int calls = 0;

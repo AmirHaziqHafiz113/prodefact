@@ -98,10 +98,10 @@ void main() {
       await _assertNoOverflowAcrossTextScales(tester, screenLabel: tab);
     }
 
-    // Wallet is a pushed screen, opened from Home's credits card.
+    // Wallet is a pushed screen, opened from Home's Tokens card.
     await tester.tap(inNav('Home'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('home-credits')));
+    await tester.tap(find.byKey(const ValueKey('home-tokens')));
     await tester.pumpAndSettle();
     await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Wallet');
     await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Wallet');

@@ -1,4 +1,5 @@
 import type {Firestore} from "firebase-admin/firestore";
+import {LEGACY_CREDITS_PER_MYR, tokensForLegacyCredits} from "./tokens";
 
 /**
  * A payment intent — the backend-created, backend-authoritative record
@@ -9,6 +10,19 @@ import type {Firestore} from "firebase-admin/firestore";
  * client never gets to assert payment success on its own.
  */
 export type PaymentPurpose = "topup" | "housePass";
+
+/**
+ * @param {PaymentIntent} intent a top-up intent.
+ * @return {number} the Tokens it grants — a legacy Credits intent
+ *   created before Tokens converts at the same RM value.
+ */
+export function tokensForIntent(intent: PaymentIntent): number {
+  if (typeof intent.tokensAmount === "number") return intent.tokensAmount;
+  return tokensForLegacyCredits(
+    intent.creditsAmount ?? 0,
+    LEGACY_CREDITS_PER_MYR
+  );
+}
 export type PaymentIntentStatus = "pending" | "succeeded" | "failed";
 
 export interface PaymentIntent {
@@ -16,8 +30,11 @@ export interface PaymentIntent {
   userId: string;
   purpose: PaymentPurpose;
   amountMyr: number;
-  /** The Credits a `topup` intent will grant on success — irrelevant
-   * for `housePass`, which never grants Credits. */
+  /** The Tokens a `topup` intent will grant on success — irrelevant
+   * for `housePass`, which never grants Tokens. */
+  tokensAmount?: number;
+  /** Legacy: what a pre-Token `topup` intent would grant, in Credits.
+   * Read only via [tokensForIntent]. */
   creditsAmount?: number;
   /** The inspection a `housePass` intent is for — irrelevant for
    * `topup`. */
@@ -44,7 +61,7 @@ function paymentIntentRef(db: Firestore, uid: string, id: string) {
  * rejects `undefined` outright (`Cannot use "undefined" as a Firestore
  * value`), so an optional field that's genuinely absent (e.g. a
  * `topup` intent's `inspectionId`, or a `housePass` intent's
- * `creditsAmount`) must never be assigned into the object that gets
+ * `tokensAmount`) must never be assigned into the object that gets
  * `.set()`, not merely left `undefined` on it. This is the one place
  * that guarantee is enforced, so every optional field on
  * [PaymentIntent] — present or future — gets it for free, rather than
@@ -75,7 +92,7 @@ export async function createPaymentIntent(db: Firestore, params: {
   idempotencyKey: string;
   purpose: PaymentPurpose;
   amountMyr: number;
-  creditsAmount?: number;
+  tokensAmount?: number;
   inspectionId?: string;
 }): Promise<PaymentIntent> {
   const ref = paymentIntentRef(db, params.uid, params.idempotencyKey);
@@ -89,7 +106,7 @@ export async function createPaymentIntent(db: Firestore, params: {
     userId: params.uid,
     purpose: params.purpose,
     amountMyr: params.amountMyr,
-    creditsAmount: params.creditsAmount,
+    tokensAmount: params.tokensAmount,
     inspectionId: params.inspectionId,
     status: "pending",
     createdAt: now,

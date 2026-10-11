@@ -31,7 +31,7 @@ Future<void> _settle() => pumpEventQueue(times: 1000);
 typedef _Seeded = ({String sessionId, String findingId, String sectionId});
 
 /// A session with one photographed, saved finding. Auto-analyse is off
-/// (the Flex Credits default), so it is left `awaitingApproval` and no AI
+/// (the Pay as you go default), so it is left `awaitingApproval` and no AI
 /// has run; each test then puts it into the persisted state it needs.
 Future<_Seeded> _seedFinding(DriftInspectionRepository repo) async {
   final container = ProviderContainer(

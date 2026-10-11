@@ -9,6 +9,10 @@ enum WalletTransactionType {
   adjustment,
   housePassPurchase,
 
+  /// The one-off conversion of a legacy Credits balance to Tokens of the
+  /// same RM value. Informational — it moves no balance itself.
+  legacyMigration,
+
   /// A ledger entry type this build doesn't recognize yet — never
   /// invented; the raw type string is preserved separately for display
   /// if needed.
@@ -26,15 +30,25 @@ class WalletTransactionSummary {
     required this.id,
     required this.type,
     required this.direction,
-    required this.amountCredits,
+    required this.amountTokens,
     required this.description,
     required this.createdAt,
+    this.legacyAmountCredits,
   });
 
   final String id;
   final WalletTransactionType type;
   final LedgerDirection direction;
-  final int amountCredits;
+
+  /// Whole Tokens. For a legacy entry written in Credits this is 0 —
+  /// historical Token usage is never invented; see [legacyAmountCredits].
+  final int amountTokens;
   final String description;
   final DateTime createdAt;
+
+  /// Set for an entry written before Tokens existed: its original
+  /// Credits amount, shown as-is ("1,000 Credits"), never re-priced.
+  final int? legacyAmountCredits;
+
+  bool get isLegacyCredits => legacyAmountCredits != null;
 }

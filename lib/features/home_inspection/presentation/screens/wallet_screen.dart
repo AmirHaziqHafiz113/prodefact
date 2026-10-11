@@ -9,13 +9,14 @@ import '../../providers/session_list_providers.dart';
 import '../../providers/wallet_providers.dart';
 import 'house_pass_screen.dart';
 import 'top_up_screen.dart';
+import 'usage_details_screen.dart';
 
-/// Wallet (opened from Home's credits card and from Profile — no longer
-/// a bottom-nav tab): real Credits balance, this-month usage stats, a
+/// Wallet (opened from Home's Tokens card and from Profile — no longer
+/// a bottom-nav tab): real Tokens balance, this-month usage stats, a
 /// real-data usage-over-time graph, a human-readable activity feed,
 /// and a plain-language explanation of the two real commercial modes
-/// (Flex Credits / House Pass) — see docs/commercial_model.md. Nothing
-/// here ever computes a price or grants Credits itself.
+/// (Pay as you go / House Pass) — see docs/commercial_model.md. Nothing
+/// here ever computes a price or grants Tokens itself.
 class WalletScreen extends ConsumerWidget {
   const WalletScreen({super.key});
 
@@ -48,14 +49,14 @@ class WalletScreen extends ConsumerWidget {
             ),
             children: [
               Text(
-                'Manage your AI credits and usage.',
+                'Your ProDefact Tokens and what they were used for.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
               _BalanceCard(
                 balanceAsync: balanceAsync,
                 cacheAsync: cacheAsync,
-                creditsPerMyr: configAsync.value?.creditsPerMyr,
+                tokensPerMyr: configAsync.value?.tokensPerMyr,
                 onTopUp: () => context.push(TopUpScreen.routePath),
                 onViewPricing: () => Scrollable.ensureVisible(
                   _pricingKey.currentContext ?? context,
@@ -66,16 +67,16 @@ class WalletScreen extends ConsumerWidget {
               configAsync.maybeWhen(
                 data: (config) {
                   final balance =
-                      balanceAsync.value ?? cacheAsync.value?.balanceCredits;
+                      balanceAsync.value ?? cacheAsync.value?.balanceTokens;
                   if (balance == null ||
-                      balance >= config.lowBalanceThresholdCredits) {
+                      balance >= config.lowBalanceThresholdTokens) {
                     return const SizedBox.shrink();
                   }
                   return const Padding(
                     padding: EdgeInsets.only(bottom: AppSpacing.md),
                     child: AppInlineWarningBanner(
                       message:
-                          'Your Credits balance is low. AI analysis will '
+                          'Your Token balance is low. AI analysis will '
                           'ask you to top up before it runs — physical '
                           'inspection is never affected.',
                     ),
@@ -94,6 +95,8 @@ class WalletScreen extends ConsumerWidget {
                 data: (transactions) =>
                     _UsageSummary(transactions: transactions),
               ),
+              const SizedBox(height: AppSpacing.md),
+              const _UsageDetailsLink(),
               const SizedBox(height: AppSpacing.xl),
               AppSectionHeader(title: 'Recent activity'),
               transactionsAsync.maybeWhen(
@@ -186,7 +189,7 @@ class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     required this.balanceAsync,
     required this.cacheAsync,
-    required this.creditsPerMyr,
+    required this.tokensPerMyr,
     required this.onTopUp,
     required this.onViewPricing,
   });
@@ -196,7 +199,7 @@ class _BalanceCard extends StatelessWidget {
 
   /// Null only while `commercialConfigProvider` hasn't resolved yet —
   /// the RM equivalent is simply omitted until then, never guessed.
-  final int? creditsPerMyr;
+  final int? tokensPerMyr;
   final VoidCallback onTopUp;
   final VoidCallback onViewPricing;
 
@@ -206,7 +209,7 @@ class _BalanceCard extends StatelessWidget {
     // cache only while that's still loading or unavailable — never the
     // other way around (see docs/commercial_model.md).
     final resolvedBalance =
-        balanceAsync.value ?? cacheAsync.value?.balanceCredits;
+        balanceAsync.value ?? cacheAsync.value?.balanceTokens;
     final isStale = balanceAsync.value == null && resolvedBalance != null;
 
     return AppHeroCard(
@@ -229,7 +232,7 @@ class _BalanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'AI CREDITS',
+                  'TOKEN BALANCE',
                   style: TextStyle(
                     color: AppColors.onHeroSecondary,
                     fontSize: 12,
@@ -253,21 +256,28 @@ class _BalanceCard extends StatelessWidget {
                     style: TextStyle(color: AppColors.onHero),
                   )
                 else
-                  AppAnimatedNumber(
-                    value: resolvedBalance!,
-                    suffix: ' credits',
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      color: AppColors.onHero,
-                      fontWeight: FontWeight.w700,
+                  // Balances run into the hundreds of millions: scale down
+                  // rather than clip on a narrow phone.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: AppAnimatedNumber(
+                      key: const ValueKey('wallet-token-balance'),
+                      value: resolvedBalance!,
+                      format: formatTokenCount,
+                      suffix: ' Tokens',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            color: AppColors.onHero,
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
                   ),
-                if (resolvedBalance != null &&
-                    creditsPerMyr != null &&
-                    creditsPerMyr! > 0) ...[
+                if (resolvedBalance != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '≈ RM${(resolvedBalance / creditsPerMyr!).toStringAsFixed(2)} '
-                    '· RM${(1 / creditsPerMyr!).toStringAsFixed(2)} / credit',
+                    '≈ ${tokensAsMyr(resolvedBalance)} · '
+                    '${formatTokenCount(kTokensPerMyr)} Tokens = RM1',
                     style: const TextStyle(
                       color: AppColors.onHeroSecondary,
                       fontSize: 12.5,
@@ -335,13 +345,13 @@ class _UsageSummary extends StatelessWidget {
     );
     final spent = thisMonth
         .where((t) => t.direction == LedgerDirection.debit)
-        .fold<int>(0, (sum, t) => sum + t.amountCredits);
+        .fold<int>(0, (sum, t) => sum + t.amountTokens);
     final analysisCount = thisMonth
         .where((t) => t.type == WalletTransactionType.usage)
         .length;
-    final avgPerAnalysis = analysisCount == 0 ? 0 : spent / analysisCount;
+    final avgPerAnalysis = analysisCount == 0 ? 0 : spent ~/ analysisCount;
 
-    // Real Credits spent per day over the last 7 days — never a fake
+    // Real Tokens spent per day over the last 7 days — never a fake
     // or interpolated series.
     final days = List.generate(
       7,
@@ -363,7 +373,7 @@ class _UsageSummary extends StatelessWidget {
                     t.createdAt.month == day.month &&
                     t.createdAt.day == day.day,
               )
-              .fold<int>(0, (sum, t) => sum + t.amountCredits)
+              .fold<int>(0, (sum, t) => sum + t.amountTokens)
               .toDouble(),
         ),
     ];
@@ -379,8 +389,8 @@ class _UsageSummary extends StatelessWidget {
                 Expanded(
                   child: AppMetricCard(
                     icon: Icons.receipt_long_outlined,
-                    value: '$spent',
-                    label: 'Credits used',
+                    value: formatTokenCount(spent),
+                    label: 'Tokens used',
                     caption: 'This month',
                     dense: true,
                   ),
@@ -406,9 +416,9 @@ class _UsageSummary extends StatelessWidget {
                 Expanded(
                   child: AppMetricCard(
                     icon: Icons.insights_outlined,
-                    value: avgPerAnalysis.toStringAsFixed(1),
+                    value: formatTokenCount(avgPerAnalysis),
                     label: 'Avg. / analysis',
-                    caption: 'Credits',
+                    caption: 'Tokens',
                     iconColor: AppColors.plumbing,
                     dense: true,
                   ),
@@ -423,7 +433,7 @@ class _UsageSummary extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    'Credit usage',
+                    'Token usage',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelLarge,
@@ -491,6 +501,10 @@ class _ActivityRow extends StatelessWidget {
         Icons.verified_outlined,
         AppColors.primary,
       ),
+      WalletTransactionType.legacyMigration => (
+        Icons.swap_horiz,
+        AppColors.primary,
+      ),
       WalletTransactionType.unknown => (
         Icons.receipt_long_outlined,
         AppColors.textMuted,
@@ -508,11 +522,26 @@ class _ActivityRow extends StatelessWidget {
         child: Icon(icon, color: color, size: 18),
       ),
       title: Text(transaction.description),
-      subtitle: Text(_formatDate(transaction.createdAt)),
-      trailing: transaction.amountCredits == 0
+      subtitle: Text(
+        transaction.isLegacyCredits
+            ? '${_formatDate(transaction.createdAt)} · before Tokens'
+            : _formatDate(transaction.createdAt),
+      ),
+      // A pre-Token entry shows its original Credits — never re-priced
+      // or presented as Token usage. The migration entry moves nothing.
+      trailing: transaction.isLegacyCredits
+          ? Text(
+              '${isCredit ? '+' : '-'}'
+              '${formatTokenCount(transaction.legacyAmountCredits!)} Credits',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          : transaction.amountTokens == 0 ||
+                transaction.type == WalletTransactionType.legacyMigration ||
+                transaction.type == WalletTransactionType.housePassPurchase
           ? null
           : Text(
-              '${isCredit ? '+' : '-'}${transaction.amountCredits}',
+              '${isCredit ? '+' : '-'}'
+              '${formatTokenCount(transaction.amountTokens)}',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: isCredit ? AppColors.success : AppColors.textPrimary,
               ),
@@ -565,11 +594,12 @@ class _PricingExplainer extends ConsumerWidget {
                     Expanded(
                       child: _PlanTile(
                         icon: Icons.bolt_outlined,
-                        title: 'Flex Credits',
-                        description: 'Pay as you go. No commitment.',
+                        title: 'Pay as you go',
+                        description: 'Tokens per analysis. No commitment.',
                         priceLine: flexInfo == null
                             ? null
-                            : 'RM${(1 / config.creditsPerMyr).toStringAsFixed(2)} / credit',
+                            : '${formatTokenCount(config.tokensPerMyr)} '
+                                  'Tokens = RM1',
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -633,6 +663,32 @@ class _PlanTile extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// "Total used" across recent operations, and the way into the usage
+/// breakdown (AI Analysis / Storage / Processing / Other) and usage by
+/// inspection.
+class _UsageDetailsLink extends ConsumerWidget {
+  const _UsageDetailsLink();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final records = ref.watch(walletUsageRecordsProvider).value;
+    final total = records?.fold<int>(0, (sum, r) => sum + r.tokensCharged);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: AppActionRow(
+        key: const ValueKey('wallet-usage-details'),
+        icon: Icons.pie_chart_outline,
+        title: 'Usage details',
+        subtitle: total == null
+            ? 'By category and by inspection'
+            : 'Total used: ${formatTokens(total)}'
+                  '${records!.length >= 100 ? ' (last 100 operations)' : ''}',
+        onTap: () => context.push(UsageDetailsScreen.routePath),
       ),
     );
   }

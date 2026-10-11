@@ -148,3 +148,29 @@ queue order (plumbing first). If every area is complete, it goes to Areas.
 - Every screen has one filled primary action, pinned at the bottom. Secondary
   actions are list rows or text buttons.
 - Touch targets are at least 48dp. Body text is at least 13sp.
+
+## 4. Past Inspections, Tokens, Drive backup (2026-10-11)
+
+- **Inspections** is split into **Active | Past**. Past holds completed
+  (reported) inspections only, and Active never lists them. Past cards show:
+  - the property photo, title and address
+  - the inspection date and completed date
+  - total findings and report status
+  - the inspector and client
+- **Past Inspection Detail** (`/home-inspection/past/:sessionId`) is read-only.
+  - It shows the photo, address, dates, inspector, client/purchaser, totals, an
+    area summary and the report status.
+  - Actions: View Areas, View Findings (`/home-inspection/past-findings`), View
+    Report (the existing Report screen) and View Photos
+    (`/home-inspection/past-photos`, with "View Original" from Drive).
+- Any card for a completed inspection opens Past Inspection Detail, never the
+  editable Overview.
+  - While a completed inspection is open, `inspectionReadOnlyProvider` hides
+    capture, notes, area completion, defect changes, Reanalyse, Reject and
+    Delete.
+  - There is no reopen or revision flow yet.
+- **Wallet → Usage details** (`/home-inspection/wallet/usage`) shows Tokens by
+  category (AI Analysis, Storage, Processing, Other infrastructure) and by
+  inspection. See docs/token_billing.md.
+- **Profile → Storage & Backup** (`/home-inspection/profile/backup`) controls
+  Google Drive backup. See docs/drive_backup.md.

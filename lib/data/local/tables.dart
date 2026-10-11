@@ -334,8 +334,8 @@ class UserProfileRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// A local, non-authoritative display cache of the last-known Credits
-/// wallet balance (added in schema v9) — purely so the Wallet/Home UI
+/// A local, non-authoritative display cache of the last-known wallet
+/// balance (added in schema v9; Tokens since v18) — purely so the Wallet/Home UI
 /// has something to show instantly and offline. The backend ledger
 /// (`users/{uid}/walletTransactions`) is always the source of truth;
 /// this cache is refreshed opportunistically whenever a commercial
@@ -344,8 +344,16 @@ class UserProfileRows extends Table {
 /// `'local'` — see `WalletCache`.
 class WalletCacheRows extends Table {
   TextColumn get id => text()();
+
+  /// Legacy (pre-Token) cached balance, in Credits. Never read for
+  /// display once [balanceTokens] is set; kept so an old row stays valid.
   IntColumn get balanceCredits => integer()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  /// The cached ProDefact Token balance (added in schema v18). Null for a
+  /// row cached before Tokens — such a row is treated as no cache, so an
+  /// old Credits figure is never shown as Tokens.
+  IntColumn get balanceTokens => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -383,4 +391,44 @@ class CustomDefectRows extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Google Drive backup state of one evidence photo (added in schema
+/// v18) — the persistent backup queue. One row per photo, keyed by its
+/// evidence id, so a photo can never be queued (or uploaded) twice, and
+/// the queue survives app restarts. See `DriveBackupCoordinator` and
+/// docs/drive_backup.md. Holds no OAuth tokens or secrets.
+class DriveBackupRows extends Table {
+  TextColumn get evidenceId => text()();
+  TextColumn get sessionId => text()();
+  TextColumn get findingId => text()();
+
+  /// `notStarted` / `queued` / `uploading` / `verified` / `failed` — see
+  /// `DriveBackupStatus`.
+  TextColumn get status => text().withDefault(const Constant('queued'))();
+  TextColumn get driveFileId => text().nullable()();
+  TextColumn get driveFolderId => text().nullable()();
+  DateTimeColumn get backedUpAt => dateTime().nullable()();
+  TextColumn get lastError => text().nullable()();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+
+  /// Not retried before this time (exponential backoff after a failure).
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {evidenceId};
+}
+
+/// Small on-device app settings as key/value text (added in schema v18)
+/// — e.g. the Drive Auto Backup toggle and the connected account's email
+/// for display. Never secrets: Google OAuth tokens stay with the platform
+/// sign-in SDK.
+class AppSettingRows extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
 }

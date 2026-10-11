@@ -6,7 +6,7 @@ import '../entities/commercial_mode.dart';
 /// backend reason string can never silently fall through as
 /// unexplained. See docs/commercial_model.md.
 enum EstimateIneligibleReason {
-  insufficientCredits,
+  insufficientTokens,
   housePassAllowanceReached,
   housePassNotActive,
 
@@ -17,27 +17,27 @@ enum EstimateIneligibleReason {
 }
 
 /// The result of `estimateFindingAnalysis` — a price check only. Never
-/// implies AI ran or anything was reserved. `estimatedCredits`/
-/// `maximumCredits` are a ceiling ("Up to N Credits"), never a false-
+/// implies AI ran or anything was reserved. `estimatedTokens`/
+/// `maximumTokens` are a ceiling ("Up to N Tokens"), never a false-
 /// precise exact number, since the real cost is unknowable before the
 /// request runs. See docs/commercial_model.md ("The estimate ->
 /// approval -> reservation -> settlement protocol").
 class AnalysisEstimate {
   const AnalysisEstimate({
     required this.aiLevel,
-    required this.estimatedCredits,
-    required this.maximumCredits,
+    required this.estimatedTokens,
+    required this.maximumTokens,
     required this.currentBalance,
     required this.paymentMode,
     required this.includedInHousePass,
-    required this.surchargeCredits,
+    required this.surchargeTokens,
     required this.eligible,
     this.reason,
   });
 
   final AiLevel aiLevel;
-  final int estimatedCredits;
-  final int maximumCredits;
+  final int estimatedTokens;
+  final int maximumTokens;
   final int currentBalance;
 
   /// The commercial mode this estimate was actually priced under — may
@@ -46,7 +46,7 @@ class AnalysisEstimate {
   /// this one analysis; never re-derived client-side).
   final CommercialMode paymentMode;
   final bool includedInHousePass;
-  final int surchargeCredits;
+  final int surchargeTokens;
   final bool eligible;
   final EstimateIneligibleReason? reason;
 }

@@ -26,9 +26,9 @@ import '../support/test_repository.dart';
 /// active, unresolved work.
 
 /// A fake backend that can fail chosen findings, hold one open, and
-/// counts every analysis (and Credits charged).
+/// counts every analysis (and Tokens charged).
 class _Backend extends FakeBillingService {
-  _Backend() : super(initialBalanceCredits: 100000);
+  _Backend() : super(initialBalanceTokens: 1000000000);
 
   final Set<String> failFindingIds = {};
   final Map<String, Completer<void>> holds = {};

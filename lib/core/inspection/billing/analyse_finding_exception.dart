@@ -9,7 +9,7 @@
 /// separately charged analysis. See `AiAnalysisAttempt`.
 ///
 /// [outcomeUnknown] is false for a rejection the backend itself returned
-/// (insufficient Credits, permission, a provider failure it already
+/// (insufficient Tokens, permission, a provider failure it already
 /// refunded, or a replay of an attempt it recorded as failed). The key
 /// can then be discarded, and a later inspector Retry safely mints a
 /// fresh one.

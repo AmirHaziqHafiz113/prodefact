@@ -56,7 +56,7 @@ class ScriptedBillingService implements BillingService {
     : _steps = Queue.of(steps);
 
   final FakeBillingService _inner = FakeBillingService(
-    initialBalanceCredits: 100000,
+    initialBalanceTokens: 1000000000,
   );
   final Queue<ScriptedAnalysisStep> _steps;
   final Map<String, AnalyseFindingResult> _jobs = {};

@@ -539,17 +539,17 @@ void main() {
         'and a later save overwrites rather than accumulating rows', () async {
       final now = DateTime.now();
       await repository.saveWalletCache(
-        WalletCache(balanceCredits: 500, updatedAt: now),
+        WalletCache(balanceTokens: 500, updatedAt: now),
       );
       final first = await repository.loadWalletCache();
-      expect(first!.balanceCredits, 500);
+      expect(first!.balanceTokens, 500);
 
       final later = now.add(const Duration(minutes: 5));
       await repository.saveWalletCache(
-        WalletCache(balanceCredits: 320, updatedAt: later),
+        WalletCache(balanceTokens: 320, updatedAt: later),
       );
       final second = await repository.loadWalletCache();
-      expect(second!.balanceCredits, 320);
+      expect(second!.balanceTokens, 320);
       // Drift's DateTimeColumn stores whole seconds — compare with
       // second precision rather than the microsecond-precise input.
       expect(

@@ -12,16 +12,16 @@ import '../support/test_repository.dart';
 
 /// A zero-balance, Flex-only finding must never block physical
 /// inspection: it's still saved, and since analysis is automatic the
-/// card says it's waiting for Credits (with Top Up) —
+/// card says it's waiting for Tokens (with Top Up) —
 /// see docs/commercial_model.md ("Physical inspection is never blocked
 /// by commercial state").
 void main() {
-  testWidgets('a saved finding on a zero-balance Flex Credits inspection: '
+  testWidgets('a saved finding on a zero-balance Pay as you go inspection: '
       'its automatic analysis cannot run, so the card shows "AI: Waiting '
-      'for Credits" with Top Up (and Retry), never a bare failure', (
+      'for Tokens" with Top Up (and Retry), never a bare failure', (
     tester,
   ) async {
-    final billing = FakeBillingService(initialBalanceCredits: 0);
+    final billing = FakeBillingService(initialBalanceTokens: 0);
     final container = ProviderContainer(
       overrides: testOverrides(billingService: billing),
     );
@@ -55,16 +55,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('AI: Waiting for Credits'), findsOneWidget);
+    expect(find.text('AI: Waiting for Tokens'), findsOneWidget);
     expect(find.text('Top Up'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('AI analysis failed'), findsNothing);
   });
 
-  testWidgets('a zero Credit balance never blocks a House Pass inspection: '
+  testWidgets('a zero Token balance never blocks a House Pass inspection: '
       'the finding is analysed under the pass and never shows the '
-      'zero-Credits card', (tester) async {
-    final billing = FakeBillingService(initialBalanceCredits: 0);
+      'zero-Tokens card', (tester) async {
+    final billing = FakeBillingService(initialBalanceTokens: 0);
     final container = ProviderContainer(
       overrides: testOverrides(billingService: billing),
     );
@@ -101,7 +101,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('AI: Waiting for Credits'), findsNothing);
+    expect(find.text('AI: Waiting for Tokens'), findsNothing);
     expect(
       container.read(activeSessionProvider)!.findings.single.aiStatus,
       AiFindingStatus.completed,

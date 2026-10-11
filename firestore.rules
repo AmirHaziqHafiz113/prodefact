@@ -63,6 +63,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // The Token cost audit trail (one record per charged operation —
+      // see functions/src/billing/usage_cost.ts). Server-written only.
+      match /usageRecords/{usageId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
       match /housePasses/{passId} {
         allow read: if isOwner();
         allow write: if false;

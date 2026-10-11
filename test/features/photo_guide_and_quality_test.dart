@@ -388,7 +388,7 @@ void main() {
 
 /// The AI answers with a usable-but-blurry photo assessment.
 class _UnclearPhotoBilling extends FakeBillingService {
-  _UnclearPhotoBilling() : super(initialBalanceCredits: 10000);
+  _UnclearPhotoBilling() : super(initialBalanceTokens: 100000000);
 
   @override
   Future<AnalyseFindingResult> analyseFinding({
@@ -404,7 +404,7 @@ class _UnclearPhotoBilling extends FakeBillingService {
     final c = r.classification;
     return AnalyseFindingResult(
       aiLevel: r.aiLevel,
-      creditsCharged: r.creditsCharged,
+      tokensCharged: r.tokensCharged,
       newBalance: r.newBalance,
       paymentMode: r.paymentMode,
       classification: AiFindingClassification(

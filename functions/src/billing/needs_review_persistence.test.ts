@@ -18,7 +18,7 @@ import {AiLevel} from "./types";
 const UID = "uid_1";
 
 /**
- * @return {Firestore} a fake Firestore with one owned finding and Credits.
+ * @return {Firestore} a fake Firestore with one owned finding and Tokens.
  */
 function seeded(): Firestore {
   const {db} = fakeFirestore({
@@ -26,7 +26,7 @@ function seeded(): Firestore {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: 1000,
+      balanceTokens: 10_000_000,
       updatedAt: 0,
     },
   });
@@ -81,7 +81,7 @@ for (const level of ["fast", "smart", "expert"] as AiLevel[]) {
     const replay = await call(firestore, level, `key_${level}`);
     assert.deepEqual(replay.classification, first.classification);
     assert.equal(provider.calls, 1, "a replay never calls the provider");
-    assert.equal(replay.creditsCharged, first.creditsCharged);
+    assert.equal(replay.tokensCharged, first.tokensCharged);
   });
 
   test(`35. ${level}: unreadable model output still finishes as ` +

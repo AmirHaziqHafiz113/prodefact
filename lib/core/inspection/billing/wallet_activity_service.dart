@@ -1,3 +1,4 @@
+import 'usage_record.dart';
 import 'wallet_transaction.dart';
 
 /// Read-only access to the wallet's real balance and ledger history —
@@ -18,5 +19,13 @@ abstract class WalletActivityService {
   Future<List<WalletTransactionSummary>> loadRecentTransactions(
     String uid, {
     int limit = 30,
+  });
+
+  /// Most-recent-first Token cost records (one per charged operation —
+  /// `users/{uid}/usageRecords`), for "usage by inspection" and the
+  /// category breakdown. Empty where no backend exists.
+  Future<List<UsageRecordSummary>> loadUsageRecords(
+    String uid, {
+    int limit = 100,
   });
 }

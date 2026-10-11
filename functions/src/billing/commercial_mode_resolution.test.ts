@@ -16,7 +16,7 @@ import {getWalletBalance} from "./wallet";
  */
 
 const UID = "uid_1";
-const START_BALANCE = 1000;
+const START_BALANCE = 10_000_000;
 
 /**
  * @param {object} options what to seed.
@@ -33,7 +33,7 @@ function seeded(options: {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: START_BALANCE,
+      balanceTokens: START_BALANCE,
       updatedAt: 0,
     },
   };
@@ -111,7 +111,7 @@ test("an active House Pass is used automatically even though the " +
     apiKeys: {openai: "test-key"},
   });
   assert.equal(result.paymentMode, "housePass");
-  assert.equal(result.creditsCharged, 0);
+  assert.equal(result.tokensCharged, 0);
   assert.equal(await getWalletBalance(firestore, UID), START_BALANCE);
   assert.equal(
     store.get(`users/${UID}/housePasses/hp_1`)?.allowanceUsed,
@@ -119,7 +119,7 @@ test("an active House Pass is used automatically even though the " +
   );
 });
 
-test("with no House Pass, Flex Credits are used even if the client " +
+test("with no House Pass, pay-as-you-go Tokens are used even if the client " +
   "wrote commercialMode: housePass on the inspection", async (t) => {
   stubProvider(t);
   const {firestore} = seeded({inspectionField: "housePass"});
@@ -142,15 +142,15 @@ test("with no House Pass, Flex Credits are used even if the client " +
     apiKeys: {openai: "test-key"},
   });
   assert.equal(result.paymentMode, "flexCredits");
-  assert.ok(result.creditsCharged > 0);
+  assert.ok(result.tokensCharged > 0);
   assert.equal(
     await getWalletBalance(firestore, UID),
-    START_BALANCE - result.creditsCharged
+    START_BALANCE - result.tokensCharged
   );
 });
 
 test("a House Pass whose allowance is used up falls back to Flex " +
-  "Credits automatically, and says why", async () => {
+  "Tokens automatically, and says why", async () => {
   const {firestore} = seeded({passStatus: "allowanceReached"});
 
   const estimate = await handleEstimateFindingAnalysis({

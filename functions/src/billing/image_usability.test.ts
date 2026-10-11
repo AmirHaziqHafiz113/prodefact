@@ -27,7 +27,7 @@ const input = {
 
 /**
  * @return {{db: Firestore, store: Map<string, Record<string, unknown>>}}
- *   a fake Firestore with one owned finding and Credits.
+ *   a fake Firestore with one owned finding and Tokens.
  */
 function seeded() {
   const {db, store} = fakeFirestore({
@@ -35,7 +35,7 @@ function seeded() {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: 1000,
+      balanceTokens: 10_000_000,
       updatedAt: 0,
     },
   });
@@ -170,7 +170,7 @@ async (t) => {
   assert.equal(r.classification.imageUsable, false);
   assert.deepEqual(r.classification.qualityIssues, ["blur", "unclear"]);
   assert.equal(r.classification.isRelevantInspectionImage, true);
-  assert.ok(r.creditsCharged > 0, "an answered request is charged");
+  assert.ok(r.tokensCharged > 0, "an answered request is charged");
 
   const job = store.get(`users/${UID}/aiJobs/key_poor`)!;
   const classification = job.classification as Record<string, unknown>;

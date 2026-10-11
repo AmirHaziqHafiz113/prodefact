@@ -14,7 +14,7 @@ import '../support/test_repository.dart';
 /// "Queued for AI", a failed job shown as queued, or a deleted finding.
 
 class _Backend extends FakeBillingService {
-  _Backend() : super(initialBalanceCredits: 100000);
+  _Backend() : super(initialBalanceTokens: 1000000000);
 
   final Set<String> fail = {};
 

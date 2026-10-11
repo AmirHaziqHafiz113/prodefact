@@ -5,8 +5,8 @@ import {
   loadPricingConfigWithSource,
   PricingConfig,
 } from "./pricing_config";
-import {estimateMaxCredits, housePassSurchargeCredits} from "./pricing";
-import {getWalletBalance} from "./wallet";
+import {estimateMaxTokens, housePassSurchargeTokens} from "./pricing";
+import {getWalletBalance, migrateLegacyWallet} from "./wallet";
 import {findHousePassForInspection, hasRemainingAllowance} from "./house_pass";
 import {AiLevel, EstimateResult, isAiLevel} from "./types";
 
@@ -74,7 +74,7 @@ export async function isOwnedFinding(
 /**
  * The full estimate computation, shared by the `estimateFindingAnalysis`
  * callable and `analyseFinding` (which re-derives the same eligibility
- * decision immediately before reserving/spending real Credits — see
+ * decision immediately before reserving/spending real Tokens — see
  * docs/commercial_model.md, "Reservation before AI"). Assumes ownership
  * has already been verified by the caller.
  * @param {Firestore} firestore the Admin Firestore client.
@@ -95,17 +95,21 @@ export async function computeEstimate(
 ): Promise<EstimateResult> {
   const config = options.config ?? await loadPricingConfig(firestore);
   const onStage = options.onStage ?? (() => undefined);
+  // A legacy Credits wallet is converted (same RM value) before any
+  // Token pricing reads it.
+  await migrateLegacyWallet(firestore, uid, config.legacyCreditsPerMyr);
   const balance = await getWalletBalance(firestore, uid);
   onStage("wallet_balance_read");
-  const maximumCredits = estimateMaxCredits(req.aiLevel, config);
+  const maximumTokens = estimateMaxTokens(req.aiLevel, config);
 
   // Billing mode is decided here, never by the client (QA #23): the
   // inspection's House Pass record exists only once the backend has
   // confirmed payment, so an active pass means House Pass; anything
-  // else means Flex Credits. The inspection document's client-written
+  // else means pay-as-you-go Tokens. The inspection document's
+  // client-written
   // `commercialMode` field is deliberately ignored — it was never
   // synced reliably, which left paid House Pass inspections billed as
-  // Flex Credits.
+  // pay-as-you-go Tokens.
   const pass = await findHousePassForInspection(
     firestore,
     uid,
@@ -113,25 +117,25 @@ export async function computeEstimate(
   );
   onStage("house_pass_lookup", {passStatus: pass?.status ?? "none"});
   if (!pass || pass.status !== "active") {
-    const eligible = balance >= maximumCredits;
+    const eligible = balance >= maximumTokens;
     return {
       aiLevel: req.aiLevel,
-      estimatedCredits: maximumCredits,
-      maximumCredits,
+      estimatedTokens: maximumTokens,
+      maximumTokens,
       currentBalance: balance,
       paymentMode: "flexCredits",
       includedInHousePass: false,
-      surchargeCredits: 0,
+      surchargeTokens: 0,
       eligible,
       // A used-up pass is worth telling the inspector about even when
-      // Flex Credits cover this analysis; a missing pass is not.
+      // pay-as-you-go Tokens cover this analysis; a missing pass is not.
       reason: !eligible ?
-        "insufficientCredits" :
+        "insufficientTokens" :
         (pass ? "housePassAllowanceReached" : undefined),
     };
   }
 
-  const surcharge = housePassSurchargeCredits(
+  const surcharge = housePassSurchargeTokens(
     req.aiLevel,
     pass.includedAiLevel,
     config
@@ -141,16 +145,16 @@ export async function computeEstimate(
 
   return {
     aiLevel: req.aiLevel,
-    estimatedCredits: surcharge,
-    maximumCredits: surcharge,
+    estimatedTokens: surcharge,
+    maximumTokens: surcharge,
     currentBalance: balance,
     paymentMode: "housePass",
     includedInHousePass: surcharge === 0,
-    surchargeCredits: surcharge,
+    surchargeTokens: surcharge,
     eligible,
     reason: !withinAllowance ?
       "housePassAllowanceReached" :
-      (!eligible ? "insufficientCredits" : undefined),
+      (!eligible ? "insufficientTokens" : undefined),
   };
 }
 
@@ -224,8 +228,8 @@ export async function handleEstimateFindingAnalysis(params: {
       onStage: (name, detail) => log(name, detail),
     });
     log("estimate_ready", {
-      estimatedCredits: result.estimatedCredits,
-      maximumCredits: result.maximumCredits,
+      estimatedTokens: result.estimatedTokens,
+      maximumTokens: result.maximumTokens,
       paymentMode: result.paymentMode,
       eligible: result.eligible,
     });

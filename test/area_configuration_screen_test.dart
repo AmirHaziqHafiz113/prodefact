@@ -32,7 +32,7 @@ Future<void> _startHighRiseSetup(WidgetTester tester) async {
 /// From the area configuration screen straight to Review Setup, to
 /// "Start Inspection" — the only place a draft actually becomes a
 /// persisted inspection (see `ReviewSetupScreen`). Setup no longer asks
-/// Flex Credits vs. House Pass or an AI level (see the QA/QC
+/// Pay as you go vs. House Pass or an AI level (see the QA/QC
 /// simplification pass), so a single "Continue" reaches Review Setup.
 Future<void> _reviewAndStart(WidgetTester tester) async {
   await tester.tap(find.text('Continue'));

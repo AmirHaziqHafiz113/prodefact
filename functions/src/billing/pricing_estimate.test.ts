@@ -13,6 +13,7 @@ import {
 import {
   handleEstimateFindingAnalysis,
 } from "./handle_estimate_finding_analysis";
+import {estimateMaxTokens} from "./pricing";
 
 /**
  * The "Could not check pricing" fix (2026-10-01). Production logs showed
@@ -30,7 +31,7 @@ const UID = "uid_1";
 function seeded(extra: Record<string, Record<string, unknown>> = {}) {
   const {db} = fakeFirestore({
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
-    [`users/${UID}/wallet/main`]: {userId: UID, balanceCredits: 500,
+    [`users/${UID}/wallet/main`]: {userId: UID, balanceTokens: 5_000_000,
       updatedAt: 0},
     ...extra,
   });
@@ -51,13 +52,14 @@ test("1 + 10. a synced finding gets an estimate with the full response " +
     firestore: seeded(),
   });
   assert.deepEqual(Object.keys(result).sort(), [
-    "aiLevel", "currentBalance", "eligible", "estimatedCredits",
-    "includedInHousePass", "maximumCredits", "paymentMode", "reason",
-    "surchargeCredits",
+    "aiLevel", "currentBalance", "eligible", "estimatedTokens",
+    "includedInHousePass", "maximumTokens", "paymentMode", "reason",
+    "surchargeTokens",
   ]);
   assert.equal(result.aiLevel, "smart");
-  assert.equal(result.maximumCredits, 2);
-  assert.equal(result.currentBalance, 500);
+  assert.equal(result.maximumTokens,
+    estimateMaxTokens("smart", DEFAULT_PRICING_CONFIG));
+  assert.equal(result.currentBalance, 5_000_000);
   assert.equal(result.paymentMode, "flexCredits");
   assert.equal(result.eligible, true);
 });
@@ -132,7 +134,7 @@ test("7. a valid persisted config applies its commercial overrides and, " +
   });
   assert.equal(resolved.source, "firestore");
   assert.equal(resolved.config.version, 7);
-  assert.equal(resolved.config.creditsPerMyr, 120);
+  assert.equal(resolved.config.legacyCreditsPerMyr, 120);
   assert.equal(resolved.config.markupMultiplier, 2.5);
   assert.equal(resolved.config.aiLevels.smart.estimatedOutputTokens, 400);
   assert.equal(resolved.config.housePass.priceMyr, 35);
@@ -190,7 +192,8 @@ test("4-6. a malformed document never causes undefined access: missing " +
     assert.ok(Number.isFinite(c.providerCostPerKInputTokensUsd), level);
     assert.ok(Number.isFinite(c.providerCostPerKOutputTokensUsd), level);
   }
-  assert.equal(config.creditsPerMyr, DEFAULT_PRICING_CONFIG.creditsPerMyr);
+  assert.equal(config.legacyCreditsPerMyr,
+    DEFAULT_PRICING_CONFIG.legacyCreditsPerMyr);
   assert.equal(config.housePass.priceMyr,
     DEFAULT_PRICING_CONFIG.housePass.priceMyr);
   assert.deepEqual(resolvePricingConfig("nonsense").config,
@@ -207,7 +210,8 @@ test("a malformed persisted config still produces a valid estimate",
       data: request,
       firestore,
     });
-    assert.equal(result.maximumCredits, 2);
+    assert.equal(result.maximumTokens,
+      estimateMaxTokens("smart", DEFAULT_PRICING_CONFIG));
   });
 
 test("12. App Check is not enforced on estimateFindingAnalysis (unchanged)",

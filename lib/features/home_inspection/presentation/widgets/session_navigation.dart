@@ -10,12 +10,13 @@ import '../../providers/active_session_providers.dart';
 import '../screens/ai_review_overview_screen.dart';
 import '../screens/area_inspection_screen.dart';
 import '../screens/inspection_overview_screen.dart';
+import '../screens/past_inspection_screens.dart';
 import '../screens/report_screen.dart';
 
 /// Resumes [sessionId] as the active session, then pushes [location].
 /// Shared by every "open this inspection's X" action so each screen
 /// doesn't re-implement the resume-then-navigate sequence.
-Future<bool> _resumeThenPush(
+Future<bool> resumeAndPush(
   BuildContext context,
   WidgetRef ref,
   String sessionId,
@@ -37,32 +38,48 @@ Future<bool> _resumeThenPush(
   return true;
 }
 
-/// Opens [sessionId]'s Inspection Overview — what tapping an inspection
-/// card does everywhere.
+/// Opens [sessionId]: its Inspection Overview, or — for a completed
+/// (reported) inspection — its read-only Past Inspection Detail. What
+/// tapping an inspection card does everywhere.
 Future<void> resumeAndOpenInspection(
   BuildContext context,
   WidgetRef ref,
   String sessionId,
-) => _resumeThenPush(
-  context,
-  ref,
-  sessionId,
-  InspectionOverviewScreen.routePath,
-);
+) async {
+  final resumed = await ref
+      .read(activeSessionProvider.notifier)
+      .resume(sessionId);
+  if (!context.mounted) return;
+  if (!resumed) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not open that inspection. Please try again.'),
+      ),
+    );
+    return;
+  }
+  final completed =
+      ref.read(activeSessionProvider)?.status == InspectionStatus.reported;
+  context.push(
+    completed
+        ? pastInspectionLocation(sessionId)
+        : InspectionOverviewScreen.routePath,
+  );
+}
 
 /// Opens [sessionId]'s AI Review (its findings that need a decision).
 Future<void> resumeAndOpenReview(
   BuildContext context,
   WidgetRef ref,
   String sessionId,
-) => _resumeThenPush(context, ref, sessionId, AiReviewOverviewScreen.routePath);
+) => resumeAndPush(context, ref, sessionId, AiReviewOverviewScreen.routePath);
 
 /// Opens [sessionId]'s Report screen (the existing report flow).
 Future<void> resumeAndOpenReport(
   BuildContext context,
   WidgetRef ref,
   String sessionId,
-) => _resumeThenPush(context, ref, sessionId, ReportScreen.routePath);
+) => resumeAndPush(context, ref, sessionId, ReportScreen.routePath);
 
 /// The Area Findings location for [sectionId]; [capture] opens the
 /// camera as soon as the screen appears (the "+" quick-capture path).

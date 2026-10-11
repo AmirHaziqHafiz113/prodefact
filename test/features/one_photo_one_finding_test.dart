@@ -19,7 +19,7 @@ import '../support/test_repository.dart';
 
 /// Records every AI request, so each finding's job can be checked.
 class _RecordingBilling extends FakeBillingService {
-  _RecordingBilling() : super(initialBalanceCredits: 5000);
+  _RecordingBilling() : super(initialBalanceTokens: 50000000);
 
   final List<AiFindingClassificationRequest> requests = [];
 

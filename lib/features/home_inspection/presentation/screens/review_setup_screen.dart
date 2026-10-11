@@ -257,7 +257,7 @@ class _StartInspectionButtonState
     }
     // A new inspection first shows the photo guide (once — never on
     // resume, never per photo); its "Start Inspection" continues into
-    // the queue. Setup no longer asks Flex Credits vs. House Pass (see
+    // the queue. Setup no longer asks Pay as you go vs. House Pass (see
     // the QA/QC simplification pass): that stays available later, from
     // the queue's own "House Pass" action.
     context.push(PhotoGuideScreen.startRoutePath);

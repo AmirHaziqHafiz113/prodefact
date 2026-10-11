@@ -146,7 +146,8 @@ class _AreasScreenState extends ConsumerState<AreasScreen> {
                           context.push(areaFindingsLocation(section.id)),
                     ),
                   ),
-                if (session != null) ...[
+                if (session != null &&
+                    !ref.watch(inspectionReadOnlyProvider)) ...[
                   const SizedBox(height: AppSpacing.sm),
                   OutlinedButton.icon(
                     onPressed: () => _addDiscoveredArea(session),

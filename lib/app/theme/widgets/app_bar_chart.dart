@@ -4,7 +4,7 @@ import '../app_colors.dart';
 import '../app_metrics.dart';
 
 /// One real-data point in an [AppBarChart] — e.g. one day's/week's
-/// Credits usage, or one area's finding count. Never a fabricated or
+/// Tokens usage, or one area's finding count. Never a fabricated or
 /// interpolated value.
 class AppBarChartPoint {
   const AppBarChartPoint({required this.label, required this.value});

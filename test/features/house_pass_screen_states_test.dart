@@ -81,7 +81,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
   });
 
-  testWidgets('allowance reached: explains Flex Credits fallback with one '
+  testWidgets('allowance reached: explains Pay as you go fallback with one '
       'Continue action', (tester) async {
     await _pump(
       tester,
@@ -97,7 +97,7 @@ void main() {
 
     expect(find.text('Allowance Reached'), findsOneWidget);
     expect(
-      find.widgetWithText(FilledButton, 'Continue with AI Credits'),
+      find.widgetWithText(FilledButton, 'Continue with Tokens'),
       findsOneWidget,
     );
   });

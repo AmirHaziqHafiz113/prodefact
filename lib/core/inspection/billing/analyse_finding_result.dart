@@ -9,7 +9,7 @@ import '../entities/commercial_mode.dart';
 class AnalyseFindingResult {
   const AnalyseFindingResult({
     required this.aiLevel,
-    required this.creditsCharged,
+    required this.tokensCharged,
     required this.newBalance,
     required this.paymentMode,
     required this.classification,
@@ -17,9 +17,9 @@ class AnalyseFindingResult {
 
   final AiLevel aiLevel;
 
-  /// The real Credits charged for this analysis — 0 for a finding fully
+  /// The real Tokens charged for this analysis — 0 for a finding fully
   /// within an active House Pass's included tier.
-  final int creditsCharged;
+  final int tokensCharged;
   final int newBalance;
   final CommercialMode paymentMode;
   final AiFindingClassification classification;

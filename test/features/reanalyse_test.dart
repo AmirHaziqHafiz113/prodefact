@@ -20,7 +20,7 @@ enum _Mode { confident, uncertain, fail }
 /// A backend whose next answers can be scripted, recording every
 /// request (and its key) it actually processes.
 class _Backend extends FakeBillingService {
-  _Backend() : super(initialBalanceCredits: 100000);
+  _Backend() : super(initialBalanceTokens: 1000000000);
 
   _Mode mode = _Mode.confident;
   final List<AiFindingClassificationRequest> requests = [];
@@ -44,7 +44,7 @@ class _Backend extends FakeBillingService {
     final c = r.classification;
     return AnalyseFindingResult(
       aiLevel: r.aiLevel,
-      creditsCharged: r.creditsCharged,
+      tokensCharged: r.tokensCharged,
       newBalance: r.newBalance,
       paymentMode: r.paymentMode,
       classification: AiFindingClassification(

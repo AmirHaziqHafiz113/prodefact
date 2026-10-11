@@ -188,7 +188,7 @@ void main() {
 
       expect(find.byTooltip('House Pass'), findsNothing);
       expect(find.textContaining('purchase required'), findsNothing);
-      expect(find.textContaining('Flex Credits'), findsNothing);
+      expect(find.textContaining('Pay as you go'), findsNothing);
       expect(find.textContaining('House Pass'), findsNothing);
     });
 

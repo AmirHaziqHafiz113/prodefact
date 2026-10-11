@@ -82,6 +82,9 @@ export interface ResolvedImage {
   /** Always a normalized, re-encoded format — see `ai/evidence.ts`. */
   mimeType: "image/jpeg";
   base64: string;
+  /** Bytes downloaded from Storage for this image — billing metadata
+   * for the Token cost model; never sent to the provider. */
+  sourceBytes?: number;
 }
 
 /** The (possibly empty) set of successfully resolved images for one
@@ -148,7 +151,7 @@ export interface ClassificationResult {
 
 /**
  * A provider's own reported token usage for one request — internal
- * only, used solely to compute the customer's Credits charge (see
+ * only, used solely to compute the customer's Token charge (see
  * `billing/pricing.ts`). Never forwarded to Flutter, never logged in
  * full; see `docs/commercial_model.md` ("Actual usage settlement").
  */

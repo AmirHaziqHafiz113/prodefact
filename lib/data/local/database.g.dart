@@ -6682,8 +6682,24 @@ class $WalletCacheRowsTable extends WalletCacheRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _balanceTokensMeta = const VerificationMeta(
+    'balanceTokens',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, balanceCredits, updatedAt];
+  late final GeneratedColumn<int> balanceTokens = GeneratedColumn<int>(
+    'balance_tokens',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    balanceCredits,
+    updatedAt,
+    balanceTokens,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -6720,6 +6736,15 @@ class $WalletCacheRowsTable extends WalletCacheRows
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('balance_tokens')) {
+      context.handle(
+        _balanceTokensMeta,
+        balanceTokens.isAcceptableOrUnknown(
+          data['balance_tokens']!,
+          _balanceTokensMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6741,6 +6766,10 @@ class $WalletCacheRowsTable extends WalletCacheRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      balanceTokens: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_tokens'],
+      ),
     );
   }
 
@@ -6752,12 +6781,21 @@ class $WalletCacheRowsTable extends WalletCacheRows
 
 class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
   final String id;
+
+  /// Legacy (pre-Token) cached balance, in Credits. Never read for
+  /// display once [balanceTokens] is set; kept so an old row stays valid.
   final int balanceCredits;
   final DateTime updatedAt;
+
+  /// The cached ProDefact Token balance (added in schema v18). Null for a
+  /// row cached before Tokens — such a row is treated as no cache, so an
+  /// old Credits figure is never shown as Tokens.
+  final int? balanceTokens;
   const WalletCacheRow({
     required this.id,
     required this.balanceCredits,
     required this.updatedAt,
+    this.balanceTokens,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6765,6 +6803,9 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
     map['id'] = Variable<String>(id);
     map['balance_credits'] = Variable<int>(balanceCredits);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || balanceTokens != null) {
+      map['balance_tokens'] = Variable<int>(balanceTokens);
+    }
     return map;
   }
 
@@ -6773,6 +6814,9 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
       id: Value(id),
       balanceCredits: Value(balanceCredits),
       updatedAt: Value(updatedAt),
+      balanceTokens: balanceTokens == null && nullToAbsent
+          ? const Value.absent()
+          : Value(balanceTokens),
     );
   }
 
@@ -6785,6 +6829,7 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
       id: serializer.fromJson<String>(json['id']),
       balanceCredits: serializer.fromJson<int>(json['balanceCredits']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      balanceTokens: serializer.fromJson<int?>(json['balanceTokens']),
     );
   }
   @override
@@ -6794,6 +6839,7 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
       'id': serializer.toJson<String>(id),
       'balanceCredits': serializer.toJson<int>(balanceCredits),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'balanceTokens': serializer.toJson<int?>(balanceTokens),
     };
   }
 
@@ -6801,10 +6847,14 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
     String? id,
     int? balanceCredits,
     DateTime? updatedAt,
+    Value<int?> balanceTokens = const Value.absent(),
   }) => WalletCacheRow(
     id: id ?? this.id,
     balanceCredits: balanceCredits ?? this.balanceCredits,
     updatedAt: updatedAt ?? this.updatedAt,
+    balanceTokens: balanceTokens.present
+        ? balanceTokens.value
+        : this.balanceTokens,
   );
   WalletCacheRow copyWithCompanion(WalletCacheRowsCompanion data) {
     return WalletCacheRow(
@@ -6813,6 +6863,9 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
           ? data.balanceCredits.value
           : this.balanceCredits,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      balanceTokens: data.balanceTokens.present
+          ? data.balanceTokens.value
+          : this.balanceTokens,
     );
   }
 
@@ -6821,37 +6874,42 @@ class WalletCacheRow extends DataClass implements Insertable<WalletCacheRow> {
     return (StringBuffer('WalletCacheRow(')
           ..write('id: $id, ')
           ..write('balanceCredits: $balanceCredits, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('balanceTokens: $balanceTokens')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, balanceCredits, updatedAt);
+  int get hashCode => Object.hash(id, balanceCredits, updatedAt, balanceTokens);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is WalletCacheRow &&
           other.id == this.id &&
           other.balanceCredits == this.balanceCredits &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.balanceTokens == this.balanceTokens);
 }
 
 class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
   final Value<String> id;
   final Value<int> balanceCredits;
   final Value<DateTime> updatedAt;
+  final Value<int?> balanceTokens;
   final Value<int> rowid;
   const WalletCacheRowsCompanion({
     this.id = const Value.absent(),
     this.balanceCredits = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.balanceTokens = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   WalletCacheRowsCompanion.insert({
     required String id,
     required int balanceCredits,
     required DateTime updatedAt,
+    this.balanceTokens = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        balanceCredits = Value(balanceCredits),
@@ -6860,12 +6918,14 @@ class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
     Expression<String>? id,
     Expression<int>? balanceCredits,
     Expression<DateTime>? updatedAt,
+    Expression<int>? balanceTokens,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (balanceCredits != null) 'balance_credits': balanceCredits,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (balanceTokens != null) 'balance_tokens': balanceTokens,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6874,12 +6934,14 @@ class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
     Value<String>? id,
     Value<int>? balanceCredits,
     Value<DateTime>? updatedAt,
+    Value<int?>? balanceTokens,
     Value<int>? rowid,
   }) {
     return WalletCacheRowsCompanion(
       id: id ?? this.id,
       balanceCredits: balanceCredits ?? this.balanceCredits,
       updatedAt: updatedAt ?? this.updatedAt,
+      balanceTokens: balanceTokens ?? this.balanceTokens,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6896,6 +6958,9 @@ class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (balanceTokens.present) {
+      map['balance_tokens'] = Variable<int>(balanceTokens.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6908,6 +6973,7 @@ class WalletCacheRowsCompanion extends UpdateCompanion<WalletCacheRow> {
           ..write('id: $id, ')
           ..write('balanceCredits: $balanceCredits, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('balanceTokens: $balanceTokens, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8022,6 +8088,956 @@ class CustomDefectRowsCompanion extends UpdateCompanion<CustomDefectRow> {
   }
 }
 
+class $DriveBackupRowsTable extends DriveBackupRows
+    with TableInfo<$DriveBackupRowsTable, DriveBackupRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DriveBackupRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _evidenceIdMeta = const VerificationMeta(
+    'evidenceId',
+  );
+  @override
+  late final GeneratedColumn<String> evidenceId = GeneratedColumn<String>(
+    'evidence_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _findingIdMeta = const VerificationMeta(
+    'findingId',
+  );
+  @override
+  late final GeneratedColumn<String> findingId = GeneratedColumn<String>(
+    'finding_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('queued'),
+  );
+  static const VerificationMeta _driveFileIdMeta = const VerificationMeta(
+    'driveFileId',
+  );
+  @override
+  late final GeneratedColumn<String> driveFileId = GeneratedColumn<String>(
+    'drive_file_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _driveFolderIdMeta = const VerificationMeta(
+    'driveFolderId',
+  );
+  @override
+  late final GeneratedColumn<String> driveFolderId = GeneratedColumn<String>(
+    'drive_folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _backedUpAtMeta = const VerificationMeta(
+    'backedUpAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> backedUpAt = GeneratedColumn<DateTime>(
+    'backed_up_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _retryCountMeta = const VerificationMeta(
+    'retryCount',
+  );
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+    'retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    evidenceId,
+    sessionId,
+    findingId,
+    status,
+    driveFileId,
+    driveFolderId,
+    backedUpAt,
+    lastError,
+    retryCount,
+    nextAttemptAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'drive_backup_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DriveBackupRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('evidence_id')) {
+      context.handle(
+        _evidenceIdMeta,
+        evidenceId.isAcceptableOrUnknown(data['evidence_id']!, _evidenceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_evidenceIdMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('finding_id')) {
+      context.handle(
+        _findingIdMeta,
+        findingId.isAcceptableOrUnknown(data['finding_id']!, _findingIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_findingIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('drive_file_id')) {
+      context.handle(
+        _driveFileIdMeta,
+        driveFileId.isAcceptableOrUnknown(
+          data['drive_file_id']!,
+          _driveFileIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drive_folder_id')) {
+      context.handle(
+        _driveFolderIdMeta,
+        driveFolderId.isAcceptableOrUnknown(
+          data['drive_folder_id']!,
+          _driveFolderIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('backed_up_at')) {
+      context.handle(
+        _backedUpAtMeta,
+        backedUpAt.isAcceptableOrUnknown(
+          data['backed_up_at']!,
+          _backedUpAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+        _retryCountMeta,
+        retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {evidenceId};
+  @override
+  DriveBackupRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DriveBackupRow(
+      evidenceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evidence_id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      findingId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}finding_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      driveFileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_file_id'],
+      ),
+      driveFolderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drive_folder_id'],
+      ),
+      backedUpAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}backed_up_at'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      retryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retry_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DriveBackupRowsTable createAlias(String alias) {
+    return $DriveBackupRowsTable(attachedDatabase, alias);
+  }
+}
+
+class DriveBackupRow extends DataClass implements Insertable<DriveBackupRow> {
+  final String evidenceId;
+  final String sessionId;
+  final String findingId;
+
+  /// `notStarted` / `queued` / `uploading` / `verified` / `failed` — see
+  /// `DriveBackupStatus`.
+  final String status;
+  final String? driveFileId;
+  final String? driveFolderId;
+  final DateTime? backedUpAt;
+  final String? lastError;
+  final int retryCount;
+
+  /// Not retried before this time (exponential backoff after a failure).
+  final DateTime? nextAttemptAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const DriveBackupRow({
+    required this.evidenceId,
+    required this.sessionId,
+    required this.findingId,
+    required this.status,
+    this.driveFileId,
+    this.driveFolderId,
+    this.backedUpAt,
+    this.lastError,
+    required this.retryCount,
+    this.nextAttemptAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['evidence_id'] = Variable<String>(evidenceId);
+    map['session_id'] = Variable<String>(sessionId);
+    map['finding_id'] = Variable<String>(findingId);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || driveFileId != null) {
+      map['drive_file_id'] = Variable<String>(driveFileId);
+    }
+    if (!nullToAbsent || driveFolderId != null) {
+      map['drive_folder_id'] = Variable<String>(driveFolderId);
+    }
+    if (!nullToAbsent || backedUpAt != null) {
+      map['backed_up_at'] = Variable<DateTime>(backedUpAt);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DriveBackupRowsCompanion toCompanion(bool nullToAbsent) {
+    return DriveBackupRowsCompanion(
+      evidenceId: Value(evidenceId),
+      sessionId: Value(sessionId),
+      findingId: Value(findingId),
+      status: Value(status),
+      driveFileId: driveFileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveFileId),
+      driveFolderId: driveFolderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driveFolderId),
+      backedUpAt: backedUpAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(backedUpAt),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      retryCount: Value(retryCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DriveBackupRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DriveBackupRow(
+      evidenceId: serializer.fromJson<String>(json['evidenceId']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      findingId: serializer.fromJson<String>(json['findingId']),
+      status: serializer.fromJson<String>(json['status']),
+      driveFileId: serializer.fromJson<String?>(json['driveFileId']),
+      driveFolderId: serializer.fromJson<String?>(json['driveFolderId']),
+      backedUpAt: serializer.fromJson<DateTime?>(json['backedUpAt']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'evidenceId': serializer.toJson<String>(evidenceId),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'findingId': serializer.toJson<String>(findingId),
+      'status': serializer.toJson<String>(status),
+      'driveFileId': serializer.toJson<String?>(driveFileId),
+      'driveFolderId': serializer.toJson<String?>(driveFolderId),
+      'backedUpAt': serializer.toJson<DateTime?>(backedUpAt),
+      'lastError': serializer.toJson<String?>(lastError),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DriveBackupRow copyWith({
+    String? evidenceId,
+    String? sessionId,
+    String? findingId,
+    String? status,
+    Value<String?> driveFileId = const Value.absent(),
+    Value<String?> driveFolderId = const Value.absent(),
+    Value<DateTime?> backedUpAt = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+    int? retryCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => DriveBackupRow(
+    evidenceId: evidenceId ?? this.evidenceId,
+    sessionId: sessionId ?? this.sessionId,
+    findingId: findingId ?? this.findingId,
+    status: status ?? this.status,
+    driveFileId: driveFileId.present ? driveFileId.value : this.driveFileId,
+    driveFolderId: driveFolderId.present
+        ? driveFolderId.value
+        : this.driveFolderId,
+    backedUpAt: backedUpAt.present ? backedUpAt.value : this.backedUpAt,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    retryCount: retryCount ?? this.retryCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  DriveBackupRow copyWithCompanion(DriveBackupRowsCompanion data) {
+    return DriveBackupRow(
+      evidenceId: data.evidenceId.present
+          ? data.evidenceId.value
+          : this.evidenceId,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      findingId: data.findingId.present ? data.findingId.value : this.findingId,
+      status: data.status.present ? data.status.value : this.status,
+      driveFileId: data.driveFileId.present
+          ? data.driveFileId.value
+          : this.driveFileId,
+      driveFolderId: data.driveFolderId.present
+          ? data.driveFolderId.value
+          : this.driveFolderId,
+      backedUpAt: data.backedUpAt.present
+          ? data.backedUpAt.value
+          : this.backedUpAt,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      retryCount: data.retryCount.present
+          ? data.retryCount.value
+          : this.retryCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriveBackupRow(')
+          ..write('evidenceId: $evidenceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('findingId: $findingId, ')
+          ..write('status: $status, ')
+          ..write('driveFileId: $driveFileId, ')
+          ..write('driveFolderId: $driveFolderId, ')
+          ..write('backedUpAt: $backedUpAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    evidenceId,
+    sessionId,
+    findingId,
+    status,
+    driveFileId,
+    driveFolderId,
+    backedUpAt,
+    lastError,
+    retryCount,
+    nextAttemptAt,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DriveBackupRow &&
+          other.evidenceId == this.evidenceId &&
+          other.sessionId == this.sessionId &&
+          other.findingId == this.findingId &&
+          other.status == this.status &&
+          other.driveFileId == this.driveFileId &&
+          other.driveFolderId == this.driveFolderId &&
+          other.backedUpAt == this.backedUpAt &&
+          other.lastError == this.lastError &&
+          other.retryCount == this.retryCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DriveBackupRowsCompanion extends UpdateCompanion<DriveBackupRow> {
+  final Value<String> evidenceId;
+  final Value<String> sessionId;
+  final Value<String> findingId;
+  final Value<String> status;
+  final Value<String?> driveFileId;
+  final Value<String?> driveFolderId;
+  final Value<DateTime?> backedUpAt;
+  final Value<String?> lastError;
+  final Value<int> retryCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DriveBackupRowsCompanion({
+    this.evidenceId = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.findingId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.driveFileId = const Value.absent(),
+    this.driveFolderId = const Value.absent(),
+    this.backedUpAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DriveBackupRowsCompanion.insert({
+    required String evidenceId,
+    required String sessionId,
+    required String findingId,
+    this.status = const Value.absent(),
+    this.driveFileId = const Value.absent(),
+    this.driveFolderId = const Value.absent(),
+    this.backedUpAt = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : evidenceId = Value(evidenceId),
+       sessionId = Value(sessionId),
+       findingId = Value(findingId),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<DriveBackupRow> custom({
+    Expression<String>? evidenceId,
+    Expression<String>? sessionId,
+    Expression<String>? findingId,
+    Expression<String>? status,
+    Expression<String>? driveFileId,
+    Expression<String>? driveFolderId,
+    Expression<DateTime>? backedUpAt,
+    Expression<String>? lastError,
+    Expression<int>? retryCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (evidenceId != null) 'evidence_id': evidenceId,
+      if (sessionId != null) 'session_id': sessionId,
+      if (findingId != null) 'finding_id': findingId,
+      if (status != null) 'status': status,
+      if (driveFileId != null) 'drive_file_id': driveFileId,
+      if (driveFolderId != null) 'drive_folder_id': driveFolderId,
+      if (backedUpAt != null) 'backed_up_at': backedUpAt,
+      if (lastError != null) 'last_error': lastError,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DriveBackupRowsCompanion copyWith({
+    Value<String>? evidenceId,
+    Value<String>? sessionId,
+    Value<String>? findingId,
+    Value<String>? status,
+    Value<String?>? driveFileId,
+    Value<String?>? driveFolderId,
+    Value<DateTime?>? backedUpAt,
+    Value<String?>? lastError,
+    Value<int>? retryCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return DriveBackupRowsCompanion(
+      evidenceId: evidenceId ?? this.evidenceId,
+      sessionId: sessionId ?? this.sessionId,
+      findingId: findingId ?? this.findingId,
+      status: status ?? this.status,
+      driveFileId: driveFileId ?? this.driveFileId,
+      driveFolderId: driveFolderId ?? this.driveFolderId,
+      backedUpAt: backedUpAt ?? this.backedUpAt,
+      lastError: lastError ?? this.lastError,
+      retryCount: retryCount ?? this.retryCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (evidenceId.present) {
+      map['evidence_id'] = Variable<String>(evidenceId.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (findingId.present) {
+      map['finding_id'] = Variable<String>(findingId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (driveFileId.present) {
+      map['drive_file_id'] = Variable<String>(driveFileId.value);
+    }
+    if (driveFolderId.present) {
+      map['drive_folder_id'] = Variable<String>(driveFolderId.value);
+    }
+    if (backedUpAt.present) {
+      map['backed_up_at'] = Variable<DateTime>(backedUpAt.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriveBackupRowsCompanion(')
+          ..write('evidenceId: $evidenceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('findingId: $findingId, ')
+          ..write('status: $status, ')
+          ..write('driveFileId: $driveFileId, ')
+          ..write('driveFolderId: $driveFolderId, ')
+          ..write('backedUpAt: $backedUpAt, ')
+          ..write('lastError: $lastError, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppSettingRowsTable extends AppSettingRows
+    with TableInfo<$AppSettingRowsTable, AppSettingRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppSettingRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_setting_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AppSettingRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  AppSettingRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSettingRow(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $AppSettingRowsTable createAlias(String alias) {
+    return $AppSettingRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AppSettingRow extends DataClass implements Insertable<AppSettingRow> {
+  final String key;
+  final String value;
+  const AppSettingRow({required this.key, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  AppSettingRowsCompanion toCompanion(bool nullToAbsent) {
+    return AppSettingRowsCompanion(key: Value(key), value: Value(value));
+  }
+
+  factory AppSettingRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSettingRow(
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  AppSettingRow copyWith({String? key, String? value}) =>
+      AppSettingRow(key: key ?? this.key, value: value ?? this.value);
+  AppSettingRow copyWithCompanion(AppSettingRowsCompanion data) {
+    return AppSettingRow(
+      key: data.key.present ? data.key.value : this.key,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingRow(')
+          ..write('key: $key, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSettingRow &&
+          other.key == this.key &&
+          other.value == this.value);
+}
+
+class AppSettingRowsCompanion extends UpdateCompanion<AppSettingRow> {
+  final Value<String> key;
+  final Value<String> value;
+  final Value<int> rowid;
+  const AppSettingRowsCompanion({
+    this.key = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AppSettingRowsCompanion.insert({
+    required String key,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : key = Value(key),
+       value = Value(value);
+  static Insertable<AppSettingRow> custom({
+    Expression<String>? key,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AppSettingRowsCompanion copyWith({
+    Value<String>? key,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return AppSettingRowsCompanion(
+      key: key ?? this.key,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingRowsCompanion(')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8045,6 +9061,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CustomDefectRowsTable customDefectRows = $CustomDefectRowsTable(
     this,
   );
+  late final $DriveBackupRowsTable driveBackupRows = $DriveBackupRowsTable(
+    this,
+  );
+  late final $AppSettingRowsTable appSettingRows = $AppSettingRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8060,6 +9080,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     walletCacheRows,
     areaCandidateRows,
     customDefectRows,
+    driveBackupRows,
+    appSettingRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -12326,6 +13348,7 @@ typedef $$WalletCacheRowsTableCreateCompanionBuilder =
       required String id,
       required int balanceCredits,
       required DateTime updatedAt,
+      Value<int?> balanceTokens,
       Value<int> rowid,
     });
 typedef $$WalletCacheRowsTableUpdateCompanionBuilder =
@@ -12333,6 +13356,7 @@ typedef $$WalletCacheRowsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<int> balanceCredits,
       Value<DateTime> updatedAt,
+      Value<int?> balanceTokens,
       Value<int> rowid,
     });
 
@@ -12357,6 +13381,11 @@ class $$WalletCacheRowsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceTokens => $composableBuilder(
+    column: $table.balanceTokens,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -12384,6 +13413,11 @@ class $$WalletCacheRowsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get balanceTokens => $composableBuilder(
+    column: $table.balanceTokens,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$WalletCacheRowsTableAnnotationComposer
@@ -12405,6 +13439,11 @@ class $$WalletCacheRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceTokens => $composableBuilder(
+    column: $table.balanceTokens,
+    builder: (column) => column,
+  );
 }
 
 class $$WalletCacheRowsTableTableManager
@@ -12447,11 +13486,13 @@ class $$WalletCacheRowsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<int> balanceCredits = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int?> balanceTokens = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WalletCacheRowsCompanion(
                 id: id,
                 balanceCredits: balanceCredits,
                 updatedAt: updatedAt,
+                balanceTokens: balanceTokens,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -12459,11 +13500,13 @@ class $$WalletCacheRowsTableTableManager
                 required String id,
                 required int balanceCredits,
                 required DateTime updatedAt,
+                Value<int?> balanceTokens = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WalletCacheRowsCompanion.insert(
                 id: id,
                 balanceCredits: balanceCredits,
                 updatedAt: updatedAt,
+                balanceTokens: balanceTokens,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13084,6 +14127,515 @@ typedef $$CustomDefectRowsTableProcessedTableManager =
       CustomDefectRow,
       PrefetchHooks Function()
     >;
+typedef $$DriveBackupRowsTableCreateCompanionBuilder =
+    DriveBackupRowsCompanion Function({
+      required String evidenceId,
+      required String sessionId,
+      required String findingId,
+      Value<String> status,
+      Value<String?> driveFileId,
+      Value<String?> driveFolderId,
+      Value<DateTime?> backedUpAt,
+      Value<String?> lastError,
+      Value<int> retryCount,
+      Value<DateTime?> nextAttemptAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DriveBackupRowsTableUpdateCompanionBuilder =
+    DriveBackupRowsCompanion Function({
+      Value<String> evidenceId,
+      Value<String> sessionId,
+      Value<String> findingId,
+      Value<String> status,
+      Value<String?> driveFileId,
+      Value<String?> driveFolderId,
+      Value<DateTime?> backedUpAt,
+      Value<String?> lastError,
+      Value<int> retryCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$DriveBackupRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $DriveBackupRowsTable> {
+  $$DriveBackupRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get evidenceId => $composableBuilder(
+    column: $table.evidenceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get findingId => $composableBuilder(
+    column: $table.findingId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get backedUpAt => $composableBuilder(
+    column: $table.backedUpAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DriveBackupRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DriveBackupRowsTable> {
+  $$DriveBackupRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get evidenceId => $composableBuilder(
+    column: $table.evidenceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get findingId => $composableBuilder(
+    column: $table.findingId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get backedUpAt => $composableBuilder(
+    column: $table.backedUpAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DriveBackupRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DriveBackupRowsTable> {
+  $$DriveBackupRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get evidenceId => $composableBuilder(
+    column: $table.evidenceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get findingId =>
+      $composableBuilder(column: $table.findingId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get driveFileId => $composableBuilder(
+    column: $table.driveFileId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driveFolderId => $composableBuilder(
+    column: $table.driveFolderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get backedUpAt => $composableBuilder(
+    column: $table.backedUpAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DriveBackupRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DriveBackupRowsTable,
+          DriveBackupRow,
+          $$DriveBackupRowsTableFilterComposer,
+          $$DriveBackupRowsTableOrderingComposer,
+          $$DriveBackupRowsTableAnnotationComposer,
+          $$DriveBackupRowsTableCreateCompanionBuilder,
+          $$DriveBackupRowsTableUpdateCompanionBuilder,
+          (
+            DriveBackupRow,
+            BaseReferences<
+              _$AppDatabase,
+              $DriveBackupRowsTable,
+              DriveBackupRow
+            >,
+          ),
+          DriveBackupRow,
+          PrefetchHooks Function()
+        > {
+  $$DriveBackupRowsTableTableManager(
+    _$AppDatabase db,
+    $DriveBackupRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriveBackupRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriveBackupRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DriveBackupRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> evidenceId = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> findingId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveFolderId = const Value.absent(),
+                Value<DateTime?> backedUpAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DriveBackupRowsCompanion(
+                evidenceId: evidenceId,
+                sessionId: sessionId,
+                findingId: findingId,
+                status: status,
+                driveFileId: driveFileId,
+                driveFolderId: driveFolderId,
+                backedUpAt: backedUpAt,
+                lastError: lastError,
+                retryCount: retryCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String evidenceId,
+                required String sessionId,
+                required String findingId,
+                Value<String> status = const Value.absent(),
+                Value<String?> driveFileId = const Value.absent(),
+                Value<String?> driveFolderId = const Value.absent(),
+                Value<DateTime?> backedUpAt = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => DriveBackupRowsCompanion.insert(
+                evidenceId: evidenceId,
+                sessionId: sessionId,
+                findingId: findingId,
+                status: status,
+                driveFileId: driveFileId,
+                driveFolderId: driveFolderId,
+                backedUpAt: backedUpAt,
+                lastError: lastError,
+                retryCount: retryCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$DriveBackupRowsTable, DriveBackupRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $DriveBackupRowsTable,
+                    DriveBackupRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DriveBackupRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DriveBackupRowsTable,
+      DriveBackupRow,
+      $$DriveBackupRowsTableFilterComposer,
+      $$DriveBackupRowsTableOrderingComposer,
+      $$DriveBackupRowsTableAnnotationComposer,
+      $$DriveBackupRowsTableCreateCompanionBuilder,
+      $$DriveBackupRowsTableUpdateCompanionBuilder,
+      (
+        DriveBackupRow,
+        BaseReferences<_$AppDatabase, $DriveBackupRowsTable, DriveBackupRow>,
+      ),
+      DriveBackupRow,
+      PrefetchHooks Function()
+    >;
+typedef $$AppSettingRowsTableCreateCompanionBuilder =
+    AppSettingRowsCompanion Function({
+      required String key,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$AppSettingRowsTableUpdateCompanionBuilder =
+    AppSettingRowsCompanion Function({
+      Value<String> key,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+class $$AppSettingRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AppSettingRowsTable> {
+  $$AppSettingRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AppSettingRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AppSettingRowsTable> {
+  $$AppSettingRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AppSettingRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AppSettingRowsTable> {
+  $$AppSettingRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$AppSettingRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AppSettingRowsTable,
+          AppSettingRow,
+          $$AppSettingRowsTableFilterComposer,
+          $$AppSettingRowsTableOrderingComposer,
+          $$AppSettingRowsTableAnnotationComposer,
+          $$AppSettingRowsTableCreateCompanionBuilder,
+          $$AppSettingRowsTableUpdateCompanionBuilder,
+          (
+            AppSettingRow,
+            BaseReferences<_$AppDatabase, $AppSettingRowsTable, AppSettingRow>,
+          ),
+          AppSettingRow,
+          PrefetchHooks Function()
+        > {
+  $$AppSettingRowsTableTableManager(
+    _$AppDatabase db,
+    $AppSettingRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppSettingRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppSettingRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppSettingRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> key = const Value.absent(),
+            Value<String> value = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => AppSettingRowsCompanion(key: key, value: value, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => AppSettingRowsCompanion.insert(
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AppSettingRowsTable, AppSettingRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AppSettingRowsTable,
+                    AppSettingRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AppSettingRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AppSettingRowsTable,
+      AppSettingRow,
+      $$AppSettingRowsTableFilterComposer,
+      $$AppSettingRowsTableOrderingComposer,
+      $$AppSettingRowsTableAnnotationComposer,
+      $$AppSettingRowsTableCreateCompanionBuilder,
+      $$AppSettingRowsTableUpdateCompanionBuilder,
+      (
+        AppSettingRow,
+        BaseReferences<_$AppDatabase, $AppSettingRowsTable, AppSettingRow>,
+      ),
+      AppSettingRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13108,4 +14660,8 @@ class $AppDatabaseManager {
       $$AreaCandidateRowsTableTableManager(_db, _db.areaCandidateRows);
   $$CustomDefectRowsTableTableManager get customDefectRows =>
       $$CustomDefectRowsTableTableManager(_db, _db.customDefectRows);
+  $$DriveBackupRowsTableTableManager get driveBackupRows =>
+      $$DriveBackupRowsTableTableManager(_db, _db.driveBackupRows);
+  $$AppSettingRowsTableTableManager get appSettingRows =>
+      $$AppSettingRowsTableTableManager(_db, _db.appSettingRows);
 }

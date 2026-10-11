@@ -5,7 +5,7 @@ import 'package:prodefact/data/billing/fake_billing_service.dart';
 /// guess flagged `needsReview` — the case that is never auto-accepted,
 /// so a suggestion stays pending until the inspector resolves it.
 class UncertainAiBillingService extends FakeBillingService {
-  UncertainAiBillingService({super.initialBalanceCredits});
+  UncertainAiBillingService({super.initialBalanceTokens});
 
   @override
   Future<AnalyseFindingResult> analyseFinding({
@@ -21,7 +21,7 @@ class UncertainAiBillingService extends FakeBillingService {
     final c = result.classification;
     return AnalyseFindingResult(
       aiLevel: result.aiLevel,
-      creditsCharged: result.creditsCharged,
+      tokensCharged: result.tokensCharged,
       newBalance: result.newBalance,
       paymentMode: result.paymentMode,
       classification: AiFindingClassification(

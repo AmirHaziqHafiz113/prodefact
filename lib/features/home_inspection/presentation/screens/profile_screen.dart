@@ -13,6 +13,7 @@ import '../../providers/user_profile_providers.dart';
 import '../../providers/wallet_providers.dart';
 import '../widgets/app_bottom_sheet.dart';
 import 'photo_guide_screen.dart';
+import 'storage_backup_screen.dart';
 import 'wallet_screen.dart';
 
 /// Everything that belongs to the inspector and their company, grouped:
@@ -58,7 +59,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .length;
     final balance =
         ref.watch(walletBalanceProvider).value ??
-        ref.watch(walletCacheProvider).value?.balanceCredits;
+        ref.watch(walletCacheProvider).value?.balanceTokens;
 
     profileAsync.whenData((profile) {
       if (!_prefilled) {
@@ -253,9 +254,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Wallet & usage',
                   subtitle: balance == null
-                      ? 'AI credits, top up, House Pass'
-                      : '$balance credits · top up, usage, House Pass',
+                      ? 'Token balance, top up, usage, House Pass'
+                      : '${formatTokens(balance)} · top up, usage',
                   onTap: () => context.push(WalletScreen.routePath),
+                ),
+                AppActionRow(
+                  key: const ValueKey('profile-storage-backup'),
+                  icon: Icons.add_to_drive,
+                  title: 'Storage & Backup',
+                  subtitle: 'Google Drive backup of original photos',
+                  onTap: () => context.push(StorageBackupScreen.routePath),
                 ),
                 AppActionRow(
                   key: const ValueKey('profile-custom-catalogue'),

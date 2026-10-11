@@ -28,9 +28,9 @@ void main() {
     });
   });
 
-  group('estimateFindingAnalysis / analyseFinding (Flex Credits)', () {
+  group('estimateFindingAnalysis / analyseFinding (Pay as you go)', () {
     test('an inspection with no House Pass prices under flexCredits', () async {
-      final service = FakeBillingService(initialBalanceCredits: 1000);
+      final service = FakeBillingService(initialBalanceTokens: 10000000);
       final estimate = await service.estimateFindingAnalysis(
         inspectionId: 'session_1',
         findingId: 'finding_1',
@@ -42,14 +42,14 @@ void main() {
 
     test('an insufficient balance is ineligible and analyseFinding refuses '
         'to run', () async {
-      final service = FakeBillingService(initialBalanceCredits: 10);
+      final service = FakeBillingService(initialBalanceTokens: 100000);
       final estimate = await service.estimateFindingAnalysis(
         inspectionId: 'session_1',
         findingId: 'finding_1',
         aiLevel: AiLevel.expert,
       );
       expect(estimate.eligible, isFalse);
-      expect(estimate.reason, EstimateIneligibleReason.insufficientCredits);
+      expect(estimate.reason, EstimateIneligibleReason.insufficientTokens);
 
       await expectLater(
         () => service.analyseFinding(
@@ -63,7 +63,7 @@ void main() {
 
     test('a successful analysis debits the balance by no more than the '
         'estimated maximum', () async {
-      final service = FakeBillingService(initialBalanceCredits: 1000);
+      final service = FakeBillingService(initialBalanceTokens: 10000000);
       final estimate = await service.estimateFindingAnalysis(
         inspectionId: 'session_1',
         findingId: 'finding_1',
@@ -76,20 +76,20 @@ void main() {
         idempotencyKey: 'idem_1',
       );
 
-      expect(result.creditsCharged, lessThanOrEqualTo(estimate.maximumCredits));
-      expect(result.newBalance, 1000 - result.creditsCharged);
+      expect(result.tokensCharged, lessThanOrEqualTo(estimate.maximumTokens));
+      expect(result.newBalance, 10000000 - result.tokensCharged);
     });
   });
 
   group('purchaseHousePass / confirmSandboxPayment', () {
     test('a purchased and confirmed House Pass switches the inspection to '
         'housePass pricing, with the included level free', () async {
-      final service = FakeBillingService(initialBalanceCredits: 0);
+      final service = FakeBillingService(initialBalanceTokens: 0);
       final intent = await service.purchaseHousePass('session_1');
       final confirmation = await service.confirmSandboxPayment(intent.intentId);
       expect(confirmation.purpose, PaymentPurpose.housePass);
-      // House Pass purchase never grants Credits.
-      expect(confirmation.creditsAdded, 0);
+      // House Pass purchase never grants Tokens.
+      expect(confirmation.tokensAdded, 0);
 
       final estimate = await service.estimateFindingAnalysis(
         inspectionId: 'session_1',
@@ -98,13 +98,13 @@ void main() {
       );
       expect(estimate.paymentMode, CommercialMode.housePass);
       expect(estimate.includedInHousePass, isTrue);
-      expect(estimate.surchargeCredits, 0);
-      expect(estimate.eligible, isTrue); // even with a 0 Credits balance
+      expect(estimate.surchargeTokens, 0);
+      expect(estimate.eligible, isTrue); // even with a 0 Tokens balance
     });
 
     test('a House Pass finding above the included level still requires '
-        'Credits for the surcharge', () async {
-      final service = FakeBillingService(initialBalanceCredits: 0);
+        'Tokens for the surcharge', () async {
+      final service = FakeBillingService(initialBalanceTokens: 0);
       final intent = await service.purchaseHousePass('session_1');
       await service.confirmSandboxPayment(intent.intentId);
 
@@ -113,13 +113,13 @@ void main() {
         findingId: 'finding_1',
         aiLevel: AiLevel.expert, // above the included "smart" level
       );
-      expect(estimate.surchargeCredits, greaterThan(0));
+      expect(estimate.surchargeTokens, greaterThan(0));
       expect(estimate.eligible, isFalse); // 0 balance can't cover it
     });
 
     test('the House Pass allowance is finite: after enough included-level '
-        'analyses, it falls back to Flex Credits', () async {
-      final service = FakeBillingService(initialBalanceCredits: 10_000);
+        'analyses, it falls back to Pay as you go', () async {
+      final service = FakeBillingService(initialBalanceTokens: 100000000);
       final intent = await service.purchaseHousePass('session_1');
       await service.confirmSandboxPayment(intent.intentId);
 
@@ -137,7 +137,7 @@ void main() {
         findingId: 'finding_overflow',
         aiLevel: AiLevel.smart,
       );
-      // Falls back to Flex Credits pricing — and since the balance still
+      // Falls back to Pay as you go pricing — and since the balance still
       // covers it, this one analysis is still eligible (the allowance
       // being reached never blocks physical inspection or AI outright,
       // only which pricing pays for it).
@@ -150,11 +150,11 @@ void main() {
         'real backend, which reports the House Pass reason whenever a '
         'pass exists but is no longer active, regardless of whether the '
         'fallback balance would also be insufficient', () async {
-      // Below Smart's 300-Credit ceiling — every included-tier House
+      // Below Smart's 300-Token ceiling — every included-tier House
       // Pass analysis below is free (0 charge), so this balance is
-      // untouched by the loop and still too low once Flex Credits
+      // untouched by the loop and still too low once Pay as you go
       // pricing takes back over.
-      final service = FakeBillingService(initialBalanceCredits: 100);
+      final service = FakeBillingService(initialBalanceTokens: 1000000);
       final intent = await service.purchaseHousePass('session_1');
       await service.confirmSandboxPayment(intent.intentId);
 
@@ -189,16 +189,16 @@ void main() {
   });
 
   group('createTopUpIntent', () {
-    test('computes Credits from the configured MYR-per-Credit ratio, and '
-        'confirming it credits the wallet', () async {
-      final service = FakeBillingService(initialBalanceCredits: 0);
+    test('computes Tokens from the configured MYR-per-Token ratio, and '
+        'confirming it Tokens the wallet', () async {
+      final service = FakeBillingService(initialBalanceTokens: 0);
       final intent = await service.createTopUpIntent(30);
-      expect(intent.creditsAmount, 3000);
+      expect(intent.tokensAmount, 30000000);
 
       final confirmation = await service.confirmSandboxPayment(intent.intentId);
       expect(confirmation.purpose, PaymentPurpose.topup);
-      expect(confirmation.creditsAdded, 3000);
-      expect(confirmation.newBalance, 3000);
+      expect(confirmation.tokensAdded, 30000000);
+      expect(confirmation.newBalance, 30000000);
     });
   });
 
@@ -206,26 +206,26 @@ void main() {
     test(
       'loadBalance matches the balance used for pricing decisions',
       () async {
-        final service = FakeBillingService(initialBalanceCredits: 777);
-        expect(await service.loadBalance('any-uid'), 777);
+        final service = FakeBillingService(initialBalanceTokens: 7770000);
+        expect(await service.loadBalance('any-uid'), 7770000);
       },
     );
 
     test(
       'a fresh service already has a "Starting balance" ledger entry',
       () async {
-        final service = FakeBillingService(initialBalanceCredits: 500);
+        final service = FakeBillingService(initialBalanceTokens: 5000000);
         final transactions = await service.loadRecentTransactions('any-uid');
         expect(transactions, hasLength(1));
         expect(transactions.single.type, WalletTransactionType.topup);
-        expect(transactions.single.amountCredits, 500);
+        expect(transactions.single.amountTokens, 5000000);
       },
     );
 
     test(
       'a successful analysis appends a usage entry, most-recent-first',
       () async {
-        final service = FakeBillingService(initialBalanceCredits: 1000);
+        final service = FakeBillingService(initialBalanceTokens: 10000000);
         await service.analyseFinding(
           request: _request(),
           aiLevel: AiLevel.smart,
@@ -240,17 +240,17 @@ void main() {
     );
 
     test('a confirmed top-up appends a topup entry', () async {
-      final service = FakeBillingService(initialBalanceCredits: 0);
+      final service = FakeBillingService(initialBalanceTokens: 0);
       final intent = await service.createTopUpIntent(10);
       await service.confirmSandboxPayment(intent.intentId);
 
       final transactions = await service.loadRecentTransactions('any-uid');
       expect(transactions.first.type, WalletTransactionType.topup);
-      expect(transactions.first.amountCredits, 1000);
+      expect(transactions.first.amountTokens, 10000000);
     });
 
     test('loadRecentTransactions respects the limit', () async {
-      final service = FakeBillingService(initialBalanceCredits: 10_000);
+      final service = FakeBillingService(initialBalanceTokens: 100000000);
       for (var i = 0; i < 5; i++) {
         await service.analyseFinding(
           request: _request(note: 'finding_$i'),

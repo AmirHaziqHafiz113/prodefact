@@ -17,7 +17,7 @@ import '../support/test_repository.dart';
 /// call, and a finding can never sit "queued" forever.
 
 class _Backend extends FakeBillingService {
-  _Backend() : super(initialBalanceCredits: 100000);
+  _Backend() : super(initialBalanceTokens: 1000000000);
 
   bool fail = false;
   bool unsure = false;
@@ -38,7 +38,7 @@ class _Backend extends FakeBillingService {
     if (unsure) {
       return AnalyseFindingResult(
         aiLevel: aiLevel,
-        creditsCharged: 1,
+        tokensCharged: 1,
         newBalance: 1,
         paymentMode: CommercialMode.flexCredits,
         classification: AiFindingClassification(

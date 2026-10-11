@@ -19,7 +19,7 @@ import 'top_up_screen.dart';
 /// explicit re-analysis action.
 ///
 /// The "Analyse" action on an `awaitingApproval` finding: shows the
-/// real, server-computed AI cost estimate ("Up to N Credits") and asks
+/// real, server-computed AI cost estimate ("Up to N Tokens") and asks
 /// the inspector to explicitly approve before anything runs — this is
 /// the only place [ActiveInspectionSession.approveAndRunAnalysis] is
 /// ever called from the UI. See docs/commercial_model.md ("The
@@ -113,11 +113,11 @@ Future<void> _showIneligibleDialog(
   AnalysisEstimate estimate,
 ) async {
   final showTopUp =
-      estimate.reason == EstimateIneligibleReason.insufficientCredits;
+      estimate.reason == EstimateIneligibleReason.insufficientTokens;
   await showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Not enough Credits'),
+      title: const Text('Not enough Tokens'),
       content: Text(_reasonMessage(estimate)),
       actions: [
         TextButton(
@@ -164,14 +164,14 @@ String pricingErrorMessage(Object? error) {
 
 String _reasonMessage(AnalysisEstimate estimate) {
   return switch (estimate.reason) {
-    EstimateIneligibleReason.insufficientCredits =>
-      '${estimate.maximumCredits} Credits required, '
-          '${estimate.currentBalance} Credits available. Physical '
+    EstimateIneligibleReason.insufficientTokens =>
+      '${formatTokens(estimate.maximumTokens)} required, '
+          '${formatTokens(estimate.currentBalance)} available. Physical '
           'inspection is never affected — you can still classify this '
           'finding manually.',
     EstimateIneligibleReason.housePassAllowanceReached =>
       "This inspection's House Pass allowance has been used up. Top up "
-          'with Flex Credits to keep analysing.',
+          'with Pay as you go to keep analysing.',
     EstimateIneligibleReason.housePassNotActive =>
       "This inspection's House Pass isn't active yet.",
     EstimateIneligibleReason.unknown ||
@@ -196,15 +196,15 @@ class _EstimateApprovalDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final configAsync = ref.watch(commercialConfigProvider);
-    final creditsPerMyr = configAsync.value?.creditsPerMyr;
+    final tokensPerMyr = configAsync.value?.tokensPerMyr;
     final finding = ref
         .watch(activeSessionProvider)
         ?.findings
         .firstWhereOrNull((f) => f.id == findingId);
     final evidencePhoto = finding?.evidence.firstOrNull;
-    final chargedCredits = estimate.paymentMode == CommercialMode.housePass
-        ? estimate.surchargeCredits
-        : estimate.maximumCredits;
+    final chargedTokens = estimate.paymentMode == CommercialMode.housePass
+        ? estimate.surchargeTokens
+        : estimate.maximumTokens;
 
     return AlertDialog(
       // Shows which level is used (set in Profile); never a selector.
@@ -237,14 +237,14 @@ class _EstimateApprovalDialog extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.md),
             ],
-            if (estimate.includedInHousePass || chargedCredits == 0)
-              const Text('Included with this inspection. No Credits charged.')
+            if (estimate.includedInHousePass || chargedTokens == 0)
+              const Text('Included with this inspection. No Tokens charged.')
             else ...[
-              Text('Up to $chargedCredits Credits'),
-              if (creditsPerMyr != null && creditsPerMyr > 0) ...[
+              Text('Up to ${formatTokens(chargedTokens)}'),
+              if (tokensPerMyr != null && tokensPerMyr > 0) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '≈ RM${(chargedCredits / creditsPerMyr).toStringAsFixed(2)}',
+                  '≈ RM${(chargedTokens / tokensPerMyr).toStringAsFixed(2)}',
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: AppColors.textMuted),
                 ),
@@ -252,7 +252,7 @@ class _EstimateApprovalDialog extends ConsumerWidget {
             ],
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Balance: ${estimate.currentBalance} Credits',
+              'Balance: ${formatTokens(estimate.currentBalance)}',
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: AppColors.textMuted),
             ),

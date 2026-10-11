@@ -23,7 +23,7 @@ const _candidates = [
 
 /// AI is unsure: no pick, four sliding-door options, a reason.
 class _UnsureBackend extends FakeBillingService {
-  _UnsureBackend() : super(initialBalanceCredits: 100000);
+  _UnsureBackend() : super(initialBalanceTokens: 1000000000);
 
   int calls = 0;
 
@@ -41,7 +41,7 @@ class _UnsureBackend extends FakeBillingService {
     );
     return AnalyseFindingResult(
       aiLevel: r.aiLevel,
-      creditsCharged: r.creditsCharged,
+      tokensCharged: r.tokensCharged,
       newBalance: r.newBalance,
       paymentMode: r.paymentMode,
       classification: AiFindingClassification(

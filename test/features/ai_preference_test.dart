@@ -19,7 +19,7 @@ import '../support/test_repository.dart';
 
 /// Records the level every estimate and analysis is asked for.
 class _RecordingBilling extends FakeBillingService {
-  _RecordingBilling() : super(initialBalanceCredits: 5000);
+  _RecordingBilling() : super(initialBalanceTokens: 50000000);
 
   final List<AiLevel> estimated = [];
   final List<AiLevel> analysed = [];

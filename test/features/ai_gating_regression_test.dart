@@ -14,7 +14,7 @@ import '../support/test_repository.dart';
 /// to prove AI is never even *reached* except after the explicit
 /// estimate/approval gate. Camera-first model: capturing/previewing a
 /// photo, saving a finding, or editing a not-yet-approved note must
-/// never spend Credits or call AI by themselves — only an explicit
+/// never spend Tokens or call AI by themselves — only an explicit
 /// [ActiveInspectionSession.approveAndRunAnalysis] (or, for an active
 /// House Pass with Auto Analyse on, the save itself) does. See
 /// docs/commercial_model.md ("The estimate -> approval -> reservation

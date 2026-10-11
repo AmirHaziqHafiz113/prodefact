@@ -28,17 +28,17 @@ void main() {
 
       // Real packages from FakeBillingService's CommercialConfig — never
       // an invented amount.
-      expect(find.text('RM10 · 1000 Credits'), findsOneWidget);
-      expect(find.text('RM30 · 3000 Credits'), findsOneWidget);
-      expect(find.text('RM50 · 5000 Credits'), findsOneWidget);
-      expect(find.text('RM100 · 10000 Credits'), findsOneWidget);
+      expect(find.text('RM10 · 10,000,000 Tokens'), findsOneWidget);
+      expect(find.text('RM30 · 30,000,000 Tokens'), findsOneWidget);
+      expect(find.text('RM50 · 50,000,000 Tokens'), findsOneWidget);
+      expect(find.text('RM100 · 100,000,000 Tokens'), findsOneWidget);
 
       final proceedButtonBefore = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Proceed to Payment'),
       );
       expect(proceedButtonBefore.onPressed, isNull);
 
-      final rm30Chip = find.widgetWithText(ChoiceChip, 'RM30 · 3000 Credits');
+      final rm30Chip = find.widgetWithText(ChoiceChip, 'RM30 · 30,000,000 Tokens');
       await tester.tap(rm30Chip);
       await tester.pumpAndSettle();
 
@@ -52,7 +52,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('RM30 top-up'), findsOneWidget);
-      expect(find.text('You will receive 3000 Credits'), findsOneWidget);
+      expect(find.text('You will receive 30,000,000 Tokens'), findsOneWidget);
     },
   );
 }

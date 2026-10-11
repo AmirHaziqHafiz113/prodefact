@@ -180,6 +180,10 @@ class InspectionSessionSummary {
     this.findingsCount = 0,
     this.inspectionDate,
     this.coverPhotoPath,
+    this.completedAt,
+    this.reportVersion,
+    this.inspectorName,
+    this.clientName,
   });
 
   final String id;
@@ -228,6 +232,21 @@ class InspectionSessionSummary {
   /// read from the stored report metadata — shown on inspection cards
   /// when present. See `ReportMetadata.coverPhotoPath`.
   final String? coverPhotoPath;
+
+  /// When the report was (last) generated — the inspection's completed
+  /// date. Null until a report exists.
+  final DateTime? completedAt;
+
+  /// The current report's version ("v2"), when one exists.
+  final int? reportVersion;
+
+  /// From the setup's property details, for history cards.
+  final String? inspectorName;
+  final String? clientName;
+
+  /// Completed and finalised: a report has been generated. Past
+  /// Inspections shows only these; Active never does.
+  bool get isPast => status == InspectionStatus.reported;
 
   bool get isComplete => status != InspectionStatus.inProgress;
 

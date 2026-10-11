@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
-import '../../../../data/billing/billing_providers.dart';
 import '../../../../data/remote/remote_providers.dart';
 import '../../providers/session_detail_providers.dart';
 import '../../providers/session_list_providers.dart';
@@ -28,7 +27,7 @@ import 'wallet_screen.dart';
 ///   when there are several);
 /// - **Latest report** → that inspection's Report;
 /// - **Start New Inspection** → New Inspection setup;
-/// - the credits card → Wallet;
+/// - the Tokens card → Wallet;
 /// - **View all inspections** → the Inspections tab.
 ///
 /// Every figure comes from the same real data the other screens show.
@@ -176,7 +175,7 @@ class _HomeBody extends ConsumerWidget {
           _LatestReportCard(summary: latestReport),
         ],
         const SizedBox(height: AppSpacing.xl),
-        const _CreditsCard(),
+        const _TokensCard(),
         if (sessions.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),
           TextButton.icon(
@@ -501,21 +500,17 @@ class _LatestReportCard extends ConsumerWidget {
 
 /// A compact usage/balance card: the row opens Wallet; Top Up is its one
 /// button.
-class _CreditsCard extends ConsumerWidget {
-  const _CreditsCard();
+class _TokensCard extends ConsumerWidget {
+  const _TokensCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final balanceAsync = ref.watch(walletBalanceProvider);
     final cache = ref.watch(walletCacheProvider).value;
-    final creditsPerMyr = ref
-        .watch(commercialConfigProvider)
-        .value
-        ?.creditsPerMyr;
-    final balance = balanceAsync.value ?? cache?.balanceCredits;
+    final balance = balanceAsync.value ?? cache?.balanceTokens;
 
     return Card(
-      key: const ValueKey('home-credits'),
+      key: const ValueKey('home-tokens'),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.push(WalletScreen.routePath),
@@ -541,7 +536,7 @@ class _CreditsCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'AI credits',
+                      'Token balance',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     balance == null
@@ -549,16 +544,19 @@ class _CreditsCard extends ConsumerWidget {
                             balanceAsync.hasError ? 'Unavailable' : 'Loading…',
                             style: Theme.of(context).textTheme.titleMedium,
                           )
-                        : AppAnimatedNumber(
-                            value: balance,
-                            suffix: ' credits',
-                            style: Theme.of(context).textTheme.titleLarge,
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: AppAnimatedNumber(
+                              value: balance,
+                              format: formatTokenCount,
+                              suffix: ' Tokens',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
                           ),
-                    if (balance != null &&
-                        creditsPerMyr != null &&
-                        creditsPerMyr > 0)
+                    if (balance != null)
                       Text(
-                        '≈ RM${(balance / creditsPerMyr).toStringAsFixed(2)}',
+                        '≈ ${tokensAsMyr(balance)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                   ],

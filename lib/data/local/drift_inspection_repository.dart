@@ -30,6 +30,10 @@ class DriftInspectionRepository implements InspectionRepository {
 
   final AppDatabase _db;
 
+  /// The underlying database — shared with stores that live alongside
+  /// inspection data (e.g. the Drive backup queue).
+  AppDatabase get database => _db;
+
   String _newId(String prefix) =>
       '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
 
@@ -408,6 +412,10 @@ class DriftInspectionRepository implements InspectionRepository {
       'GROUP BY session_id',
       sessionIds,
     );
+    final reportRows = await (_db.select(
+      _db.reportRows,
+    )..where((t) => t.sessionId.isIn(sessionIds))).get();
+    final reportBySession = {for (final r in reportRows) r.sessionId: r};
     final pendingSync = await _countPerSession(
       'SELECT f.session_id as session_id, COUNT(*) as c '
       'FROM evidence_rows e '
@@ -441,6 +449,10 @@ class DriftInspectionRepository implements InspectionRepository {
             inspectionDate: row.inspectionDate,
             coverPhotoPath: _reportMetadataFromJson(row.reportMetadataJson)
                 ?.coverPhotoPath,
+            completedAt: reportBySession[row.id]?.generatedAt,
+            reportVersion: reportBySession[row.id]?.version,
+            inspectorName: row.inspectorName,
+            clientName: row.clientName,
           ),
         )
         .toList();
@@ -966,9 +978,11 @@ class DriftInspectionRepository implements InspectionRepository {
     final row = await (_db.select(
       _db.walletCacheRows,
     )..where((t) => t.id.equals(_localWalletCacheId))).getSingleOrNull();
-    if (row == null) return null;
+    // A row cached before Tokens holds only Credits: treated as no
+    // cache, so an old Credits figure is never shown as Tokens.
+    if (row == null || row.balanceTokens == null) return null;
     return WalletCache(
-      balanceCredits: row.balanceCredits,
+      balanceTokens: row.balanceTokens!,
       updatedAt: row.updatedAt,
     );
   }
@@ -980,7 +994,9 @@ class DriftInspectionRepository implements InspectionRepository {
         .insertOnConflictUpdate(
           WalletCacheRowsCompanion.insert(
             id: _localWalletCacheId,
-            balanceCredits: cache.balanceCredits,
+            // The legacy non-null Credits column; never read for display.
+            balanceCredits: 0,
+            balanceTokens: Value(cache.balanceTokens),
             updatedAt: cache.updatedAt,
           ),
         );

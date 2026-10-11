@@ -12,7 +12,7 @@ import '../theme/design_system.dart';
 /// it starts the capture flow ([startCaptureFlow] — pick an open
 /// inspection and area, then the camera; or New Inspection when nothing
 /// is open). Review carries a real count badge of inspections waiting on
-/// the inspector. Wallet is no longer a tab: it opens from Home's credits
+/// the inspector. Wallet is no longer a tab: it opens from Home's Tokens
 /// card and from Profile.
 ///
 /// Only screens reached via the bottom nav show it — the New

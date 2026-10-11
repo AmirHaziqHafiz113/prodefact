@@ -19,24 +19,24 @@ AiFindingClassificationRequest _requestWithEvidence() {
 
 Map<String, dynamic> _commercialConfigResponse() {
   return {
-    'creditsPerMyr': 100,
-    'lowBalanceThresholdCredits': 500,
+    'tokensPerMyr': 100,
+    'lowBalanceThresholdTokens': 500,
     'topUpPackages': [
-      {'myr': 10, 'credits': 1000},
-      {'myr': 30, 'credits': 3000},
+      {'myr': 10, 'tokens': 1000},
+      {'myr': 30, 'tokens': 3000},
     ],
     'aiLevels': [
       {
         'id': 'fast',
         'label': 'Fast',
         'description': 'Lowest cost.',
-        'maximumCredits': 150,
+        'maximumTokens': 150,
       },
       {
         'id': 'smart',
         'label': 'Smart',
         'description': 'Recommended.',
-        'maximumCredits': 300,
+        'maximumTokens': 300,
       },
     ],
     'housePass': {
@@ -101,11 +101,11 @@ void main() {
     test('maps a well-formed response into a typed config', () {
       final config = parseCommercialConfig(_commercialConfigResponse());
 
-      expect(config.creditsPerMyr, 100);
-      expect(config.lowBalanceThresholdCredits, 500);
+      expect(config.tokensPerMyr, 100);
+      expect(config.lowBalanceThresholdTokens, 500);
       expect(config.topUpPackages, hasLength(2));
       expect(config.topUpPackages.first.myr, 10);
-      expect(config.topUpPackages.first.credits, 1000);
+      expect(config.topUpPackages.first.tokens, 1000);
       expect(config.aiLevels, hasLength(2));
       expect(config.aiLevels.first.level, AiLevel.fast);
       expect(config.housePass.includedAiLevel, AiLevel.smart);
@@ -122,20 +122,20 @@ void main() {
   });
 
   group('parseAnalysisEstimate', () {
-    test('maps an eligible Flex Credits estimate', () {
+    test('maps an eligible Pay as you go estimate', () {
       final estimate = parseAnalysisEstimate({
         'aiLevel': 'smart',
-        'estimatedCredits': 120,
-        'maximumCredits': 300,
+        'estimatedTokens': 120,
+        'maximumTokens': 300,
         'currentBalance': 5000,
         'paymentMode': 'flexCredits',
         'includedInHousePass': false,
-        'surchargeCredits': 0,
+        'surchargeTokens': 0,
         'eligible': true,
       });
 
       expect(estimate.aiLevel, AiLevel.smart);
-      expect(estimate.maximumCredits, 300);
+      expect(estimate.maximumTokens, 300);
       expect(estimate.paymentMode, CommercialMode.flexCredits);
       expect(estimate.eligible, isTrue);
       expect(estimate.reason, isNull);
@@ -144,27 +144,27 @@ void main() {
     test('maps a recognized ineligible reason', () {
       final estimate = parseAnalysisEstimate({
         'aiLevel': 'smart',
-        'estimatedCredits': 300,
-        'maximumCredits': 300,
+        'estimatedTokens': 300,
+        'maximumTokens': 300,
         'currentBalance': 0,
         'paymentMode': 'flexCredits',
         'includedInHousePass': false,
-        'surchargeCredits': 0,
+        'surchargeTokens': 0,
         'eligible': false,
-        'reason': 'insufficientCredits',
+        'reason': 'insufficientTokens',
       });
-      expect(estimate.reason, EstimateIneligibleReason.insufficientCredits);
+      expect(estimate.reason, EstimateIneligibleReason.insufficientTokens);
     });
 
     test('an unrecognized reason string maps to unknown, never invented', () {
       final estimate = parseAnalysisEstimate({
         'aiLevel': 'smart',
-        'estimatedCredits': 300,
-        'maximumCredits': 300,
+        'estimatedTokens': 300,
+        'maximumTokens': 300,
         'currentBalance': 0,
         'paymentMode': 'flexCredits',
         'includedInHousePass': false,
-        'surchargeCredits': 0,
+        'surchargeTokens': 0,
         'eligible': false,
         'reason': 'someFutureReasonThisBuildDoesNotKnow',
       });
@@ -176,7 +176,7 @@ void main() {
     test('maps a well-formed response into a typed result', () {
       final result = parseAnalyseFindingResult({
         'aiLevel': 'smart',
-        'creditsCharged': 85,
+        'tokensCharged': 85,
         'newBalance': 4915,
         'paymentMode': 'flexCredits',
         'classification': {
@@ -188,7 +188,7 @@ void main() {
       }, 'finding_1');
 
       expect(result.aiLevel, AiLevel.smart);
-      expect(result.creditsCharged, 85);
+      expect(result.tokensCharged, 85);
       expect(result.newBalance, 4915);
       expect(result.classification.catalogueEntryId, _validEntryId);
     });
@@ -198,7 +198,7 @@ void main() {
       expect(
         () => parseAnalyseFindingResult({
           'aiLevel': 'smart',
-          'creditsCharged': 85,
+          'tokensCharged': 85,
           'newBalance': 4915,
           'paymentMode': 'flexCredits',
           'classification': {
@@ -216,11 +216,11 @@ void main() {
       final intent = parseTopUpIntent({
         'intentId': 'intent_1',
         'amountMyr': 30,
-        'creditsAmount': 3000,
+        'tokensAmount': 3000,
       });
       expect(intent.intentId, 'intent_1');
       expect(intent.amountMyr, 30);
-      expect(intent.creditsAmount, 3000);
+      expect(intent.tokensAmount, 3000);
     });
 
     test('maps a House Pass purchase intent response', () {
@@ -238,20 +238,20 @@ void main() {
       final confirmation = parseSandboxPaymentConfirmation({
         'purpose': 'topup',
         'newBalance': 3000,
-        'creditsAdded': 3000,
+        'tokensAdded': 3000,
       });
       expect(confirmation.purpose, PaymentPurpose.topup);
-      expect(confirmation.creditsAdded, 3000);
+      expect(confirmation.tokensAdded, 3000);
     });
 
-    test('maps a House Pass confirmation, which never adds Credits', () {
+    test('maps a House Pass confirmation, which never adds Tokens', () {
       final confirmation = parseSandboxPaymentConfirmation({
         'purpose': 'housePass',
         'newBalance': 0,
-        'creditsAdded': 0,
+        'tokensAdded': 0,
       });
       expect(confirmation.purpose, PaymentPurpose.housePass);
-      expect(confirmation.creditsAdded, 0);
+      expect(confirmation.tokensAdded, 0);
     });
   });
 

@@ -59,7 +59,7 @@ void main() {
     await pumpApp(tester);
 
     // FakeBillingService's default starting balance.
-    expect(find.text('500 credits'), findsOneWidget);
+    expect(find.text('5,000,000 Tokens'), findsOneWidget);
     expect(find.text('No inspections yet'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('home-start-first')));
@@ -67,16 +67,16 @@ void main() {
     expect(find.byType(PropertyTypeSelectionScreen), findsOneWidget);
   });
 
-  testWidgets('Wallet opens from Home\'s credits card as a pushed screen '
+  testWidgets('Wallet opens from Home\'s Tokens card as a pushed screen '
       '(bottom nav hidden), and back returns to Home', (tester) async {
     await pumpApp(tester);
 
-    await tester.tap(find.byKey(const ValueKey('home-credits')));
+    await tester.tap(find.byKey(const ValueKey('home-tokens')));
     await tester.pumpAndSettle();
 
     expect(find.byType(WalletScreen), findsOneWidget);
     expect(find.byType(AppBottomNav), findsNothing);
-    expect(find.text('500 credits'), findsOneWidget);
+    expect(find.text('5,000,000 Tokens'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Top Up'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Starting balance'),

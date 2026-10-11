@@ -8,14 +8,14 @@ import '../support/test_repository.dart';
 
 /// The redesign pass explicitly must never copy the reference mockup's
 /// illustrative sample numbers (e.g. "RM39/month" for House Pass, or an
-/// invented Credits-per-Ringgit rate) — every price shown must come
+/// invented Tokens-per-Ringgit rate) — every price shown must come
 /// from the real, server-computed `CommercialConfig`. See
 /// docs/commercial_model.md ("House Pass ... RM30 per property, not
 /// unlimited") and docs/ui_design_system.md.
 void main() {
   testWidgets('the Wallet pricing explainer shows the real House Pass rule '
       '("RM30 / property", never a fabricated monthly subscription '
-      'price) and the real Flex Credits rate from CommercialConfig', (
+      'price) and the real Pay as you go rate from CommercialConfig', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -23,8 +23,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Wallet opens from Home's credits card (no longer a tab).
-    await tester.tap(find.byKey(const ValueKey('home-credits')));
+    // Wallet opens from Home's Tokens card (no longer a tab).
+    await tester.tap(find.byKey(const ValueKey('home-tokens')));
     await tester.pumpAndSettle();
 
     expect(find.byType(WalletScreen), findsOneWidget);
@@ -42,10 +42,10 @@ void main() {
     expect(find.textContaining('/month'), findsNothing);
     expect(find.textContaining('RM39'), findsNothing);
 
-    // The real Credits-per-Ringgit rate — see FakeBillingService's
+    // The real Tokens-per-Ringgit rate — see FakeBillingService's
     // `_creditsPerMyr = 100` (i.e. RM0.01/credit) — never a
     // fabricated "RM0.50/credit" copied verbatim from the mockup.
-    expect(find.text('RM0.01 / credit'), findsOneWidget);
+    expect(find.text('1,000,000 Tokens = RM1'), findsOneWidget);
     expect(find.textContaining('RM0.50'), findsNothing);
   });
 }

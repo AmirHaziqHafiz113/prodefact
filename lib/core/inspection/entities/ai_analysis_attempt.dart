@@ -5,7 +5,7 @@ import 'ai_level.dart';
 /// after navigation, app termination, or a lost connection.
 ///
 /// The backend `analyseFinding` callable is idempotent per
-/// [idempotencyKey]: every Credits ledger mutation (reserve, settle,
+/// [idempotencyKey]: every Tokens ledger mutation (reserve, settle,
 /// release) is keyed by it, and a finished attempt's outcome is stored
 /// under it, so replaying the *same* key can never reserve or charge
 /// twice — see `functions/src/billing/handle_analyse_finding.ts` and
@@ -37,7 +37,7 @@ class AiAnalysisAttempt {
   /// (180s, `functions/src/index.ts`) plus the client callable timeout
   /// margin, so the original invocation is guaranteed to have been
   /// terminated before a replay can start. A replay that overlaps a
-  /// still-running original would not double-charge Credits (the
+  /// still-running original would not double-charge Tokens (the
   /// ledger dedupes by key) but could invoke the AI provider twice and
   /// record House Pass usage twice.
   static const Duration replaySafeAfter = Duration(minutes: 4);

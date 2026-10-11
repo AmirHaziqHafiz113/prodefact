@@ -12,6 +12,7 @@ import '../../features/home_inspection/presentation/screens/finding_detail_scree
 import '../../features/home_inspection/presentation/screens/home_dashboard_screen.dart';
 import '../../features/home_inspection/presentation/screens/house_pass_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_overview_screen.dart';
+import '../../features/home_inspection/presentation/screens/past_inspection_screens.dart';
 import '../../features/home_inspection/presentation/screens/photo_guide_screen.dart';
 import '../../features/home_inspection/presentation/screens/inspection_sessions_screen.dart';
 import '../../features/home_inspection/presentation/screens/profile_screen.dart';
@@ -21,7 +22,9 @@ import '../../features/home_inspection/presentation/screens/report_details_scree
 import '../../features/home_inspection/presentation/screens/report_screen.dart';
 import '../../features/home_inspection/presentation/screens/review_inbox_screen.dart';
 import '../../features/home_inspection/presentation/screens/review_setup_screen.dart';
+import '../../features/home_inspection/presentation/screens/storage_backup_screen.dart';
 import '../../features/home_inspection/presentation/screens/top_up_screen.dart';
+import '../../features/home_inspection/presentation/screens/usage_details_screen.dart';
 import '../../features/home_inspection/presentation/screens/wallet_screen.dart';
 import 'app_shell_screen.dart';
 import 'go_router_refresh_stream.dart';
@@ -146,6 +149,28 @@ GoRouter buildAppRouter(WidgetRef ref) {
       GoRoute(
         path: WalletScreen.routePath,
         builder: (context, state) => const WalletScreen(),
+      ),
+      GoRoute(
+        path: '${PastInspectionDetailScreen.routePathPrefix}/:sessionId',
+        builder: (context, state) => PastInspectionDetailScreen(
+          sessionId: state.pathParameters['sessionId']!,
+        ),
+      ),
+      GoRoute(
+        path: PastFindingsScreen.routePath,
+        builder: (context, state) => const PastFindingsScreen(),
+      ),
+      GoRoute(
+        path: PastPhotosScreen.routePath,
+        builder: (context, state) => const PastPhotosScreen(),
+      ),
+      GoRoute(
+        path: StorageBackupScreen.routePath,
+        builder: (context, state) => const StorageBackupScreen(),
+      ),
+      GoRoute(
+        path: UsageDetailsScreen.routePath,
+        builder: (context, state) => const UsageDetailsScreen(),
       ),
       GoRoute(
         path: TopUpScreen.routePath,

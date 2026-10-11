@@ -4,7 +4,12 @@ import type {Firestore} from "firebase-admin/firestore";
 import type {Storage} from "firebase-admin/storage";
 import {fakeFirestore} from "./fakes";
 import {DEFAULT_PRICING_CONFIG} from "./pricing_config";
-import {estimateMaxCredits} from "./pricing";
+import {
+  estimateMaxTokens,
+  priceUsage,
+  worstCaseAnalysisUsage,
+} from "./pricing";
+import {TOKENS_PER_MYR} from "./tokens";
 import {
   handleEstimateFindingAnalysis,
 } from "./handle_estimate_finding_analysis";
@@ -16,7 +21,7 @@ import {AiLevel} from "./types";
  * The OpenAI model lineup (2026-10-01): Fast gpt-6-luna, Smart
  * gpt-6.1-sol, Expert gpt-6.1-sol (no GPT-6 Terra exists yet), at
  * OpenAI's published prices, with
- * the customer markup and Credit conversion unchanged.
+ * the customer markup and Token conversion unchanged.
  */
 
 const UID = "uid_1";
@@ -65,30 +70,43 @@ test("4-6. provider prices match OpenAI's per-1M-token rates", () => {
   }
 });
 
-test("9 + 10. markup and Credit conversion are unchanged", () => {
+test("9 + 10. the markup is unchanged (100% markup) and Tokens are " +
+  "1,000,000 per RM", () => {
   assert.equal(DEFAULT_PRICING_CONFIG.markupMultiplier, 2.0);
-  assert.equal(DEFAULT_PRICING_CONFIG.creditsPerMyr, 100);
+  assert.equal(TOKENS_PER_MYR, 1_000_000);
+  assert.equal(DEFAULT_PRICING_CONFIG.legacyCreditsPerMyr, 100);
 });
 
-test("8. Credit estimates follow the new prices through the unchanged " +
-  "formula (provider cost × 2 × 100, rounded up)", () => {
+test("8. Token estimates follow the new prices: the AI part is the " +
+  "provider cost, and the total is (AI + infrastructure) × 2", () => {
   for (const level of ["fast", "smart", "expert"] as AiLevel[]) {
     const c = DEFAULT_PRICING_CONFIG.aiLevels[level];
     const costUsd =
       (c.estimatedInputTokens / 1e6) * LINEUP[level].inPerM +
       (c.estimatedOutputTokens / 1e6) * LINEUP[level].outPerM;
-    const expected = Math.ceil(costUsd * 2 * 100 - 1e-9);
-    assert.equal(estimateMaxCredits(level, DEFAULT_PRICING_CONFIG), expected,
-      level);
+    const cost = priceUsage(
+      worstCaseAnalysisUsage(level, DEFAULT_PRICING_CONFIG),
+      DEFAULT_PRICING_CONFIG
+    );
+    assert.ok(
+      Math.abs(cost.openaiCostRm -
+        costUsd * DEFAULT_PRICING_CONFIG.usdToMyrRate) < 1e-9,
+      level
+    );
+    assert.equal(estimateMaxTokens(level, DEFAULT_PRICING_CONFIG),
+      cost.tokensCharged, level);
+    // Never below the AI cost alone at a 100% markup.
+    assert.ok(cost.tokensCharged >= Math.floor(costUsd * 2 * 1e6), level);
   }
-  // The concrete figures an inspector sees with the default config.
-  assert.equal(estimateMaxCredits("fast", DEFAULT_PRICING_CONFIG), 1);
-  assert.equal(estimateMaxCredits("smart", DEFAULT_PRICING_CONFIG), 2);
-  assert.equal(estimateMaxCredits("expert", DEFAULT_PRICING_CONFIG), 2);
+  // Ordering an inspector sees with the default config.
+  const fast = estimateMaxTokens("fast", DEFAULT_PRICING_CONFIG);
+  const smart = estimateMaxTokens("smart", DEFAULT_PRICING_CONFIG);
+  const expert = estimateMaxTokens("expert", DEFAULT_PRICING_CONFIG);
+  assert.ok(fast < smart && smart <= expert, `${fast} ${smart} ${expert}`);
 });
 
 /**
- * @return {Firestore} a fake Firestore with one owned finding and Credits.
+ * @return {Firestore} a fake Firestore with one owned finding and Tokens.
  */
 function seeded(): Firestore {
   const {db} = fakeFirestore({
@@ -96,7 +114,7 @@ function seeded(): Firestore {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: 1000,
+      balanceTokens: 10_000_000,
       updatedAt: 0,
     },
   });
@@ -144,8 +162,8 @@ test("7. estimateFindingAnalysis and analyseFinding resolve the same " +
       firestore,
     });
     assert.equal(
-      estimate.maximumCredits,
-      estimateMaxCredits(level, DEFAULT_PRICING_CONFIG),
+      estimate.maximumTokens,
+      estimateMaxTokens(level, DEFAULT_PRICING_CONFIG),
       level
     );
 
@@ -159,7 +177,7 @@ test("7. estimateFindingAnalysis and analyseFinding resolve the same " +
       apiKeys: {openai: "test-key"},
     });
     assert.equal(result.aiLevel, level);
-    assert.ok(result.creditsCharged <= estimate.maximumCredits, level);
+    assert.ok(result.tokensCharged <= estimate.maximumTokens, level);
   }
   assert.deepEqual(models, ["gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-sol"]);
 });

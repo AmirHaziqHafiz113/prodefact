@@ -20,7 +20,7 @@ import 'support/test_repository.dart';
 /// House Pass surcharge estimate dialog, Top Up, and Sign In — at the
 /// same narrow/standard/large phone widths and text scales, so "every
 /// redesigned screen" genuinely means every screen, not just the ones
-/// on the default Flex Credits path.
+/// on the default Pay as you go path.
 const _phoneWidths = [320.0, 360.0, 390.0, 430.0];
 
 Future<void> _assertNoOverflowAcrossWidths(
@@ -112,7 +112,7 @@ void main() {
       await _assertNoOverflowAcrossWidths(tester, screenLabel: 'Top Up');
       await _assertNoOverflowAcrossTextScales(tester, screenLabel: 'Top Up');
 
-      // The "intent created" summary (amount/credits + sandbox/real
+      // The "intent created" summary (amount/Tokens + sandbox/real
       // banner) is a materially different layout — check it too.
       await tester.tap(find.byType(ChoiceChip).first);
       await tester.pumpAndSettle();
@@ -161,7 +161,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 2600);
     tester.view.devicePixelRatio = 1.0;
 
-    final billing = FakeBillingService(initialBalanceCredits: 10000);
+    final billing = FakeBillingService(initialBalanceTokens: 100000000);
     final container = ProviderContainer(
       overrides: testOverrides(billingService: billing),
     );

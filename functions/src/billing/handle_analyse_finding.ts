@@ -19,12 +19,19 @@ import {
   validateAndNormalize,
 } from "../ai/gateway";
 import {AiLevelConfig, loadPricingConfig} from "./pricing_config";
-import {actualCreditsForUsage, providerCostForTokensUsd} from "./pricing";
+import {
+  actualAnalysisUsage,
+  priceUsage,
+  providerCostForTokensUsd,
+} from "./pricing";
+import {UsageRecord, buildUsageRecord} from "./usage_cost";
+import {LEGACY_CREDITS_PER_MYR, tokensForLegacyCredits} from "./tokens";
 import {
   getWalletBalance,
-  InsufficientCreditsError,
+  InsufficientTokensError,
+  recordUsageOnce,
   releaseReservation,
-  reserveCredits,
+  reserveTokens,
   settleReservation,
 } from "./wallet";
 import {findHousePassForInspection, recordHousePassUsage} from "./house_pass";
@@ -66,7 +73,7 @@ import {
  * 4. The job ends as `succeeded` (stored result, returned to every later
  *    replay without charging) or `failed` (nothing charged).
  *
- * Every Credits ledger mutation is also keyed (`{key}_reservation`,
+ * Every Tokens ledger mutation is also keyed (`{key}_reservation`,
  * `{key}_settlement`, `{key}_release_failed`), settlement and the
  * failure-release are mutually exclusive, and House Pass allowance is
  * consumed once per key — so even a replay racing an unexpected crash
@@ -199,7 +206,7 @@ interface AiJobRecord {
   /** How many invocations have claimed this job (1 unless taken over). */
   claimCount?: number;
   paymentMode?: CommercialMode;
-  /** Credits to hold; 0 for a House Pass analysis fully included. */
+  /** Tokens to hold; 0 for a House Pass analysis fully included. */
   reservationAmount?: number;
   /** The reservation ledger entry, when `reservationAmount > 0`. */
   reservationId?: string;
@@ -207,7 +214,12 @@ interface AiJobRecord {
   housePassId?: string;
   classification?: ClassificationResult;
   /** The usage-based charge, fixed once the provider has answered. */
+  actualTokens?: number;
+  /** Legacy (pre-Token) jobs: the charge in Credits. */
   actualCredits?: number;
+  /** The cost audit record, fixed with the charge so a replay writes
+   * exactly the same record (see `usage_cost.ts`). */
+  usageCostRecord?: UsageRecord;
   providerCompletedAt?: number;
   // Per-finding AI usage for analytics (never shown to inspectors).
   // Token fields are absent when the provider reported no usage.
@@ -227,7 +239,9 @@ interface AiJobRecord {
   reanalysisAttempt?: number;
   settledAt?: number;
   housePassUsageRecorded?: boolean;
-  creditsCharged: number;
+  tokensCharged: number;
+  /** Legacy (pre-Token) jobs: what was charged, in Credits. */
+  creditsCharged?: number;
   failureReason?: string;
   createdAt: number;
   updatedAt: number;
@@ -311,6 +325,27 @@ function analysisInProgressError(retryAfterMs?: number): HttpsError {
 }
 
 /**
+ * @param {AiJobRecord} job a stored job.
+ * @return {number} what it charged, in Tokens — a job stored before
+ *   Tokens recorded Credits, read at the same RM value.
+ */
+function chargedTokensOf(job: AiJobRecord): number {
+  if (typeof job.tokensCharged === "number") return job.tokensCharged;
+  return tokensForLegacyCredits(job.creditsCharged ?? 0,
+    LEGACY_CREDITS_PER_MYR);
+}
+
+/**
+ * @param {AiJobRecord} job a stored job.
+ * @return {number} its fixed usage charge, in Tokens (legacy-safe).
+ */
+function actualTokensOf(job: AiJobRecord): number {
+  if (typeof job.actualTokens === "number") return job.actualTokens;
+  return tokensForLegacyCredits(job.actualCredits ?? 0,
+    LEGACY_CREDITS_PER_MYR);
+}
+
+/**
  * @param {AiJobRecord} job a stored job outcome.
  * @param {number} newBalance the caller's current wallet balance.
  * @return {AnalyseFindingResult} the callable's response shape.
@@ -330,7 +365,7 @@ function toResult(
   }
   return {
     aiLevel: job.aiLevel,
-    creditsCharged: job.creditsCharged,
+    tokensCharged: chargedTokensOf(job),
     newBalance,
     paymentMode: job.paymentMode,
     classification: {
@@ -394,7 +429,7 @@ export async function claimAiJob(
         claimId: params.claimId,
         leaseExpiresAt: params.now + AI_JOB_LEASE_MS,
         claimCount: 1,
-        creditsCharged: 0,
+        tokensCharged: 0,
         createdAt: params.now,
         updatedAt: params.now,
       };
@@ -574,13 +609,14 @@ export async function handleAnalyseFinding(params: {
       job: claim.job,
       config,
       apiKey: apiKeyFor(claim.job.aiLevel),
+      clock: now,
     });
   } catch (error) {
     if (error instanceof LostJobClaimError) {
       throw analysisInProgressError();
     }
     if (error instanceof HttpsError) throw error;
-    // Anything else happened after the claim, possibly after Credits
+    // Anything else happened after the claim, possibly after Tokens
     // were reserved or settled. The job stays `in_progress` at its last
     // durable stage, so a replay of this same key reconciles it rather
     // than the client starting a new, separately charged analysis.
@@ -601,7 +637,7 @@ export async function handleAnalyseFinding(params: {
 /**
  * The per-request usage facts logged and stored on the job. Cost comes
  * from the same pricing config (and `providerCostForTokensUsd`) as the
- * Credits charge, never from separate hard-coded prices. Without a
+ * Tokens charge, never from separate hard-coded prices. Without a
  * provider usage report nothing is invented: only `usageAvailable:
  * false` is recorded.
  * @param {object} params the provider's usage, the level's pricing, and
@@ -643,7 +679,7 @@ export function providerUsageRecord(params: {
 
 /**
  * The response for a provider failure. The job is already recorded as
- * failed and its Credits released, so the outcome is definite: every
+ * failed and its Tokens released, so the outcome is definite: every
  * code used here is one the app treats as final (it shows "failed" with
  * Retry at once). `deadline-exceeded` is deliberately never used — the
  * app reads that as "outcome unknown" (its own call timing out) and
@@ -706,10 +742,14 @@ async function runClaimedJob(params: {
   job: AiJobRecord;
   config: Awaited<ReturnType<typeof loadPricingConfig>>;
   apiKey: string | undefined;
+  /** The handler's clock — times the invocation for the cost model. */
+  clock: () => number;
 }): Promise<AnalyseFindingResult> {
   const {firestore, storage, uid, input, idempotencyKey, claimId, jobRef} =
     params;
   let job = params.job;
+  // Measured function time for the cost model: this invocation's work.
+  const invocationStartedAt = params.clock();
   const aiLevel = job.aiLevel;
   const levelConfig = params.config.aiLevels[aiLevel];
   const advance = (patch: Partial<AiJobRecord>) =>
@@ -717,7 +757,7 @@ async function runClaimedJob(params: {
   const failDefinitively = async (reason: string) => {
     job = await advance({
       status: "failed",
-      creditsCharged: 0,
+      tokensCharged: 0,
       failureReason: reason,
       leaseExpiresAt: 0,
     });
@@ -728,7 +768,7 @@ async function runClaimedJob(params: {
       "failed-precondition",
       reason === "housePass" ?
         "This House Pass can't be used for this analysis right now." :
-        "You don't have enough Credits for this analysis."
+        "You don't have enough Tokens for this analysis."
     );
 
   if (job.stage === "claimed") {
@@ -744,14 +784,15 @@ async function runClaimedJob(params: {
     if (!estimate.eligible) {
       await failDefinitively("ineligible");
       throw ineligibleError(
-        estimate.reason === "insufficientCredits" ? undefined : "housePass"
+        estimate.reason === "insufficientTokens" ? undefined : "housePass"
       );
     }
     // House Pass reserves only the surcharge (0 when the level is fully
-    // included); Flex Credits always reserves the full worst-case amount.
+    // included); pay-as-you-go always reserves the full worst-case
+    // amount of Tokens.
     const reservationAmount = estimate.paymentMode === "housePass" ?
-      estimate.surchargeCredits :
-      estimate.maximumCredits;
+      estimate.surchargeTokens :
+      estimate.maximumTokens;
     const pass = estimate.paymentMode === "housePass" ?
       await findHousePassForInspection(firestore, uid, input.inspectionId) :
       null;
@@ -768,9 +809,9 @@ async function runClaimedJob(params: {
     let reservationId: string | undefined;
     if (reservationAmount > 0) {
       try {
-        const reservation = await reserveCredits(firestore, {
+        const reservation = await reserveTokens(firestore, {
           uid,
-          amountCredits: reservationAmount,
+          amountTokens: reservationAmount,
           idempotencyKey: `${idempotencyKey}_reservation`,
           inspectionId: input.inspectionId,
           findingId: input.findingId,
@@ -779,14 +820,14 @@ async function runClaimedJob(params: {
         });
         reservationId = reservation.id;
       } catch (error) {
-        if (error instanceof InsufficientCreditsError) {
+        if (error instanceof InsufficientTokensError) {
           // Nothing was reserved: the balance changed since pricing.
-          await failDefinitively("insufficientCredits");
+          await failDefinitively("insufficientTokens");
           throw ineligibleError();
         }
         throw error;
       }
-      console.info("credit_reserved", {idempotencyKey, reservationAmount});
+      console.info("tokens_reserved", {idempotencyKey, reservationAmount});
     }
     job = await advance({stage: "reserved", reservationId});
   }
@@ -867,10 +908,10 @@ async function runClaimedJob(params: {
           uid,
           reservationTransactionId: job.reservationId,
           idempotencyKey: `${idempotencyKey}_release_failed`,
-          description: "AI Analysis — Credits returned (analysis failed)",
+          description: "AI Analysis — Tokens returned (analysis failed)",
           exclusiveOf: `${idempotencyKey}_settlement`,
         });
-        console.info("credit_released", {idempotencyKey});
+        console.info("tokens_released", {idempotencyKey});
       }
       await failDefinitively(`provider_${detail.kind ?? "failed"}`);
       throw providerFailureError(error);
@@ -911,24 +952,47 @@ async function runClaimedJob(params: {
     });
 
     const reservationAmount = job.reservationAmount ?? 0;
-    const actualCredits = usage ?
-      Math.min(
-        actualCreditsForUsage(
-          aiLevel,
-          usage.inputTokens,
-          usage.outputTokens,
-          params.config
-        ),
-        reservationAmount
-      ) :
+    // The Token price from the variable-cost model: provider-reported
+    // tokens plus measured Storage bytes and function time, with the
+    // deterministic Firestore/network estimates (see usage_cost.ts).
+    const imageBytes = images.images.reduce(
+      (sum, image) => sum + (image.sourceBytes ?? 0),
+      0
+    );
+    const analysisUsage = actualAnalysisUsage({
+      aiLevel,
+      providerUsage: usage,
+      imageBytes,
+      imageCount: images.images.length,
+      functionDurationMs: params.clock() - invocationStartedAt,
+    }, params.config);
+    const cost = priceUsage(analysisUsage, params.config);
+    // Never above what was reserved (what the inspector approved). With
+    // no provider usage report the reserved amount stands, as before.
+    const actualTokens = usage ?
+      Math.min(cost.tokensCharged, reservationAmount) :
       reservationAmount;
+    const usageCostRecord = buildUsageRecord({
+      usageId: idempotencyKey,
+      userId: uid,
+      inspectionId: input.inspectionId,
+      findingId: input.findingId,
+      operationType: "aiAnalysis",
+      usage: analysisUsage,
+      cost,
+      tokensCharged: job.reservationId ? actualTokens : 0,
+      usdToMyrRate: params.config.usdToMyrRate,
+      pricingVersion: params.config.version,
+      now: Date.now(),
+    });
     // The provider's answer and the exact charge are stored before any
     // money moves: from here on a replay never calls the provider again
     // and never refunds.
     job = await advance({
       stage: "providerCompleted",
       classification: normalized,
-      actualCredits,
+      actualTokens,
+      usageCostRecord,
       providerCompletedAt: Date.now(),
       ...usageRecord,
     });
@@ -939,20 +1003,26 @@ async function runClaimedJob(params: {
       await settleReservation(firestore, {
         uid,
         reservationTransactionId: job.reservationId,
-        actualCredits: job.actualCredits ?? 0,
+        actualTokens: actualTokensOf(job),
         idempotencyKey: `${idempotencyKey}_settlement`,
+        // The cost audit record, written in the same transaction.
+        usageRecord: job.usageCostRecord,
         description: `AI Analysis — ${levelConfig.label}`,
         exclusiveOf: `${idempotencyKey}_release_failed`,
       });
-      console.info("credit_settled", {
+      console.info("tokens_settled", {
         idempotencyKey,
-        actualCredits: job.actualCredits,
+        actualTokens: job.actualTokens,
       });
     }
     job = await advance({stage: "settled", settledAt: Date.now()});
   }
 
   if (job.stage === "settled") {
+    // No Tokens moved (House Pass included): still record the cost, once.
+    if (!job.reservationId && job.usageCostRecord) {
+      await recordUsageOnce(firestore, uid, job.usageCostRecord);
+    }
     let housePassUsageRecorded = false;
     if (job.paymentMode === "housePass" && job.housePassId) {
       await recordHousePassUsage(
@@ -966,12 +1036,12 @@ async function runClaimedJob(params: {
     job = await advance({
       status: "succeeded",
       housePassUsageRecorded,
-      creditsCharged: job.reservationId ? job.actualCredits ?? 0 : 0,
+      tokensCharged: job.reservationId ? actualTokensOf(job) : 0,
       leaseExpiresAt: 0,
     });
     console.info("ai_job_completed", {
       idempotencyKey,
-      creditsCharged: job.creditsCharged,
+      tokensCharged: job.tokensCharged,
     });
   }
 

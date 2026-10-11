@@ -20,7 +20,7 @@ const NOTE = "holo wall tile PRIVATE-NOTE-MARKER";
 
 /**
  * @return {{db: Firestore, store: Map<string, Record<string, unknown>>}}
- *   a fake Firestore with one owned finding and Credits.
+ *   a fake Firestore with one owned finding and Tokens.
  */
 function seeded() {
   const {db, store} = fakeFirestore({
@@ -28,7 +28,7 @@ function seeded() {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: 1000,
+      balanceTokens: 10_000_000,
       updatedAt: 0,
     },
   });
@@ -144,7 +144,7 @@ async (t) => {
   assert.equal(bodies.length, 1);
   assert.equal(first.classification.needsReview, true);
   assert.equal(first.classification.catalogueEntryId, undefined);
-  assert.ok(first.creditsCharged > 0, "the answered request is charged");
+  assert.ok(first.tokensCharged > 0, "the answered request is charged");
   const job = store.get(`users/${UID}/aiJobs/key_unrelated`)!;
   const classification = job.classification as Record<string, unknown>;
   assert.equal(classification.isRelevantInspectionImage, false);
@@ -152,7 +152,7 @@ async (t) => {
 
   const replay = await analyse(db, "key_unrelated");
   assert.equal(bodies.length, 1, "a replay never calls the provider");
-  assert.equal(replay.creditsCharged, first.creditsCharged);
+  assert.equal(replay.tokensCharged, first.tokensCharged);
 });
 
 test("7. a low-confidence answer becomes needsReview without any " +
@@ -226,7 +226,7 @@ test("reanalysis: a fresh key is a genuinely new (charged) request; the " +
 
   const again = await analyse(db, "key_reanalyse_1", 1);
   assert.equal(bodies.length, 2, "intentional reanalysis is not blocked");
-  assert.ok(again.creditsCharged > 0);
+  assert.ok(again.tokensCharged > 0);
   assert.equal(first.classification.detectedComponent, "Wall Tile");
   assert.equal(again.classification.noteImageAgreement, "neutral");
 

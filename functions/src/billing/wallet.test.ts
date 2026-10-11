@@ -3,25 +3,25 @@ import {test} from "node:test";
 import type {Firestore} from "firebase-admin/firestore";
 import {fakeFirestore} from "./fakes";
 import {
-  InsufficientCreditsError,
+  InsufficientTokensError,
   getWalletBalance,
   recordAdjustment,
   recordHousePassPurchase,
   recordTopUp,
   releaseReservation,
-  reserveCredits,
+  reserveTokens,
   settleReservation,
 } from "./wallet";
 
 /**
- * @param {number} balanceCredits the seeded starting balance.
+ * @param {number} balanceTokens the seeded starting balance.
  * @return {object} a fake wallet pre-seeded for `uid_1`.
  */
-function seededWallet(balanceCredits: number) {
+function seededWallet(balanceTokens: number) {
   const {db, store} = fakeFirestore({
     "users/uid_1/wallet/main": {
       userId: "uid_1",
-      balanceCredits,
+      balanceTokens,
       updatedAt: 0,
     },
   });
@@ -35,12 +35,12 @@ test("getWalletBalance returns 0 for a wallet that's never been " +
   assert.equal(balance, 0);
 });
 
-test("recordTopUp credits the wallet and is retryable via " +
+test("recordTopUp Tokens the wallet and is retryable via " +
   "idempotencyKey without double-crediting", async () => {
   const {db} = seededWallet(0);
   const params = {
     uid: "uid_1",
-    amountCredits: 1000,
+    amountTokens: 1000,
     idempotencyKey: "topup_1",
     externalPaymentRef: "sandbox_ref_1",
     description: "RM10 top-up",
@@ -52,12 +52,12 @@ test("recordTopUp credits the wallet and is retryable via " +
   assert.equal(await getWalletBalance(db, "uid_1"), 1000);
 });
 
-test("reserveCredits debits the wallet by the full reserved amount",
+test("reserveTokens debits the wallet by the full reserved amount",
   async () => {
     const {db} = seededWallet(500);
-    await reserveCredits(db, {
+    await reserveTokens(db, {
       uid: "uid_1",
-      amountCredits: 200,
+      amountTokens: 200,
       idempotencyKey: "res_1",
       inspectionId: "inspection_1",
       findingId: "finding_1",
@@ -67,49 +67,49 @@ test("reserveCredits debits the wallet by the full reserved amount",
     assert.equal(await getWalletBalance(db, "uid_1"), 300);
   });
 
-test("reserveCredits throws InsufficientCreditsError and never touches " +
+test("reserveTokens throws InsufficientTokensError and never touches " +
   "the balance when the wallet can't cover the reservation", async () => {
   const {db} = seededWallet(50);
   await assert.rejects(
     () =>
-      reserveCredits(db, {
+      reserveTokens(db, {
         uid: "uid_1",
-        amountCredits: 200,
+        amountTokens: 200,
         idempotencyKey: "res_1",
         inspectionId: "inspection_1",
         findingId: "finding_1",
         aiLevel: "smart",
         description: "AI analysis (smart) — reserved",
       }),
-    InsufficientCreditsError
+    InsufficientTokensError
   );
   assert.equal(await getWalletBalance(db, "uid_1"), 50);
 });
 
-test("a repeated reserveCredits call with the same idempotencyKey " +
+test("a repeated reserveTokens call with the same idempotencyKey " +
   "never debits the wallet twice (duplicate-tap protection)", async () => {
   const {db} = seededWallet(500);
   const params = {
     uid: "uid_1",
-    amountCredits: 200,
+    amountTokens: 200,
     idempotencyKey: "res_1",
     inspectionId: "inspection_1",
     findingId: "finding_1",
     aiLevel: "smart" as const,
     description: "AI analysis (smart) — reserved",
   };
-  await reserveCredits(db, params);
-  await reserveCredits(db, params);
-  await reserveCredits(db, params);
+  await reserveTokens(db, params);
+  await reserveTokens(db, params);
+  await reserveTokens(db, params);
   assert.equal(await getWalletBalance(db, "uid_1"), 300);
 });
 
 test("settleReservation refunds the unused portion and leaves the " +
   "balance reduced by exactly the actual charge", async () => {
   const {db} = seededWallet(500);
-  const reservation = await reserveCredits(db, {
+  const reservation = await reserveTokens(db, {
     uid: "uid_1",
-    amountCredits: 200,
+    amountTokens: 200,
     idempotencyKey: "res_1",
     inspectionId: "inspection_1",
     findingId: "finding_1",
@@ -120,21 +120,21 @@ test("settleReservation refunds the unused portion and leaves the " +
   await settleReservation(db, {
     uid: "uid_1",
     reservationTransactionId: reservation.id,
-    actualCredits: 120,
+    actualTokens: 120,
     idempotencyKey: "res_1_settle",
     description: "AI analysis (smart)",
   });
-  // 500 - 120 actual == 380, i.e. the 80 unused Credits were returned.
+  // 500 - 120 actual == 380, i.e. the 80 unused Tokens were returned.
   assert.equal(await getWalletBalance(db, "uid_1"), 380);
 });
 
 test("settleReservation never charges more than what was originally " +
-  "reserved, even if actualCredits is (incorrectly) reported higher",
+  "reserved, even if actualTokens is (incorrectly) reported higher",
 async () => {
   const {db} = seededWallet(500);
-  const reservation = await reserveCredits(db, {
+  const reservation = await reserveTokens(db, {
     uid: "uid_1",
-    amountCredits: 200,
+    amountTokens: 200,
     idempotencyKey: "res_1",
     inspectionId: "inspection_1",
     findingId: "finding_1",
@@ -144,7 +144,7 @@ async () => {
   await settleReservation(db, {
     uid: "uid_1",
     reservationTransactionId: reservation.id,
-    actualCredits: 9999,
+    actualTokens: 9999,
     idempotencyKey: "res_1_settle",
     description: "AI analysis (smart)",
   });
@@ -155,9 +155,9 @@ async () => {
 test("a repeated settleReservation call with the same idempotencyKey " +
   "never settles twice", async () => {
   const {db} = seededWallet(500);
-  const reservation = await reserveCredits(db, {
+  const reservation = await reserveTokens(db, {
     uid: "uid_1",
-    amountCredits: 200,
+    amountTokens: 200,
     idempotencyKey: "res_1",
     inspectionId: "inspection_1",
     findingId: "finding_1",
@@ -167,7 +167,7 @@ test("a repeated settleReservation call with the same idempotencyKey " +
   const settleParams = {
     uid: "uid_1",
     reservationTransactionId: reservation.id,
-    actualCredits: 120,
+    actualTokens: 120,
     idempotencyKey: "res_1_settle",
     description: "AI analysis (smart)",
   };
@@ -177,11 +177,11 @@ test("a repeated settleReservation call with the same idempotencyKey " +
 });
 
 test("releaseReservation refunds the full reserved amount — a failed " +
-  "AI job must never cost the inspector any Credits", async () => {
+  "AI job must never cost the inspector any Tokens", async () => {
   const {db} = seededWallet(500);
-  const reservation = await reserveCredits(db, {
+  const reservation = await reserveTokens(db, {
     uid: "uid_1",
-    amountCredits: 200,
+    amountTokens: 200,
     idempotencyKey: "res_1",
     inspectionId: "inspection_1",
     findingId: "finding_1",
@@ -197,12 +197,12 @@ test("releaseReservation refunds the full reserved amount — a failed " +
   assert.equal(await getWalletBalance(db, "uid_1"), 500);
 });
 
-test("recordHousePassPurchase never moves Credits — House Pass is a " +
+test("recordHousePassPurchase never moves Tokens — House Pass is a " +
   "separate fixed-price product", async () => {
   const {db} = seededWallet(0);
   await recordHousePassPurchase(db, {
     uid: "uid_1",
-    amountCredits: 3000,
+    amountTokens: 3000,
     idempotencyKey: "hp_1",
     inspectionId: "inspection_1",
     externalPaymentRef: "sandbox_ref_2",
@@ -212,19 +212,19 @@ test("recordHousePassPurchase never moves Credits — House Pass is a " +
 });
 
 test("recordAdjustment can credit or debit and reflects the sign of " +
-  "amountCredits", async () => {
+  "amountTokens", async () => {
   const {db} = seededWallet(100);
   await recordAdjustment(db, {
     uid: "uid_1",
-    amountCredits: 50,
+    amountTokens: 50,
     idempotencyKey: "adj_1",
-    description: "goodwill Credits",
+    description: "goodwill Tokens",
   });
   assert.equal(await getWalletBalance(db, "uid_1"), 150);
 
   await recordAdjustment(db, {
     uid: "uid_1",
-    amountCredits: -30,
+    amountTokens: -30,
     idempotencyKey: "adj_2",
     description: "correction",
   });

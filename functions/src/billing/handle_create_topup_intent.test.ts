@@ -3,8 +3,7 @@ import {test} from "node:test";
 import type {Firestore} from "firebase-admin/firestore";
 import {fakeFirestore} from "./fakes";
 import {handleCreateTopUpIntent} from "./handle_create_topup_intent";
-import {myrToCredits} from "./pricing";
-import {DEFAULT_PRICING_CONFIG} from "./pricing_config";
+import {myrToTokens} from "./pricing";
 
 /**
  * Regression coverage for the deployed `createTopUpIntent` bug: a
@@ -20,7 +19,7 @@ test("createTopUpIntent succeeds for a normal Top Up with no " +
   const {db, store} = fakeFirestore();
   const firestore = db as unknown as Firestore;
 
-  const {intentId, amountMyr, creditsAmount} = await handleCreateTopUpIntent({
+  const {intentId, amountMyr, tokensAmount} = await handleCreateTopUpIntent({
     auth: {uid: "uid_1"},
     data: {amountMyr: 30, idempotencyKey: "topup_1"},
     firestore,
@@ -28,7 +27,7 @@ test("createTopUpIntent succeeds for a normal Top Up with no " +
 
   assert.ok(intentId.length > 0);
   assert.equal(amountMyr, 30);
-  assert.equal(creditsAmount, myrToCredits(30, DEFAULT_PRICING_CONFIG));
+  assert.equal(tokensAmount, myrToTokens(30));
 
   const stored = store.get(`users/uid_1/paymentIntents/${intentId}`);
   assert.ok(stored, "the intent must have been persisted");
@@ -56,5 +55,5 @@ test("a retried createTopUpIntent call (same idempotencyKey) returns " +
   });
 
   assert.equal(first.intentId, second.intentId);
-  assert.equal(first.creditsAmount, second.creditsAmount);
+  assert.equal(first.tokensAmount, second.tokensAmount);
 });

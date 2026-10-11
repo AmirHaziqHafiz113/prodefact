@@ -6,14 +6,14 @@ import type {Storage} from "firebase-admin/storage";
 import {handleAnalyseFinding} from "./handle_analyse_finding";
 import {fakeFirestore} from "./fakes";
 import {getWalletBalance} from "./wallet";
-import {actualCreditsForUsage} from "./pricing";
+import {actualAnalysisTokens} from "./pricing";
 import {DEFAULT_PRICING_CONFIG} from "./pricing_config";
 import {AiLevel} from "./types";
 
 const noStorage = {} as unknown as Storage;
 
 /**
- * @param {number} balanceCredits the seeded wallet balance.
+ * @param {number} balanceTokens the seeded wallet balance.
  * @param {Record<string, unknown>} [inspection] fields to seed on the
  *   inspection doc (e.g. `{commercialMode: "housePass"}`).
  * @param {Record<string, unknown>} [housePass] a House Pass doc to
@@ -23,7 +23,7 @@ const noStorage = {} as unknown as Storage;
  *   against documents the callable itself never returns.
  */
 function seededFirestore(
-  balanceCredits: number,
+  balanceTokens: number,
   inspection: Record<string, unknown> = {},
   housePass?: Record<string, unknown>
 ) {
@@ -32,7 +32,7 @@ function seededFirestore(
     "users/uid_1/inspections/inspection_1": inspection,
     "users/uid_1/wallet/main": {
       userId: "uid_1",
-      balanceCredits,
+      balanceTokens,
       updatedAt: 0,
     },
   };
@@ -139,7 +139,7 @@ function okResponse(usage?: {
 
 test("an unauthenticated request is rejected before anything is " +
   "touched", async () => {
-  const {firestore} = seededFirestore(1000);
+  const {firestore} = seededFirestore(10_000_000);
   await assert.rejects(
     () =>
       handleAnalyseFinding({
@@ -157,7 +157,7 @@ test("an unauthenticated request is rejected before anything is " +
   );
 });
 
-test("insufficient Credits blocks the request before the AI provider " +
+test("insufficient Tokens blocks the request before the AI provider " +
   "is ever called — no reservation, no charge", async (t) => {
   const calls = stubOpenAi(t, () => okResponse());
   const {firestore} = seededFirestore(0); // no balance at all
@@ -181,14 +181,14 @@ test("insufficient Credits blocks the request before the AI provider " +
   assert.equal(await getWalletBalance(firestore, "uid_1"), 0);
 });
 
-test("a successful Flex Credits analysis reserves the maximum, then " +
+test("a successful pay-as-you-go Tokens analysis reserves the maximum, then " +
   "settles to the real usage-based charge and refunds the unused " +
   "portion", async (t) => {
   stubOpenAi(
     t,
     () => okResponse({prompt_tokens: 1500, completion_tokens: 100})
   );
-  const {firestore} = seededFirestore(10_000);
+  const {firestore} = seededFirestore(10_000_000);
 
   const result = await handleAnalyseFinding({
     auth: {uid: "uid_1"},
@@ -196,28 +196,32 @@ test("a successful Flex Credits analysis reserves the maximum, then " +
     firestore,
     storage: noStorage,
     apiKeys: {openai: "fake-key"},
+    // A fixed clock: the measured function time is 0, so the charge is
+    // exactly reproducible.
+    now: () => 1_000_000,
   });
 
-  const expectedCharge = actualCreditsForUsage(
-    "smart",
-    1500,
-    100,
-    DEFAULT_PRICING_CONFIG
-  );
-  assert.equal(result.creditsCharged, expectedCharge);
-  assert.equal(result.newBalance, 10_000 - expectedCharge);
+  const expectedCharge = actualAnalysisTokens({
+    aiLevel: "smart",
+    providerUsage: {inputTokens: 1500, outputTokens: 100},
+    imageBytes: 0,
+    imageCount: 0,
+    functionDurationMs: 0,
+  }, DEFAULT_PRICING_CONFIG);
+  assert.equal(result.tokensCharged, expectedCharge);
+  assert.equal(result.newBalance, 10_000_000 - expectedCharge);
   assert.equal(
     result.classification.catalogueEntryId,
     "wall.concrete_wall.05"
   );
   const balance = await getWalletBalance(firestore, "uid_1");
-  assert.equal(balance, 10_000 - expectedCharge);
+  assert.equal(balance, 10_000_000 - expectedCharge);
 });
 
 test("a failed AI provider call releases the reservation in full — the " +
   "inspector is never charged for a failed analysis", async (t) => {
   stubOpenAi(t, () => new Response("server error", {status: 500}));
-  const {firestore} = seededFirestore(10_000);
+  const {firestore} = seededFirestore(100_000_000);
 
   await assert.rejects(
     () =>
@@ -241,7 +245,7 @@ test("a failed AI provider call releases the reservation in full — the " +
       return true;
     }
   );
-  assert.equal(await getWalletBalance(firestore, "uid_1"), 10_000);
+  assert.equal(await getWalletBalance(firestore, "uid_1"), 100_000_000);
 });
 
 test("a duplicate call with the same idempotencyKey never re-invokes " +
@@ -251,7 +255,7 @@ async (t) => {
     t,
     () => okResponse({prompt_tokens: 1500, completion_tokens: 100})
   );
-  const {firestore} = seededFirestore(10_000);
+  const {firestore} = seededFirestore(100_000_000);
   const request = {
     auth: {uid: "uid_1"},
     data: payload("smart", "job_1"),
@@ -264,18 +268,18 @@ async (t) => {
   const second = await handleAnalyseFinding(request);
 
   assert.equal(calls(), 1); // the provider was only ever invoked once
-  assert.equal(first.creditsCharged, second.creditsCharged);
+  assert.equal(first.tokensCharged, second.tokensCharged);
   assert.equal(second.newBalance, first.newBalance);
 });
 
 test("a House Pass finding fully within the included tier charges 0 " +
-  "Credits and consumes one unit of the pass's allowance", async (t) => {
+  "Tokens and consumes one unit of the pass's allowance", async (t) => {
   stubOpenAi(
     t,
     () => okResponse({prompt_tokens: 1500, completion_tokens: 100})
   );
   const {firestore, store} = seededFirestore(
-    10_000,
+    100_000_000,
     {commercialMode: "housePass"},
     housePassDoc("active", "smart", 0, 5)
   );
@@ -288,11 +292,11 @@ test("a House Pass finding fully within the included tier charges 0 " +
     apiKeys: {openai: "fake-key"},
   });
 
-  assert.equal(result.creditsCharged, 0);
+  assert.equal(result.tokensCharged, 0);
   assert.equal(result.paymentMode, "housePass");
-  // Wallet Credits are untouched — House Pass usage isn't a Credits
+  // Wallet Tokens are untouched — House Pass usage isn't a Tokens
   // transaction at all.
-  assert.equal(await getWalletBalance(firestore, "uid_1"), 10_000);
+  assert.equal(await getWalletBalance(firestore, "uid_1"), 100_000_000);
 
   const pass = store.get("users/uid_1/housePasses/hp_1") as {
     allowanceUsed: number;
@@ -301,13 +305,13 @@ test("a House Pass finding fully within the included tier charges 0 " +
 });
 
 test("a House Pass finding above the included tier charges only the " +
-  "surcharge in Credits", async (t) => {
+  "surcharge in Tokens", async (t) => {
   stubOpenAi(
     t,
     () => okResponse({prompt_tokens: 1500, completion_tokens: 100})
   );
   const {firestore} = seededFirestore(
-    10_000,
+    100_000_000,
     {commercialMode: "housePass"},
     housePassDoc("active", "smart", 0, 5)
   );
@@ -320,18 +324,18 @@ test("a House Pass finding above the included tier charges only the " +
     apiKeys: {openai: "fake-key"},
   });
 
-  assert.ok(result.creditsCharged > 0);
-  assert.equal(result.newBalance, 10_000 - result.creditsCharged);
+  assert.ok(result.tokensCharged > 0);
+  assert.equal(result.newBalance, 100_000_000 - result.tokensCharged);
 });
 
 test("a House Pass with its allowance already reached falls back to " +
-  "Flex Credits rather than blocking the analysis", async (t) => {
+  "pay-as-you-go Tokens rather than blocking the analysis", async (t) => {
   stubOpenAi(
     t,
     () => okResponse({prompt_tokens: 1500, completion_tokens: 100})
   );
   const {firestore} = seededFirestore(
-    10_000,
+    100_000_000,
     {commercialMode: "housePass"},
     housePassDoc("allowanceReached", "smart", 5, 5)
   );
@@ -345,12 +349,12 @@ test("a House Pass with its allowance already reached falls back to " +
   });
 
   assert.equal(result.paymentMode, "flexCredits");
-  assert.ok(result.creditsCharged > 0);
+  assert.ok(result.tokensCharged > 0);
 });
 
 test("with no OpenAI key configured, the request fails clearly " +
   "instead of throwing deep inside the provider gateway", async () => {
-  const {firestore} = seededFirestore(10_000);
+  const {firestore} = seededFirestore(100_000_000);
   await assert.rejects(
     () =>
       handleAnalyseFinding({

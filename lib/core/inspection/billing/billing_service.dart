@@ -7,7 +7,7 @@ import 'payment_intent.dart';
 
 /// Provider-neutral commercial/billing backend abstraction — the
 /// Flutter-side counterpart to `AiInspectionService`. Nothing in the
-/// app computes a price, grants Credits, or activates a House Pass
+/// app computes a price, grants Tokens, or activates a House Pass
 /// itself; every one of those is backend-authoritative (see
 /// docs/commercial_model.md). No implementation of this interface may
 /// ever fabricate a successful payment outside a debug/test sandbox
@@ -37,7 +37,7 @@ abstract class BillingService {
   });
 
   /// Creates a `pending` Top Up payment intent for [amountMyr] — grants
-  /// no Credits by itself.
+  /// no Tokens by itself.
   Future<TopUpIntent> createTopUpIntent(double amountMyr);
 
   /// Creates a `pending` House Pass purchase intent for [inspectionId]

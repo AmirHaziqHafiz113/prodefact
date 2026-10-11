@@ -105,7 +105,7 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.autoCapture) {
+    if (widget.autoCapture && !ref.read(inspectionReadOnlyProvider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _takePhoto(widget.sectionId, source: EvidenceSource.camera);
@@ -131,6 +131,7 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     final status =
         ref.watch(sectionStatusesProvider)[section.id] ??
         SectionStatus.notStarted;
+    final readOnly = ref.watch(inspectionReadOnlyProvider);
     final areaFindings = ref
         .watch(inspectionFindingsProvider)
         .where((f) => f.sectionId == section.id)
@@ -140,16 +141,20 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
       appBar: AppBar(
         title: Text(section.name),
         actions: [
-          IconButton(
-            tooltip: section.note == null ? 'Add area note' : 'Edit area note',
-            icon: Icon(
-              section.note == null
-                  ? Icons.note_add_outlined
-                  : Icons.sticky_note_2,
+          if (!readOnly) ...[
+            IconButton(
+              tooltip: section.note == null
+                  ? 'Add area note'
+                  : 'Edit area note',
+              icon: Icon(
+                section.note == null
+                    ? Icons.note_add_outlined
+                    : Icons.sticky_note_2,
+              ),
+              onPressed: () => _editAreaNote(context, ref, section),
             ),
-            onPressed: () => _editAreaNote(context, ref, section),
-          ),
-          const PhotoGuideAction(),
+            const PhotoGuideAction(),
+          ],
         ],
       ),
       body: ListView(
@@ -160,6 +165,13 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
           AppSpacing.xl,
         ),
         children: [
+          if (readOnly)
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: AppInlineWarningBanner(
+                message: 'Completed inspection — view only.',
+              ),
+            ),
           _AreaHeader(section: section, findings: areaFindings),
           if (section.note != null) ...[
             const SizedBox(height: AppSpacing.md),
@@ -196,16 +208,17 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
           // follows from recording a finding; "Completed" is this
           // explicit action, which also covers an area inspected and
           // found to have no defects.
-          _AreaCompletionControl(
-            status: status,
-            hasFindings: areaFindings.isNotEmpty,
-            onMarkComplete: () => ref
-                .read(sectionStatusesProvider.notifier)
-                .setStatus(section.id, SectionStatus.completed),
-            onReopen: () => ref
-                .read(sectionStatusesProvider.notifier)
-                .setStatus(section.id, SectionStatus.inProgress),
-          ),
+          if (!readOnly)
+            _AreaCompletionControl(
+              status: status,
+              hasFindings: areaFindings.isNotEmpty,
+              onMarkComplete: () => ref
+                  .read(sectionStatusesProvider.notifier)
+                  .setStatus(section.id, SectionStatus.completed),
+              onReopen: () => ref
+                  .read(sectionStatusesProvider.notifier)
+                  .setStatus(section.id, SectionStatus.inProgress),
+            ),
           const SizedBox(height: AppSpacing.xl),
           AppSectionHeader(title: 'Findings (${areaFindings.length})'),
           if (areaFindings.length > 1)
@@ -217,12 +230,15 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
               ),
             ),
           if (areaFindings.isEmpty)
-            const AppEmptyView(
+            AppEmptyView(
               icon: Icons.add_a_photo_outlined,
-              title: 'No findings in this area yet',
-              message:
-                  'Tap "Take Defect Photo" whenever you spot a defect. '
-                  'Each photo becomes its own finding.',
+              title: readOnly
+                  ? 'No findings in this area'
+                  : 'No findings in this area yet',
+              message: readOnly
+                  ? 'Nothing was recorded here.'
+                  : 'Tap "Take Defect Photo" whenever you spot a defect. '
+                        'Each photo becomes its own finding.',
             )
           else
             for (final unit in orderFindings(areaFindings, sort: _sort))
@@ -237,23 +253,25 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
               ),
         ],
       ),
-      bottomNavigationBar: AppPrimaryActionBar(
-        primary: FilledButton.icon(
-          onPressed: _isCapturing ? null : () => _takePhoto(section.id),
-          icon: _isCapturing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.photo_camera),
-          label: Text(
-            areaFindings.isEmpty
-                ? 'Take Defect Photo'
-                : 'Take Another Defect Photo',
-          ),
-        ),
-      ),
+      bottomNavigationBar: readOnly
+          ? null
+          : AppPrimaryActionBar(
+              primary: FilledButton.icon(
+                onPressed: _isCapturing ? null : () => _takePhoto(section.id),
+                icon: _isCapturing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.photo_camera),
+                label: Text(
+                  areaFindings.isEmpty
+                      ? 'Take Defect Photo'
+                      : 'Take Another Defect Photo',
+                ),
+              ),
+            ),
     );
   }
 
@@ -1049,60 +1067,61 @@ class _FindingCard extends ConsumerWidget {
                       onPressed: openDetail,
                       child: const Text('Details'),
                     ),
-                    PopupMenuButton<_FindingAction>(
-                      icon: const Icon(Icons.more_vert),
-                      tooltip: 'More actions',
-                      onSelected: (action) => switch (action) {
-                        _FindingAction.editNote => editFindingNote(
-                          context,
-                          ref,
-                          finding,
-                        ),
-                        _FindingAction.reanalyse => showReanalyseDialog(
-                          context: context,
-                          ref: ref,
-                          finding: finding,
-                        ),
-                        _FindingAction.remove => confirmAndDeleteFinding(
-                          context,
-                          ref,
-                          finding,
-                        ),
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: _FindingAction.editNote,
-                          child: ListTile(
-                            leading: Icon(Icons.edit_outlined),
-                            title: Text('Edit note'),
-                            contentPadding: EdgeInsets.zero,
+                    if (!ref.watch(inspectionReadOnlyProvider))
+                      PopupMenuButton<_FindingAction>(
+                        icon: const Icon(Icons.more_vert),
+                        tooltip: 'More actions',
+                        onSelected: (action) => switch (action) {
+                          _FindingAction.editNote => editFindingNote(
+                            context,
+                            ref,
+                            finding,
                           ),
-                        ),
-                        // Any finding with a photo can be analysed again
-                        // on request — passed, needs review, failed or
-                        // corrected — except while AI is already working
-                        // on it.
-                        PopupMenuItem(
-                          value: _FindingAction.reanalyse,
-                          enabled:
-                              finding.isAiEligible &&
-                              !aiFindingStatusIsInFlight(finding.aiStatus),
-                          child: const ListTile(
-                            leading: Icon(Icons.refresh),
-                            title: Text('Reanalyse'),
-                            contentPadding: EdgeInsets.zero,
+                          _FindingAction.reanalyse => showReanalyseDialog(
+                            context: context,
+                            ref: ref,
+                            finding: finding,
                           ),
-                        ),
-                        const PopupMenuItem(
-                          value: _FindingAction.remove,
-                          child: ListTile(
-                            leading: Icon(Icons.delete_outline),
-                            title: Text('Delete finding'),
-                            contentPadding: EdgeInsets.zero,
+                          _FindingAction.remove => confirmAndDeleteFinding(
+                            context,
+                            ref,
+                            finding,
                           ),
-                        ),
-                      ],
-                    ),
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: _FindingAction.editNote,
+                            child: ListTile(
+                              leading: Icon(Icons.edit_outlined),
+                              title: Text('Edit note'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          // Any finding with a photo can be analysed again
+                          // on request — passed, needs review, failed or
+                          // corrected — except while AI is already working
+                          // on it.
+                          PopupMenuItem(
+                            value: _FindingAction.reanalyse,
+                            enabled:
+                                finding.isAiEligible &&
+                                !aiFindingStatusIsInFlight(finding.aiStatus),
+                            child: const ListTile(
+                              leading: Icon(Icons.refresh),
+                              title: Text('Reanalyse'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: _FindingAction.remove,
+                            child: ListTile(
+                              leading: Icon(Icons.delete_outline),
+                              title: Text('Delete finding'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
                 Padding(
@@ -1367,12 +1386,12 @@ class FindingAiStatusLine extends ConsumerWidget {
         );
       case AiFindingStatus.failed:
         // A zero-balance, Flex-only inspection can't analyse anything
-        // until Credits are added — say so, with Top Up, rather than a
+        // until Tokens are added — say so, with Top Up, rather than a
         // bare failure. Never claimed while the House Pass status is
         // still loading, or while a pass is active.
         final resolvedBalance =
             ref.watch(walletBalanceProvider).value ??
-            ref.watch(walletCacheProvider).value?.balanceCredits;
+            ref.watch(walletCacheProvider).value?.balanceTokens;
         final sessionId = ref.watch(activeSessionProvider)?.id;
         final passStatus = sessionId == null
             ? null
@@ -1390,7 +1409,7 @@ class FindingAiStatusLine extends ConsumerWidget {
                   : Icons.error_outline,
               color: waitingForCredits ? AppColors.textMuted : AppColors.danger,
               text: waitingForCredits
-                  ? 'AI: Waiting for Credits'
+                  ? 'AI: Waiting for Tokens'
                   : 'AI analysis failed',
             ),
             // Wrap, not Row: on a narrow card both actions must stay

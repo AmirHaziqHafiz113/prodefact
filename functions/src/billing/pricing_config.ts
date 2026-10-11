@@ -1,6 +1,11 @@
 import type {Firestore} from "firebase-admin/firestore";
 import {AiLevel} from "./types";
 import {resolvePaymentsMode} from "./payments_mode";
+import {LEGACY_CREDITS_PER_MYR} from "./tokens";
+import {
+  DEFAULT_INFRASTRUCTURE_RATES,
+  InfrastructureRates,
+} from "./usage_cost";
 
 /**
  * The single, centralized, server-side pricing configuration — see
@@ -22,9 +27,9 @@ export interface AiLevelConfig {
    * customer charge; never returned to the client. */
   providerCostPerKInputTokensUsd: number;
   providerCostPerKOutputTokensUsd: number;
-  /** A conservative worst-case token estimate for this level, used to
-   * compute `maximumCredits` (the "up to N Credits" figure) before the
-   * request actually runs. */
+  /** A conservative worst-case provider-token estimate for this level,
+   * used to compute `maximumTokens` (the "up to N Tokens" figure) before
+   * the request actually runs. */
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
   label: string;
@@ -41,7 +46,7 @@ export interface HousePassConfig {
    * `HousePass.allowanceConfigVersion`). */
   version: number;
   /** The fair-use allowance for the included AI level, in "included
-   * findings" — deliberately simple (a count, not a Credits budget) so
+   * findings" — deliberately simple (a count, not a Token budget) so
    * it's easy for a non-technical operator to reason about and
    * configure. Production launch requires an explicit value here; see
    * `environment`. */
@@ -63,20 +68,28 @@ export interface PricingConfig {
    * change — recorded on every priced transaction so historical
    * transactions remain interpretable even after the config changes. */
   version: number;
-  /** How many Credits one Malaysian Ringgit buys — e.g. 100 means
-   * "100 Credits = RM1". The sole place this ratio is defined. */
-  creditsPerMyr: number;
-  /** Customer price = provider cost × this multiplier. 2.0 means a
-   * 100% markup over provider cost — see docs/commercial_model.md
-   * ("provider cost × 2 = 100% markup, not 100% gross margin"). */
+  /** The Credits-per-RM rate legacy (pre-Token) balances were sold at —
+   * read from the old `creditsPerMyr` field. Used ONLY to convert a
+   * legacy Credits balance into Tokens of the same RM value; the Token
+   * rate itself is fixed (`TOKENS_PER_MYR`, 1,000,000 = RM1). */
+  legacyCreditsPerMyr: number;
+  /** Customer price = variable cost × this multiplier. 2.0 means a 100%
+   * MARKUP over cost (= 50% gross margin, never "100% gross margin"). */
   markupMultiplier: number;
+  /** RM per USD, for provider and Google Cloud list prices (both quoted
+   * in USD). 1.0 keeps the pre-Token assumption that USD cost ≈ RM cost;
+   * an operator must set the real rate in `pricing/config` — see
+   * docs/token_billing.md. */
+  usdToMyrRate: number;
+  /** Google Cloud / Firebase unit prices for the variable-cost model. */
+  infrastructureRates: InfrastructureRates;
   aiLevels: Record<AiLevel, AiLevelConfig>;
   housePass: HousePassConfig;
   /** Suggested top-up amounts, in MYR, for the Top Up screen. */
   topUpPackagesMyr: number[];
-  /** Below this Credits balance, the app shows a non-blocking
+  /** Below this Token balance, the app shows a non-blocking
    * low-balance notice. */
-  lowBalanceThresholdCredits: number;
+  lowBalanceThresholdTokens: number;
 }
 
 /**
@@ -90,8 +103,10 @@ export interface PricingConfig {
  */
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   version: 0,
-  creditsPerMyr: 100,
+  legacyCreditsPerMyr: LEGACY_CREDITS_PER_MYR,
   markupMultiplier: 2.0,
+  usdToMyrRate: 1.0,
+  infrastructureRates: DEFAULT_INFRASTRUCTURE_RATES,
   aiLevels: {
     // Lineup v3 (2026-10-01). Provider prices per 1M input / output
     // tokens from OpenAI's model pages: GPT-6 Luna $0.10 / $0.50,
@@ -144,7 +159,8 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     environment: "test",
   },
   topUpPackagesMyr: [10, 30, 50, 100],
-  lowBalanceThresholdCredits: 500,
+  // RM5 — the same RM value as the old 500-Credit threshold.
+  lowBalanceThresholdTokens: 5_000_000,
 };
 
 const PRICING_DOC_PATH = ["pricing", "config"] as const;
@@ -184,8 +200,9 @@ function isFiniteNumber(v: unknown): v is number {
  * Precedence, field by field:
  * 1. The deployed defaults ([DEFAULT_PRICING_CONFIG]) are the base, so a
  *    document written before a field existed can never erase it.
- * 2. Commercial settings (version, creditsPerMyr, markupMultiplier,
- *    House Pass, top-up packages, low-balance threshold) are overridden
+ * 2. Commercial settings (version, legacy Credits rate, markup, FX
+ *    rate, infrastructure rates, House Pass, top-up packages, low-balance
+ *    threshold) are overridden
  *    by any persisted value that is valid.
  * 3. Model ids, providers and provider prices (`aiLevels`) are taken
  *    from the document only when it declares
@@ -340,18 +357,48 @@ export function resolvePricingConfig(raw: unknown): PricingConfigResolution {
     };
   }
 
+  const ratesRaw = (typeof doc.infrastructureRates === "object" &&
+    doc.infrastructureRates !== null ?
+    doc.infrastructureRates :
+    {}) as Record<string, unknown>;
+  if (doc.infrastructureRates !== undefined &&
+    Object.keys(ratesRaw).length === 0) {
+    issues.push("infrastructureRates is invalid");
+  }
+  const infrastructureRates = {...base.infrastructureRates};
+  for (const key of Object.keys(infrastructureRates) as Array<
+    keyof InfrastructureRates
+  >) {
+    infrastructureRates[key] = num(`infrastructureRates.${key}`,
+      ratesRaw[key], base.infrastructureRates[key], (v) => v >= 0);
+  }
+
+  const legacyCreditsPerMyr = num("creditsPerMyr", doc.creditsPerMyr,
+    base.legacyCreditsPerMyr, (v) => v > 0);
+  // A pre-Token document only has the Credits threshold: keep its RM
+  // value (Credits ÷ Credits-per-RM × 1,000,000).
+  const legacyThreshold = doc.lowBalanceThresholdTokens === undefined &&
+    isFiniteNumber(doc.lowBalanceThresholdCredits) &&
+    doc.lowBalanceThresholdCredits >= 0 ?
+    Math.round(doc.lowBalanceThresholdCredits / legacyCreditsPerMyr *
+      1_000_000) :
+    undefined;
+
   const config: PricingConfig = {
     version: num("version", doc.version, base.version, (n) => n >= 0),
-    creditsPerMyr: num("creditsPerMyr", doc.creditsPerMyr,
-      base.creditsPerMyr, (n) => n > 0),
+    legacyCreditsPerMyr,
     markupMultiplier: num("markupMultiplier", doc.markupMultiplier,
       base.markupMultiplier, (n) => n > 0),
+    usdToMyrRate: num("usdToMyrRate", doc.usdToMyrRate, base.usdToMyrRate,
+      (n) => n > 0),
+    infrastructureRates,
     aiLevels,
     housePass,
     topUpPackagesMyr,
-    lowBalanceThresholdCredits: num("lowBalanceThresholdCredits",
-      doc.lowBalanceThresholdCredits, base.lowBalanceThresholdCredits,
-      (n) => n >= 0),
+    lowBalanceThresholdTokens: legacyThreshold ?? num(
+      "lowBalanceThresholdTokens", doc.lowBalanceThresholdTokens,
+      base.lowBalanceThresholdTokens,
+      (n) => n >= 0 && Number.isSafeInteger(n)),
   };
   return {config, source: "firestore", issues};
 }

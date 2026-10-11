@@ -7,7 +7,7 @@ import {handleCreateTopUpIntent} from "./handle_create_topup_intent";
 import {handlePurchaseHousePass} from "./handle_purchase_house_pass";
 import {handleConfirmSandboxPayment} from "./handle_confirm_sandbox_payment";
 import {getWalletBalance} from "./wallet";
-import {myrToCredits} from "./pricing";
+import {myrToTokens} from "./pricing";
 import {DEFAULT_PRICING_CONFIG} from "./pricing_config";
 
 /**
@@ -18,7 +18,7 @@ function seededFirestore(): Firestore {
   const {db} = fakeFirestore({
     "users/uid_1/wallet/main": {
       userId: "uid_1",
-      balanceCredits: 0,
+      balanceTokens: 0,
       updatedAt: 0,
     },
     "users/uid_1/inspections/inspection_1": {},
@@ -81,15 +81,15 @@ test("confirmSandboxPayment refuses to run when PAYMENTS_MODE is set " +
 });
 
 test("a full sandbox top-up: createTopUpIntent then " +
-  "confirmSandboxPayment grants exactly the configured Credits, and a " +
-  "replayed confirmation never double-credits", async () => {
+  "confirmSandboxPayment grants exactly the configured Tokens, and a " +
+  "replayed confirmation never double-Tokens", async () => {
   const firestore = seededFirestore();
-  const {intentId, creditsAmount} = await handleCreateTopUpIntent({
+  const {intentId, tokensAmount} = await handleCreateTopUpIntent({
     auth: {uid: "uid_1"},
     data: {amountMyr: 30, idempotencyKey: "topup_1"},
     firestore,
   });
-  assert.equal(creditsAmount, myrToCredits(30, DEFAULT_PRICING_CONFIG));
+  assert.equal(tokensAmount, myrToTokens(30));
 
   const sandboxEnv = {PAYMENTS_MODE: "sandbox"};
   const first = await handleConfirmSandboxPayment({
@@ -105,15 +105,15 @@ test("a full sandbox top-up: createTopUpIntent then " +
     env: sandboxEnv,
   });
 
-  assert.equal(first.creditsAdded, creditsAmount);
-  assert.equal(second.creditsAdded, creditsAmount);
-  assert.equal(first.newBalance, creditsAmount);
-  assert.equal(second.newBalance, creditsAmount); // not doubled
-  assert.equal(await getWalletBalance(firestore, "uid_1"), creditsAmount);
+  assert.equal(first.tokensAdded, tokensAmount);
+  assert.equal(second.tokensAdded, tokensAmount);
+  assert.equal(first.newBalance, tokensAmount);
+  assert.equal(second.newBalance, tokensAmount); // not doubled
+  assert.equal(await getWalletBalance(firestore, "uid_1"), tokensAmount);
 });
 
 test("a full sandbox House Pass purchase activates the pass without " +
-  "moving any Credits", async () => {
+  "moving any Tokens", async () => {
   const firestore = seededFirestore();
   const {intentId, priceMyr} = await handlePurchaseHousePass({
     auth: {uid: "uid_1"},
@@ -131,7 +131,7 @@ test("a full sandbox House Pass purchase activates the pass without " +
   });
 
   assert.equal(result.purpose, "housePass");
-  assert.equal(result.creditsAdded, 0);
+  assert.equal(result.tokensAdded, 0);
   assert.equal(await getWalletBalance(firestore, "uid_1"), 0);
 });
 

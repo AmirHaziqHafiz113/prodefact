@@ -33,7 +33,7 @@ class _InvalidIdBilling extends FakeBillingService {
     );
     return AnalyseFindingResult(
       aiLevel: result.aiLevel,
-      creditsCharged: result.creditsCharged,
+      tokensCharged: result.tokensCharged,
       newBalance: result.newBalance,
       paymentMode: result.paymentMode,
       classification: AiFindingClassification(

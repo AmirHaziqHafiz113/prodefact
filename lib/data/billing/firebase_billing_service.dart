@@ -202,7 +202,7 @@ CommercialConfig parseCommercialConfig(Map<String, dynamic> raw) {
       .map(
         (p) => TopUpPackage(
           myr: (p['myr'] as num).toDouble(),
-          credits: (p['credits'] as num).toInt(),
+          tokens: (p['tokens'] as num).toInt(),
         ),
       )
       .toList();
@@ -214,15 +214,15 @@ CommercialConfig parseCommercialConfig(Map<String, dynamic> raw) {
           level: AiLevel.values.byName(l['id'] as String),
           label: l['label'] as String,
           description: l['description'] as String,
-          maximumCredits: (l['maximumCredits'] as num).toInt(),
+          maximumTokens: (l['maximumTokens'] as num).toInt(),
         ),
       )
       .toList();
 
   final housePassRaw = raw['housePass'] as Map<String, dynamic>;
   return CommercialConfig(
-    creditsPerMyr: (raw['creditsPerMyr'] as num).toInt(),
-    lowBalanceThresholdCredits: (raw['lowBalanceThresholdCredits'] as num)
+    tokensPerMyr: (raw['tokensPerMyr'] as num).toInt(),
+    lowBalanceThresholdTokens: (raw['lowBalanceThresholdTokens'] as num)
         .toInt(),
     topUpPackages: topUpPackages,
     aiLevels: aiLevels,
@@ -242,12 +242,12 @@ CommercialConfig parseCommercialConfig(Map<String, dynamic> raw) {
 AnalysisEstimate parseAnalysisEstimate(Map<String, dynamic> raw) {
   return AnalysisEstimate(
     aiLevel: AiLevel.values.byName(raw['aiLevel'] as String),
-    estimatedCredits: (raw['estimatedCredits'] as num).toInt(),
-    maximumCredits: (raw['maximumCredits'] as num).toInt(),
+    estimatedTokens: (raw['estimatedTokens'] as num).toInt(),
+    maximumTokens: (raw['maximumTokens'] as num).toInt(),
     currentBalance: (raw['currentBalance'] as num).toInt(),
     paymentMode: CommercialMode.values.byName(raw['paymentMode'] as String),
     includedInHousePass: raw['includedInHousePass'] == true,
-    surchargeCredits: (raw['surchargeCredits'] as num).toInt(),
+    surchargeTokens: (raw['surchargeTokens'] as num).toInt(),
     eligible: raw['eligible'] == true,
     reason: _parseIneligibleReason(raw['reason']),
   );
@@ -256,7 +256,7 @@ AnalysisEstimate parseAnalysisEstimate(Map<String, dynamic> raw) {
 EstimateIneligibleReason? _parseIneligibleReason(Object? raw) {
   if (raw == null) return null;
   return switch (raw) {
-    'insufficientCredits' => EstimateIneligibleReason.insufficientCredits,
+    'insufficientTokens' => EstimateIneligibleReason.insufficientTokens,
     'housePassAllowanceReached' =>
       EstimateIneligibleReason.housePassAllowanceReached,
     'housePassNotActive' => EstimateIneligibleReason.housePassNotActive,
@@ -283,7 +283,7 @@ AnalyseFindingResult parseAnalyseFindingResult(
 
   return AnalyseFindingResult(
     aiLevel: AiLevel.values.byName(raw['aiLevel'] as String),
-    creditsCharged: (raw['creditsCharged'] as num).toInt(),
+    tokensCharged: (raw['tokensCharged'] as num).toInt(),
     newBalance: (raw['newBalance'] as num).toInt(),
     paymentMode: CommercialMode.values.byName(raw['paymentMode'] as String),
     classification: AiFindingClassification(
@@ -327,7 +327,7 @@ TopUpIntent parseTopUpIntent(Map<String, dynamic> raw) {
   return TopUpIntent(
     intentId: raw['intentId'] as String,
     amountMyr: (raw['amountMyr'] as num).toDouble(),
-    creditsAmount: (raw['creditsAmount'] as num).toInt(),
+    tokensAmount: (raw['tokensAmount'] as num).toInt(),
   );
 }
 
@@ -348,7 +348,7 @@ SandboxPaymentConfirmation parseSandboxPaymentConfirmation(
         ? PaymentPurpose.housePass
         : PaymentPurpose.topup,
     newBalance: (raw['newBalance'] as num).toInt(),
-    creditsAdded: (raw['creditsAdded'] as num).toInt(),
+    tokensAdded: (raw['tokensAdded'] as num).toInt(),
   );
 }
 

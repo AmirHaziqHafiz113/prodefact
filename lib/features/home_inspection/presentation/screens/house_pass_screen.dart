@@ -84,7 +84,7 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
             '${_levelLabel(summary.includedAiLevel)} AI for a fair-use '
             'allowance of ${summary.allowanceLimit ?? "a configured number of"} '
             'findings — a higher level or going over the allowance still '
-            'costs Credits. Physical inspection is never affected either '
+            'costs Tokens. Physical inspection is never affected either '
             'way.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -157,7 +157,7 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
       case HousePassLifecycleStatus.paymentFailed:
         return [
           Text(
-            'Your last House Pass payment attempt failed. No Credits or '
+            'Your last House Pass payment attempt failed. No Tokens or '
             'pass activation happened.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -179,14 +179,14 @@ class _HousePassScreenState extends ConsumerState<HousePassScreen> {
           Text(
             "This House Pass's AI allowance has been used up for this "
             'inspection. You can keep analysing findings — it will use '
-            'your Flex Credits instead. Physical inspection is never '
+            'your Pay as you go instead. Physical inspection is never '
             'affected.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: () => context.pop(),
-            child: const Text('Continue with AI Credits'),
+            child: const Text('Continue with Tokens'),
           ),
         ];
       case HousePassLifecycleStatus.expiredOrCancelled:

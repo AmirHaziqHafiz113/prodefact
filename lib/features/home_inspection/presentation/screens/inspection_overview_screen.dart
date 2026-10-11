@@ -780,8 +780,8 @@ Future<void> _showDetailsSheet(
 
 /// Keeps billing invisible during field work (QA #23): the backend
 /// applies this inspection's House Pass automatically while it has
-/// allowance, then Flex Credits. When the allowance runs out the
-/// inspector is told that analysis continues on Credits, but is never
+/// allowance, then Pay as you go. When the allowance runs out the
+/// inspector is told that analysis continues on Tokens, but is never
 /// asked to choose a billing mechanism (analysis is always automatic).
 class _HousePassAllowanceWatcher extends ConsumerWidget {
   const _HousePassAllowanceWatcher({required this.inspectionId});
@@ -818,7 +818,7 @@ class _HousePassAllowanceWatcher extends ConsumerWidget {
             Expanded(
               child: Text(
                 'House Pass AI allowance used up. New findings are '
-                'analysed with your AI Credits.',
+                'analysed with your Tokens.',
                 style: TextStyle(fontSize: 13),
               ),
             ),

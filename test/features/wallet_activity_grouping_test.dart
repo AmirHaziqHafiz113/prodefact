@@ -25,8 +25,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Wallet opens from Home's credits card (no longer a tab).
-      await tester.tap(find.byKey(const ValueKey('home-credits')));
+      // Wallet opens from Home's Tokens card (no longer a tab).
+      await tester.tap(find.byKey(const ValueKey('home-tokens')));
       await tester.pumpAndSettle();
 
       expect(find.byType(WalletScreen), findsOneWidget);

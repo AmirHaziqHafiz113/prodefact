@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../core/logging/app_logger.dart';
+import 'drive_backup_providers.dart';
 import '../../../data/ai/ai_providers.dart';
 import '../../../data/areas/area_candidate_providers.dart';
 import '../../../data/analytics/analytics_providers.dart';
@@ -708,6 +709,11 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       action: 'attach photo',
     );
     unawaited(evidencePersisted);
+    unawaited(
+      evidencePersisted.then(
+        (_) => _enqueueDriveBackup(session.id, findingId, evidence.id),
+      ),
+    );
 
     // A new photo can change an already-settled classification, so a
     // finding whose AI processing already finished is re-queued
@@ -987,6 +993,13 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
       action: 'save finding',
     );
     unawaited(findingPersisted);
+    // The original photo joins the Google Drive backup queue once it is
+    // durably saved — never awaited; capture and AI never wait for Drive.
+    unawaited(
+      findingPersisted.then(
+        (_) => _enqueueDriveBackup(session.id, finding.id, evidence.id),
+      ),
+    );
     ref.invalidate(sessionSummariesProvider);
     _logAnalytics(AnalyticsEvent.findingSaved);
     if (startsAi) {
@@ -1682,7 +1695,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   }
 
   /// The explicit approval action — the **only** way a finding that's
-  /// `awaitingApproval` ever actually starts spending Credits. Only
+  /// `awaitingApproval` ever actually starts spending Tokens. Only
   /// valid for a finding that's currently `awaitingApproval` or
   /// `failed` (a manual retry after approval already happened once);
   /// a no-op for any other status.
@@ -1917,7 +1930,7 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
           }
         }
       }
-      // The run may have just charged real Credits — never leave
+      // The run may have just charged real Tokens — never leave
       // Wallet/Home showing a stale balance.
       ref.invalidate(walletBalanceProvider);
     } catch (error, stackTrace) {
@@ -2348,9 +2361,36 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   /// cleared. Best-effort file cleanup: a file that fails to delete is
   /// logged and otherwise ignored — it never blocks or reverts the
   /// database deletion.
+  /// Adds a saved photo to the Google Drive backup queue. Never throws
+  /// (see `DriveBackupCoordinator.enqueue`).
+  Future<void> _enqueueDriveBackup(
+    String sessionId,
+    String findingId,
+    String evidenceId,
+  ) async {
+    try {
+      await ref
+          .read(driveBackupCoordinatorProvider)
+          .enqueue(
+            sessionId: sessionId,
+            findingId: findingId,
+            evidenceId: evidenceId,
+          );
+    } catch (error) {
+      AppLogger.warning('drive_backup_enqueue_failed', error);
+    }
+  }
+
   Future<void> deleteSession(String sessionId) async {
     final toDelete = await _repository.loadSession(sessionId);
     await _repository.deleteSession(sessionId);
+    // Its photos leave the Drive backup queue (files already in the
+    // inspector's Drive are theirs and stay).
+    try {
+      await ref.read(driveBackupStoreProvider).removeSession(sessionId);
+    } catch (error) {
+      AppLogger.warning('drive_backup_remove_session_failed', error);
+    }
 
     if (toDelete != null) {
       final evidenceFileStore = ref.read(evidenceFileStoreProvider);

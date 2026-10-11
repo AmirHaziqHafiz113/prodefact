@@ -360,7 +360,7 @@ void main() {
 
   group('Smart AI default and no upfront commercial/AI decisions', () {
     test('a new inspection has no commercialMode/selectedAiLevel chosen '
-        'at setup — resolved to Flex Credits / Smart by the rest of the '
+        'at setup — resolved to Pay as you go / Smart by the rest of the '
         'app, not asked upfront', () async {
       final container = ProviderContainer(overrides: testOverrides());
       addTearDown(container.dispose);
@@ -397,7 +397,7 @@ void main() {
       expect(find.text('Default AI quality'), findsNothing);
     });
 
-    testWidgets('Flex Credits / House Pass selection is absent from the '
+    testWidgets('Pay as you go / House Pass selection is absent from the '
         'New Inspection setup flow', (tester) async {
       await tester.pumpWidget(
         ProviderScope(overrides: testOverrides(), child: const ProDefactApp()),

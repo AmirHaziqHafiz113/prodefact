@@ -9,7 +9,7 @@ import {
   ConflictingLedgerEntryError,
   getWalletBalance,
   releaseReservation,
-  reserveCredits,
+  reserveTokens,
   settleReservation,
 } from "./wallet";
 import {AiLevel} from "./types";
@@ -24,7 +24,7 @@ import {AiLevel} from "./types";
 
 const noStorage = {} as unknown as Storage;
 const UID = "uid_1";
-const START_BALANCE = 1000;
+const START_BALANCE = 10_000_000;
 /** Any reservation amount works for the ledger-exclusivity test. */
 const RESERVATION = 300;
 
@@ -46,7 +46,7 @@ function seeded(options: {
     [`users/${UID}/inspections/inspection_1/findings/finding_2`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: options.balance ?? START_BALANCE,
+      balanceTokens: options.balance ?? START_BALANCE,
       updatedAt: 0,
     },
     "users/uid_2/inspections/inspection_9/findings/finding_9": {},
@@ -234,7 +234,7 @@ function simulateCrashAfter(
     stage,
     claimId: "dead-invocation",
     leaseExpiresAt: 0,
-    creditsCharged: 0,
+    tokensCharged: 0,
   };
   delete crashed.housePassUsageRecorded;
   store.set(path, crashed);
@@ -323,7 +323,7 @@ async (t) => {
   const {firestore, store} = seeded();
 
   const result = await raceDuplicateRequests(firestore, provider) as {
-    creditsCharged: number;
+    tokensCharged: number;
   };
 
   assert.equal(provider.calls(), 1);
@@ -333,7 +333,7 @@ async (t) => {
   );
   assert.equal(
     await getWalletBalance(firestore, UID),
-    START_BALANCE - result.creditsCharged
+    START_BALANCE - result.tokensCharged
   );
 });
 
@@ -355,7 +355,7 @@ test("3 + 4. a completed replay returns the stored result without " +
 });
 
 test("5. a replay while the job is in progress never calls the provider " +
-  "again and moves no Credits", async (t) => {
+  "again and moves no Tokens", async (t) => {
   const provider = stubProvider(t);
   provider.hold(1);
   const {firestore, store} = seeded();
@@ -375,7 +375,7 @@ test("5. a replay while the job is in progress never calls the provider " +
   await pending;
 });
 
-// ---- 6-8: Credits ----
+// ---- 6-8: Tokens ----
 
 test("6 + 7. under a lease takeover (the first invocation presumed " +
   "dead), the same key still reserves once and settles once", async (t) => {
@@ -389,7 +389,7 @@ test("6 + 7. under a lease takeover (the first invocation presumed " +
 
   const takeover = await analyse(firestore, payload("key_a"), {
     now: () => t0 + AI_JOB_LEASE_MS + 1,
-  }) as {creditsCharged: number};
+  }) as {tokensCharged: number};
   assert.equal(job(store, "key_a")?.claimCount, 2);
 
   // The original invocation wakes up after losing its claim: it must
@@ -408,7 +408,7 @@ test("6 + 7. under a lease takeover (the first invocation presumed " +
   assert.deepEqual(settlements, ["key_a_settlement"]);
   assert.equal(
     await getWalletBalance(firestore, UID),
-    START_BALANCE - takeover.creditsCharged
+    START_BALANCE - takeover.tokensCharged
   );
   assert.equal(job(store, "key_a")?.status, "succeeded");
 });
@@ -504,15 +504,15 @@ for (const stage of ["providerCompleted", "settled"]) {
     const {firestore, store} = seeded();
 
     const original = await analyse(firestore, payload("key_a")) as {
-      creditsCharged: number;
+      tokensCharged: number;
       classification: unknown;
     };
     const chargedBalance = await getWalletBalance(firestore, UID);
-    assert.equal(chargedBalance, START_BALANCE - original.creditsCharged);
+    assert.equal(chargedBalance, START_BALANCE - original.tokensCharged);
     simulateCrashAfter(store, "key_a", stage);
 
     const replay = await analyse(firestore, payload("key_a")) as {
-      creditsCharged: number;
+      tokensCharged: number;
       classification: unknown;
     };
 
@@ -520,7 +520,7 @@ for (const stage of ["providerCompleted", "settled"]) {
     assert.equal(await getWalletBalance(firestore, UID), chargedBalance);
     assert.equal(hasLedger(store, "key_a_release_failed"), false);
     assert.deepEqual(replay.classification, original.classification);
-    assert.equal(replay.creditsCharged, original.creditsCharged);
+    assert.equal(replay.tokensCharged, original.tokensCharged);
     assert.equal(job(store, "key_a")?.status, "succeeded");
   });
 }
@@ -528,9 +528,9 @@ for (const stage of ["providerCompleted", "settled"]) {
 test("a settled reservation can never also be refunded in full, and a " +
   "released one can never also be charged", async () => {
   const {firestore} = seeded();
-  const reservation = await reserveCredits(firestore, {
+  const reservation = await reserveTokens(firestore, {
     uid: UID,
-    amountCredits: RESERVATION,
+    amountTokens: RESERVATION,
     idempotencyKey: "k_reservation",
     inspectionId: "inspection_1",
     findingId: "finding_1",
@@ -540,7 +540,7 @@ test("a settled reservation can never also be refunded in full, and a " +
   await settleReservation(firestore, {
     uid: UID,
     reservationTransactionId: reservation.id,
-    actualCredits: 10,
+    actualTokens: 10,
     idempotencyKey: "k_settlement",
     description: "test",
     exclusiveOf: "k_release_failed",
@@ -559,9 +559,9 @@ test("a settled reservation can never also be refunded in full, and a " +
   );
   assert.equal(await getWalletBalance(firestore, UID), settled);
 
-  const other = await reserveCredits(firestore, {
+  const other = await reserveTokens(firestore, {
     uid: UID,
-    amountCredits: RESERVATION,
+    amountTokens: RESERVATION,
     idempotencyKey: "j_reservation",
     inspectionId: "inspection_1",
     findingId: "finding_2",
@@ -580,7 +580,7 @@ test("a settled reservation can never also be refunded in full, and a " +
     settleReservation(firestore, {
       uid: UID,
       reservationTransactionId: other.id,
-      actualCredits: 10,
+      actualTokens: 10,
       idempotencyKey: "j_settlement",
       description: "test",
       exclusiveOf: "j_release_failed",
@@ -590,12 +590,12 @@ test("a settled reservation can never also be refunded in full, and a " +
   assert.equal(await getWalletBalance(firestore, UID), released);
 });
 
-test("13. an unexpected error after Credits were settled is reported as " +
+test("13. an unexpected error after Tokens were settled is reported as " +
   "not finalised, keeps the job reconcilable, and the same key finishes " +
   "it without charging again", async (t) => {
   const provider = stubProvider(t);
   provider.hold(1);
-  // Smart on a Fast-included pass: a Credits surcharge is settled
+  // Smart on a Fast-included pass: a Tokens surcharge is settled
   // before the House Pass step runs.
   const {firestore, store} = seeded({housePass: {includedAiLevel: "fast"}});
   const passPath = `users/${UID}/housePasses/hp_1`;
@@ -621,12 +621,12 @@ test("13. an unexpected error after Credits were settled is reported as " +
 
   store.set(passPath, pass);
   const replay = await analyse(firestore, payload("key_a")) as {
-    creditsCharged: number;
+    tokensCharged: number;
   };
 
   assert.equal(provider.calls(), 1);
   assert.equal(await getWalletBalance(firestore, UID), charged);
-  assert.equal(replay.creditsCharged, START_BALANCE - charged);
+  assert.equal(replay.tokensCharged, START_BALANCE - charged);
   assert.equal(allowanceUsed(store), 1);
   assert.equal(hasLedger(store, "key_a_release_failed"), false);
   assert.equal(job(store, "key_a")?.status, "succeeded");
@@ -639,10 +639,10 @@ test("14. different idempotency keys are independent analyses", async (t) => {
   const {firestore, store} = seeded();
 
   const a = await analyse(firestore, payload("key_a")) as {
-    creditsCharged: number;
+    tokensCharged: number;
   };
   const b = await analyse(firestore, payload("key_b")) as {
-    creditsCharged: number;
+    tokensCharged: number;
   };
 
   assert.equal(provider.calls(), 2);
@@ -650,7 +650,7 @@ test("14. different idempotency keys are independent analyses", async (t) => {
   assert.equal(job(store, "key_b")?.status, "succeeded");
   assert.equal(
     await getWalletBalance(firestore, UID),
-    START_BALANCE - a.creditsCharged - b.creditsCharged
+    START_BALANCE - a.tokensCharged - b.tokensCharged
   );
 });
 

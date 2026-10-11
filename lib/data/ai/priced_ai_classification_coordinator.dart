@@ -16,7 +16,7 @@ import '../../core/logging/app_logger.dart';
 /// lookup, same catalogue-id defense-in-depth, same persistence) — the
 /// only real difference is the source of the classification:
 /// [BillingService.analyseFinding] (which reserves/settles real
-/// Credits server-side) instead of the unpriced
+/// Tokens server-side) instead of the unpriced
 /// `AiInspectionService.classifyFinding`. Both coordinator
 /// implementations are kept (rather than merging them with a runtime
 /// flag) so the pre-existing, unpriced `classifyFinding` callable path
@@ -187,7 +187,7 @@ class PricedAiClassificationCoordinator implements AiClassificationCoordinator {
       return AiClassificationResult.failure(error.toString());
     } catch (error) {
       // Not a classified backend error (e.g. the local-only fake
-      // billing service rejecting for insufficient Credits): nothing
+      // billing service rejecting for insufficient Tokens): nothing
       // outstanding on any backend.
       AppLogger.info(
         'ai_job_failed finding=${finding.id} definitive=true error=$error',

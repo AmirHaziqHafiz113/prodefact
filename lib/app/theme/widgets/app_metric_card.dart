@@ -4,7 +4,7 @@ import '../app_colors.dart';
 import '../app_metrics.dart';
 
 /// A compact icon + value + label stat, reused wherever the app shows
-/// a single real number (Credits used, inspections analysed, active
+/// a single real number (Tokens used, inspections analysed, active
 /// count, findings, photos…) instead of every screen growing its own
 /// near-identical private `_StatTile`. Always real, never decorative —
 /// callers pass the already-computed value.

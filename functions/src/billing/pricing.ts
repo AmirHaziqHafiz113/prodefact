@@ -1,37 +1,25 @@
 import {AiLevelConfig, PricingConfig} from "./pricing_config";
 import {AiLevel} from "./types";
+import {TOKENS_PER_MYR, tokensForTopUpMyr} from "./tokens";
+import {
+  ANALYSE_FINDING_FIRESTORE_OPS,
+  ANALYSE_FINDING_WORST_CASE,
+  OperationCost,
+  OperationUsage,
+  computeOperationCost,
+} from "./usage_cost";
 
 /**
- * Pure pricing math — no I/O, no Firestore, trivially unit-testable.
- * This is the one place provider-cost-in-USD becomes customer-facing
- * Credits. See docs/commercial_model.md for the full worked
- * explanation.
+ * Pure pricing math — no I/O, trivially unit-testable. This is the one
+ * place usage becomes customer-facing ProDefact Tokens, via the
+ * variable-cost model in `usage_cost.ts`: Tokens = (OpenAI cost +
+ * infrastructure cost) × markup × 1,000,000 per RM. See
+ * docs/token_billing.md.
  */
 
 /**
- * Converts a provider cost in USD to Credits, via the configured
- * MYR-per-USD-equivalent markup chain: Credits = providerCostUsd ×
- * markupMultiplier × creditsPerMyr, rounded up (never round a customer
- * charge down — see `providerCostForTokensUsd`). Note: this treats
- * provider cost as already expressed in a currency-neutral "USD ≈ MYR
- * cost basis" for this pass — a real FX conversion step is explicitly
- * deferred (see docs/commercial_model.md, "Future: payment fees, FX,
- * taxes").
- * @param {number} providerCostUsd the raw provider cost, in USD.
- * @param {PricingConfig} config the live pricing config.
- * @return {number} the customer charge, in whole Credits (rounded up).
- */
-export function creditsForProviderCostUsd(
-  providerCostUsd: number,
-  config: PricingConfig
-): number {
-  const customerCostUsd = providerCostUsd * config.markupMultiplier;
-  return Math.ceil(customerCostUsd * config.creditsPerMyr);
-}
-
-/**
- * @param {number} inputTokens tokens sent to the provider.
- * @param {number} outputTokens tokens returned by the provider.
+ * @param {number} inputTokens provider tokens sent.
+ * @param {number} outputTokens provider tokens returned.
  * @param {AiLevelConfig} levelConfig that level's provider cost rates.
  * @return {number} the raw provider cost, in USD.
  */
@@ -47,79 +35,135 @@ export function providerCostForTokensUsd(
 }
 
 /**
- * The "up to N Credits" figure shown before the inspector approves AI
- * analysis — computed from each level's conservative estimated token
- * counts. Deliberately a ceiling, never the (unknowable in advance)
- * exact charge.
+ * @param {OperationUsage} usage what an operation consumed.
+ * @param {PricingConfig} config the live pricing config.
+ * @return {OperationCost} its auditable cost and Token price.
+ */
+export function priceUsage(
+  usage: OperationUsage,
+  config: PricingConfig
+): OperationCost {
+  return computeOperationCost(usage, {
+    rates: config.infrastructureRates,
+    usdToMyrRate: config.usdToMyrRate,
+    markupMultiplier: config.markupMultiplier,
+  });
+}
+
+/**
+ * The worst-case usage of one AI analysis at [aiLevel] — the level's
+ * conservative provider-token estimate plus the per-analysis
+ * infrastructure worst case.
  * @param {AiLevel} aiLevel the selected level.
  * @param {PricingConfig} config the live pricing config.
- * @return {number} the maximum Credits this analysis could cost.
+ * @return {OperationUsage} the worst-case usage.
  */
-export function estimateMaxCredits(
+export function worstCaseAnalysisUsage(
   aiLevel: AiLevel,
   config: PricingConfig
-): number {
-  const levelConfig = config.aiLevels[aiLevel];
-  const worstCaseUsd = providerCostForTokensUsd(
-    levelConfig.estimatedInputTokens,
-    levelConfig.estimatedOutputTokens,
-    levelConfig
-  );
-  return creditsForProviderCostUsd(worstCaseUsd, config);
+): OperationUsage {
+  const level = config.aiLevels[aiLevel];
+  return {
+    openaiModel: level.model,
+    openaiInputTokens: level.estimatedInputTokens,
+    openaiOutputTokens: level.estimatedOutputTokens,
+    openaiInputPerKUsd: level.providerCostPerKInputTokensUsd,
+    openaiOutputPerKUsd: level.providerCostPerKOutputTokensUsd,
+    storageDownloadBytes: ANALYSE_FINDING_WORST_CASE.storageDownloadBytes,
+    storageRetainedBytes: ANALYSE_FINDING_WORST_CASE.storageRetainedBytes,
+    firestoreReads: ANALYSE_FINDING_FIRESTORE_OPS.reads,
+    firestoreWrites: ANALYSE_FINDING_FIRESTORE_OPS.writes,
+    firestoreDeletes: ANALYSE_FINDING_FIRESTORE_OPS.deletes,
+    functionInvocations: 1,
+    functionDurationMs: ANALYSE_FINDING_WORST_CASE.functionDurationMs,
+    networkBytes: ANALYSE_FINDING_WORST_CASE.networkBytes,
+    imagesProcessed: ANALYSE_FINDING_WORST_CASE.imagesProcessed,
+  };
 }
 
 /**
- * The actual customer charge once the provider has responded, from its
- * real (server-observed, never client-supplied) token usage. Never
- * exceeds [estimateMaxCredits] in practice since real usage is
- * normally within the conservative estimate — but if a provider
- * response is unusually large, the charge is still capped at the
- * originally-reserved maximum (the customer is never charged more than
- * what they were shown and approved) — see `wallet.ts`'s settlement
- * logic, which clamps to the reservation amount.
- * @param {AiLevel} aiLevel the level actually used.
- * @param {number} inputTokens the provider's reported prompt tokens.
- * @param {number} outputTokens the provider's reported completion
- *   tokens.
+ * The "up to N Tokens" figure shown before AI analysis runs —
+ * deliberately a ceiling, never the (unknowable in advance) exact
+ * charge. Also the amount reserved.
+ * @param {AiLevel} aiLevel the selected level.
  * @param {PricingConfig} config the live pricing config.
- * @return {number} the actual customer charge, in Credits.
+ * @return {number} the maximum Tokens this analysis could cost.
  */
-export function actualCreditsForUsage(
+export function estimateMaxTokens(
   aiLevel: AiLevel,
-  inputTokens: number,
-  outputTokens: number,
   config: PricingConfig
 ): number {
-  const levelConfig = config.aiLevels[aiLevel];
-  const costUsd = providerCostForTokensUsd(
-    inputTokens,
-    outputTokens,
-    levelConfig
-  );
-  return creditsForProviderCostUsd(costUsd, config);
+  return priceUsage(worstCaseAnalysisUsage(aiLevel, config), config)
+    .tokensCharged;
 }
 
 /**
- * @param {number} credits a Credits amount.
+ * The real usage of one AI analysis — provider-reported tokens and
+ * measured bytes/time, with deterministic Firestore/network estimates.
+ * @param {object} params the observed facts.
  * @param {PricingConfig} config the live pricing config.
- * @return {number} the equivalent MYR value, for display only (e.g.
- *   "≈ RM0.18").
+ * @return {OperationUsage} the usage, with its measurement labels.
  */
-export function creditsToMyr(credits: number, config: PricingConfig): number {
-  return credits / config.creditsPerMyr;
+export function actualAnalysisUsage(
+  params: {
+    aiLevel: AiLevel;
+    providerUsage?: {inputTokens: number; outputTokens: number};
+    imageBytes: number;
+    imageCount: number;
+    functionDurationMs: number;
+  },
+  config: PricingConfig
+): OperationUsage {
+  const level = config.aiLevels[params.aiLevel];
+  return {
+    openaiModel: level.model,
+    openaiInputTokens: params.providerUsage?.inputTokens,
+    openaiOutputTokens: params.providerUsage?.outputTokens,
+    openaiInputPerKUsd: level.providerCostPerKInputTokensUsd,
+    openaiOutputPerKUsd: level.providerCostPerKOutputTokensUsd,
+    storageDownloadBytes: params.imageBytes,
+    // The photo's operational copy stays in Storage; Drive holds the
+    // long-term original. One month of retention is charged once.
+    storageRetainedBytes: params.imageBytes,
+    firestoreReads: ANALYSE_FINDING_FIRESTORE_OPS.reads,
+    firestoreWrites: ANALYSE_FINDING_FIRESTORE_OPS.writes,
+    firestoreDeletes: ANALYSE_FINDING_FIRESTORE_OPS.deletes,
+    functionInvocations: 1,
+    functionDurationMs: params.functionDurationMs,
+    // Images travel base64-encoded (~4/3 their size) to the provider.
+    networkBytes: Math.round(params.imageBytes * 4 / 3),
+    imagesProcessed: params.imageCount,
+    measurement: {
+      openai: params.providerUsage ? "measured" : "unavailable",
+      storageDownload: "measured",
+      storageRetained: "estimated",
+      firestore: "estimated",
+      functionDuration: "measured",
+      network: "estimated",
+      overhead: "estimated",
+    },
+  };
+}
+
+/**
+ * @param {number} tokens a Token amount.
+ * @return {number} its RM retail value, for display only.
+ */
+export function tokensToMyr(tokens: number): number {
+  return tokens / TOKENS_PER_MYR;
 }
 
 /**
  * @param {number} myr a Ringgit amount (e.g. a top-up package price).
- * @param {PricingConfig} config the live pricing config.
- * @return {number} the whole number of Credits that amount buys.
+ * @return {number} the whole number of Tokens it buys (RM10 →
+ *   10,000,000).
  */
-export function myrToCredits(myr: number, config: PricingConfig): number {
-  return Math.round(myr * config.creditsPerMyr);
+export function myrToTokens(myr: number): number {
+  return tokensForTopUpMyr(myr);
 }
 
 /**
- * The extra Credits required when a House Pass's included AI level is
+ * The extra Tokens required when a House Pass's included AI level is
  * lower than the one the inspector selected — e.g. a pass including
  * `smart` but the inspector picks `expert`. 0 when the selected level
  * is the included level or "lower" in the fixed ranking
@@ -127,14 +171,29 @@ export function myrToCredits(myr: number, config: PricingConfig): number {
  * @param {AiLevel} selectedLevel the level the inspector picked.
  * @param {AiLevel} includedLevel the House Pass's included level.
  * @param {PricingConfig} config the live pricing config.
- * @return {number} the surcharge, in Credits.
+ * @return {number} the surcharge, in Tokens.
  */
-export function housePassSurchargeCredits(
+export function housePassSurchargeTokens(
   selectedLevel: AiLevel,
   includedLevel: AiLevel,
   config: PricingConfig
 ): number {
   const rank: Record<AiLevel, number> = {fast: 0, smart: 1, expert: 2};
   if (rank[selectedLevel] <= rank[includedLevel]) return 0;
-  return estimateMaxCredits(selectedLevel, config);
+  return estimateMaxTokens(selectedLevel, config);
+}
+
+/**
+ * The Token price of one analysis's real usage (before the reservation
+ * cap applied in `handle_analyse_finding.ts`).
+ * @param {object} params the observed facts (see [actualAnalysisUsage]).
+ * @param {PricingConfig} config the live pricing config.
+ * @return {number} whole Tokens.
+ */
+export function actualAnalysisTokens(
+  params: Parameters<typeof actualAnalysisUsage>[0],
+  config: PricingConfig
+): number {
+  return priceUsage(actualAnalysisUsage(params, config), config)
+    .tokensCharged;
 }

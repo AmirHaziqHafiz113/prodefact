@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
+import '../../providers/physical_inspection_providers.dart';
 import '../screens/area_inspection_screen.dart' show FindingAiStatusLine;
 import 'finding_status_presentation.dart';
 import 'reanalyse_and_candidates.dart';
@@ -75,7 +76,10 @@ class FindingResolutionPanel extends ConsumerWidget {
         ? null
         : catalogue.byId(suggestion!.suggestedCatalogueEntryId!);
     final shownEntry = finalEntry ?? suggestedEntry;
-    final canPick = FindingResolution.canPickManually(finding);
+    // A completed inspection is read-only: show the result, offer no
+    // changes (no picker, Reanalyse, Reject or Delete).
+    final readOnly = ref.watch(inspectionReadOnlyProvider);
+    final canPick = !readOnly && FindingResolution.canPickManually(finding);
     final inFlight = aiFindingStatusIsInFlight(finding.aiStatus);
     final needsChoice =
         resolution.state == FindingResolutionState.needsReview ||
@@ -166,40 +170,41 @@ class FindingResolutionPanel extends ConsumerWidget {
                 .read(activeSessionProvider.notifier)
                 .selectDefectForFinding(finding.id, entry.id),
           ),
-        Wrap(
-          spacing: AppSpacing.xs,
-          runSpacing: 0,
-          children: [
-            TextButton.icon(
-              key: ValueKey('reanalyse-finding-${finding.id}'),
-              onPressed: finding.isAiEligible && !inFlight
-                  ? () => showReanalyseDialog(
-                      context: context,
-                      ref: ref,
-                      finding: finding,
-                    )
-                  : null,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Reanalyse'),
-            ),
-            if (suggestion != null && !suggestion!.isRejected && canPick)
+        if (!readOnly)
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: 0,
+            children: [
               TextButton.icon(
-                key: ValueKey('reject-finding-${finding.id}'),
-                onPressed: () => ref
-                    .read(activeSessionProvider.notifier)
-                    .rejectSuggestion(suggestion!.id),
-                icon: const Icon(Icons.block, size: 18),
-                label: const Text('Reject'),
+                key: ValueKey('reanalyse-finding-${finding.id}'),
+                onPressed: finding.isAiEligible && !inFlight
+                    ? () => showReanalyseDialog(
+                        context: context,
+                        ref: ref,
+                        finding: finding,
+                      )
+                    : null,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Reanalyse'),
               ),
-            TextButton.icon(
-              key: ValueKey('delete-finding-${finding.id}'),
-              onPressed: () => confirmAndDeleteFinding(context, ref, finding),
-              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-              icon: const Icon(Icons.delete_outline, size: 18),
-              label: const Text('Delete'),
-            ),
-          ],
-        ),
+              if (suggestion != null && !suggestion!.isRejected && canPick)
+                TextButton.icon(
+                  key: ValueKey('reject-finding-${finding.id}'),
+                  onPressed: () => ref
+                      .read(activeSessionProvider.notifier)
+                      .rejectSuggestion(suggestion!.id),
+                  icon: const Icon(Icons.block, size: 18),
+                  label: const Text('Reject'),
+                ),
+              TextButton.icon(
+                key: ValueKey('delete-finding-${finding.id}'),
+                onPressed: () => confirmAndDeleteFinding(context, ref, finding),
+                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Delete'),
+              ),
+            ],
+          ),
       ],
     );
   }

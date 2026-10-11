@@ -35,12 +35,12 @@ class NewInspectionDraft {
   /// skipped, in which case `ReviewSetupScreen`/`startInspection` fall
   /// back to `PropertyDetails.empty`.
   ///
-  /// Setup no longer asks the inspector to choose Flex Credits vs.
+  /// Setup no longer asks the inspector to choose Pay as you go vs.
   /// House Pass or an AI quality tier (see the QA/QC setup-
   /// simplification pass) — every new inspection starts with
   /// `commercialMode`/`selectedAiLevel` unset, which
   /// `PricedAiClassificationCoordinator`/estimate logic already treat
-  /// as "Flex Credits" and "Smart" respectively. Both remain full,
+  /// as "Pay as you go" and "Smart" respectively. Both remain full,
   /// independently choosable fields on `InspectionSession` — House
   /// Pass purchase (`HousePassScreen`) and a per-finding AI level
   /// override are both still available after setup.

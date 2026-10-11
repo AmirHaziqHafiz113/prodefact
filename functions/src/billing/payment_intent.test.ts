@@ -6,7 +6,7 @@ import {createPaymentIntent, getPaymentIntent} from "./payment_intent";
 
 /**
  * Regression coverage for the bug where an absent optional field
- * (`inspectionId` on a `topup` intent, `creditsAmount` on a
+ * (`inspectionId` on a `topup` intent, `tokensAmount` on a
  * `housePass` intent) was assigned into the Firestore document as a
  * literal `undefined` instead of being omitted — which real Firestore
  * rejects outright (`Cannot use "undefined" as a Firestore value`).
@@ -25,13 +25,13 @@ test("createPaymentIntent for a Top Up (no inspectionId) succeeds and " +
     idempotencyKey: "topup_1",
     purpose: "topup",
     amountMyr: 30,
-    creditsAmount: 3000,
+    tokensAmount: 3000,
     // inspectionId intentionally omitted — a Top Up is never
     // associated with an inspection.
   });
 
   assert.equal(intent.purpose, "topup");
-  assert.equal(intent.creditsAmount, 3000);
+  assert.equal(intent.tokensAmount, 3000);
 
   const stored = store.get("users/uid_1/paymentIntents/topup_1");
   assert.ok(stored, "the intent must have been persisted");
@@ -42,8 +42,8 @@ test("createPaymentIntent for a Top Up (no inspectionId) succeeds and " +
   assert.equal(fetched?.inspectionId, undefined);
 });
 
-test("createPaymentIntent for a House Pass (no creditsAmount) still " +
-  "persists its real inspectionId and omits creditsAmount", async () => {
+test("createPaymentIntent for a House Pass (no tokensAmount) still " +
+  "persists its real inspectionId and omits tokensAmount", async () => {
   const {db, store} = fakeFirestore();
   const firestore = db as unknown as Firestore;
 
@@ -53,8 +53,8 @@ test("createPaymentIntent for a House Pass (no creditsAmount) still " +
     purpose: "housePass",
     amountMyr: 30,
     inspectionId: "inspection_1",
-    // creditsAmount intentionally omitted — House Pass never grants
-    // Credits.
+    // tokensAmount intentionally omitted — House Pass never grants
+    // Tokens.
   });
 
   assert.equal(intent.purpose, "housePass");
@@ -63,8 +63,8 @@ test("createPaymentIntent for a House Pass (no creditsAmount) still " +
   const stored = store.get("users/uid_1/paymentIntents/hp_1");
   assert.ok(stored);
   assert.equal(stored?.inspectionId, "inspection_1");
-  assert.equal(Object.prototype.hasOwnProperty.call(stored, "creditsAmount"),
-    false, "creditsAmount must be omitted, not written as undefined");
+  assert.equal(Object.prototype.hasOwnProperty.call(stored, "tokensAmount"),
+    false, "tokensAmount must be omitted, not written as undefined");
 });
 
 test("no persisted payment intent ever contains an undefined-valued " +
@@ -77,7 +77,7 @@ test("no persisted payment intent ever contains an undefined-valued " +
     idempotencyKey: "topup_1",
     purpose: "topup",
     amountMyr: 10,
-    creditsAmount: 1000,
+    tokensAmount: 1000,
   });
   await createPaymentIntent(firestore, {
     uid: "uid_1",

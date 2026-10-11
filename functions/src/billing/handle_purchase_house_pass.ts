@@ -6,7 +6,7 @@ import {findHousePassForInspection} from "./house_pass";
 
 /**
  * `purchaseHousePass` — creates a `pending` payment intent for one
- * inspection's House Pass (a fixed RM30 product, never Credits). Like
+ * inspection's House Pass (a fixed RM30 product, never Tokens). Like
  * `createTopUpIntent`, this never itself activates the pass; only
  * `handle_confirm_sandbox_payment.ts` (or, later, a real provider's
  * webhook) can do that, once payment is actually confirmed.

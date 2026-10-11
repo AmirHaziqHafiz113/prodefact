@@ -197,16 +197,16 @@ void main() {
       'missing reason (omitted from JSON when undefined)', () {
     final estimate = parseAnalysisEstimate({
       'aiLevel': 'smart',
-      'estimatedCredits': 2,
-      'maximumCredits': 2,
+      'estimatedTokens': 2,
+      'maximumTokens': 2,
       'currentBalance': 500,
       'paymentMode': 'flexCredits',
       'includedInHousePass': false,
-      'surchargeCredits': 0,
+      'surchargeTokens': 0,
       'eligible': true,
     });
     expect(estimate.aiLevel, AiLevel.smart);
-    expect(estimate.maximumCredits, 2);
+    expect(estimate.maximumTokens, 2);
     expect(estimate.paymentMode, CommercialMode.flexCredits);
     expect(estimate.eligible, isTrue);
     expect(estimate.reason, isNull);

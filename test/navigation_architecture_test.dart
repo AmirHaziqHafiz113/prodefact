@@ -27,7 +27,7 @@ import 'support/test_repository.dart';
 /// docs/ux_architecture.md. Every CTA here must land on its own,
 /// distinct screen, and back must return to where the inspector was.
 class _FailingBackend extends FakeBillingService {
-  _FailingBackend() : super(initialBalanceCredits: 100000);
+  _FailingBackend() : super(initialBalanceTokens: 1000000000);
 
   @override
   Future<AnalyseFindingResult> analyseFinding({

@@ -22,7 +22,7 @@ final aiInspectionServiceProvider = Provider<AiInspectionService>((ref) {
 });
 
 /// The priced coordinator — every AI run since the commercial pass
-/// reserves/settles real Credits server-side (see
+/// reserves/settles real Tokens server-side (see
 /// docs/commercial_model.md). The older, unpriced
 /// `DefaultAiClassificationCoordinator` (backed by
 /// [aiInspectionServiceProvider]) still exists and is still tested, but

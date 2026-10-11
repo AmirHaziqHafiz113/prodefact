@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/active_session_providers.dart';
+import '../../providers/physical_inspection_providers.dart';
 import '../widgets/finding_resolution_panel.dart';
 import '../widgets/finding_status_presentation.dart';
 import '../widgets/session_status_presentation.dart';
@@ -62,16 +63,18 @@ class FindingDetailScreen extends ConsumerWidget {
         : suggestion?.suggestedCatalogueEntryId;
     final entry = entryId == null ? null : catalogue.byId(entryId);
     final resolved = resolutionOf(finding, suggestion).isResolved;
+    final readOnly = ref.watch(inspectionReadOnlyProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(area ?? 'Finding'),
         actions: [
-          IconButton(
-            tooltip: 'Edit note',
-            icon: const Icon(Icons.edit_note),
-            onPressed: () => editFindingNote(context, ref, finding),
-          ),
+          if (!readOnly)
+            IconButton(
+              tooltip: 'Edit note',
+              icon: const Icon(Icons.edit_note),
+              onPressed: () => editFindingNote(context, ref, finding),
+            ),
         ],
       ),
       body: ListView(
@@ -148,17 +151,24 @@ class FindingDetailScreen extends ConsumerWidget {
                   icon: Icons.auto_awesome,
                   child: _AiAnalysis(finding: finding, suggestion: suggestion),
                 ),
-                const SizedBox(height: AppSpacing.xl),
-                Text(
-                  resolved ? 'Change defect' : 'Choose a defect',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                FindingResolutionPanel(
-                  finding: finding,
-                  suggestion: suggestion,
-                  showStatus: false,
-                ),
+                if (readOnly) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  const AppInlineWarningBanner(
+                    message: 'Completed inspection — view only.',
+                  ),
+                ] else ...[
+                  const SizedBox(height: AppSpacing.xl),
+                  Text(
+                    resolved ? 'Change defect' : 'Choose a defect',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  FindingResolutionPanel(
+                    finding: finding,
+                    suggestion: suggestion,
+                    showStatus: false,
+                  ),
+                ],
               ],
             ),
           ),

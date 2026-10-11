@@ -62,14 +62,15 @@ void main() {
 
       expect(find.byType(AppMetricCard), findsNothing);
       // Two real in-progress inspections (both still drafts — nothing
-      // recorded), none needing review, one real completed inspection.
+      // recorded), none needing review; the completed one is under Past.
+      expect(find.text('Active (2)'), findsOneWidget);
+      expect(find.text('Past (1)'), findsOneWidget);
       for (final label in [
-        'All (3)',
+        'All (2)',
         'Draft (2)',
-        'Active (2)',
+        'In progress (2)',
         'Needs Review (0)',
         'Report Ready (0)',
-        'Completed (1)',
       ]) {
         expect(find.widgetWithText(ChoiceChip, label), findsOneWidget);
       }

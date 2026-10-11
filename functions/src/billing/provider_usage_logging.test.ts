@@ -24,7 +24,7 @@ const NOTE = "PRIVATE inspector note about unit A-12-3";
 
 /**
  * @return {{db: Firestore, store: Map<string, Record<string, unknown>>}} a
- *   fake Firestore with one owned finding and Credits.
+ *   fake Firestore with one owned finding and Tokens.
  */
 function seeded() {
   const {db, store} = fakeFirestore({
@@ -32,7 +32,7 @@ function seeded() {
     [`users/${UID}/inspections/inspection_1/findings/finding_1`]: {},
     [`users/${UID}/wallet/main`]: {
       userId: UID,
-      balanceCredits: 1000,
+      balanceTokens: 10_000_000,
       updatedAt: 0,
     },
   });

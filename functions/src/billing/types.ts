@@ -3,9 +3,8 @@
  * module and the callables that use it. See docs/commercial_model.md
  * for the full design this implements.
  *
- * "Credits" are the only unit Flutter ever sees or reasons about — a
- * customer-facing abstraction over real money, configured server-side
- * (see `pricing_config.ts`). Flutter never computes a price itself.
+ * ProDefact Tokens are the only unit Flutter ever sees (1,000,000 Tokens
+ * = RM1 — see `tokens.ts`). Flutter never computes a price itself.
  */
 
 /** The three customer-facing AI quality tiers — never a raw model
@@ -22,7 +21,9 @@ export function isAiLevel(value: unknown): value is AiLevel {
 
 /** Which commercial mode an inspection is running under — persisted
  * once chosen (see `InspectionSession.commercialMode` on the Flutter
- * side) and never re-derived from the wallet later. */
+ * side) and never re-derived from the wallet later. `flexCredits` is a
+ * stored identifier kept for data compatibility; it means "pay as you
+ * go with Tokens". */
 export type CommercialMode = "flexCredits" | "housePass";
 
 /**
@@ -34,7 +35,7 @@ export function isCommercialMode(value: unknown): value is CommercialMode {
 }
 
 /**
- * A single, immutable entry in a user's Credits ledger — the
+ * A single, immutable entry in a user's Token ledger — the
  * authoritative history behind the cached wallet balance. See
  * `wallet.ts`.
  */
@@ -45,7 +46,10 @@ export type WalletTransactionType =
   | "reservationRelease"
   | "refund"
   | "adjustment"
-  | "housePassPurchase";
+  | "housePassPurchase"
+  /** The one-off conversion of a legacy Credits balance to Tokens of
+   * the same RM value. Informational: moves no balance by itself. */
+  | "legacyMigration";
 
 export type WalletTransactionStatus =
   | "pending"
@@ -54,7 +58,7 @@ export type WalletTransactionStatus =
   | "cancelled";
 
 /** `credit` increases the wallet balance; `debit` decreases it. A
- * `reservation` is a `debit` (credits are held), its matching
+ * `reservation` is a `debit` (Tokens are held), its matching
  * `reservationRelease`/settlement adjustment is a `credit` for any
  * unused portion. */
 export type LedgerDirection = "credit" | "debit";
@@ -64,7 +68,12 @@ export interface WalletTransaction {
   userId: string;
   type: WalletTransactionType;
   direction: LedgerDirection;
-  amountCredits: number;
+  /** Whole Tokens. Legacy entries (written before Tokens) have
+   * `amountCredits` instead and no `unit` — they are never rewritten. */
+  amountTokens: number;
+  unit: "tokens";
+  /** On a `legacyMigration` entry: the Credits balance converted. */
+  legacyAmountCredits?: number;
   status: WalletTransactionStatus;
   createdAt: number;
   updatedAt: number;
@@ -72,7 +81,7 @@ export interface WalletTransaction {
   findingId?: string;
   aiLevel?: AiLevel;
   /** The reservation transaction this usage/release/refund settles,
-   * if any — lets the full lifecycle of one AI job's credits be
+   * if any — lets the full lifecycle of one AI job's Tokens be
    * traced from a single id. */
   relatedTransactionId?: string;
   /** External payment reference (sandbox or a real gateway's own
@@ -89,8 +98,14 @@ export const WALLET_DOC_ID = "main";
 
 export interface WalletBalance {
   userId: string;
-  balanceCredits: number;
+  /** Whole Tokens — the cached balance. */
+  balanceTokens: number;
   updatedAt: number;
+  /** A pre-Token wallet's frozen Credits balance, kept for audit after
+   * conversion (never read for spending). */
+  balanceCredits?: number;
+  /** When the legacy Credits balance was converted. */
+  legacyCreditsMigratedAt?: number;
 }
 
 export type HousePassStatus =
@@ -126,22 +141,23 @@ export interface HousePass {
 
 export interface EstimateResult {
   aiLevel: AiLevel;
-  estimatedCredits: number;
-  maximumCredits: number;
+  estimatedTokens: number;
+  maximumTokens: number;
+  /** Whole Tokens. */
   currentBalance: number;
   paymentMode: CommercialMode;
   includedInHousePass: boolean;
-  /** Credits required on top of an active House Pass's included tier
+  /** Tokens required on top of an active House Pass's included tier
    * (e.g. choosing Expert when the pass only includes Smart) — 0 when
    * the level is fully included or the mode is `flexCredits`. */
-  surchargeCredits: number;
+  surchargeTokens: number;
   eligible: boolean;
   reason?: string;
 }
 
 export interface AnalyseFindingResult {
   aiLevel: AiLevel;
-  creditsCharged: number;
+  tokensCharged: number;
   newBalance: number;
   paymentMode: CommercialMode;
   classification: {

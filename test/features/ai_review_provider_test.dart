@@ -232,14 +232,14 @@ void main() {
 
   test('pending review count decreases as suggestions are resolved, and '
       'review cannot complete while any remain pending', () async {
-    // Two Smart analyses (up to 300 Credits each) need more than the
-    // fake's 500-Credit default. This previously passed only because both
+    // Two Smart analyses (up to 300 Tokens each) need more than the
+    // fake's 500-Token default. This previously passed only because both
     // balance checks ran before either charge landed, letting the fake's
     // balance go negative; analysis now starts after each finding's
     // durable save, so the runs no longer overlap that way.
     final container = ProviderContainer(
       overrides: testOverrides(
-        billingService: UncertainAiBillingService(initialBalanceCredits: 5000),
+        billingService: UncertainAiBillingService(initialBalanceTokens: 50000000),
       ),
     );
     addTearDown(container.dispose);

@@ -35,7 +35,8 @@ final sessionSummariesProvider =
 final attentionSessionsProvider =
     Provider.autoDispose<List<InspectionSessionSummary>>((ref) {
       final summaries = ref.watch(sessionSummariesProvider).value ?? const [];
-      return summaries.where((s) => s.needsAttention).toList();
+      // A completed inspection is read-only history, never review work.
+      return summaries.where((s) => s.needsAttention && !s.isPast).toList();
     });
 
 /// The real, non-fabricated count of evidence photos across every

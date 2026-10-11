@@ -5,7 +5,7 @@ import '../../../data/billing/billing_providers.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/remote/remote_providers.dart';
 
-/// The real, authoritative Credits balance — read fresh from
+/// The real, authoritative Tokens balance — read fresh from
 /// [walletActivityServiceProvider] every time, and opportunistically
 /// written through to the local [WalletCache] so the next app open has
 /// something to show instantly/offline before this resolves. Never the
@@ -18,7 +18,7 @@ final walletBalanceProvider = FutureProvider.autoDispose<int>((ref) async {
   await ref
       .watch(inspectionRepositoryProvider)
       .saveWalletCache(
-        WalletCache(balanceCredits: balance, updatedAt: DateTime.now()),
+        WalletCache(balanceTokens: balance, updatedAt: DateTime.now()),
       );
   return balance;
 });
@@ -38,4 +38,14 @@ final walletTransactionsProvider =
       return ref
           .watch(walletActivityServiceProvider)
           .loadRecentTransactions(uid, limit: 30);
+    });
+
+/// Recent Token cost records (one per charged operation) for the usage
+/// breakdown and "usage by inspection" — see `UsageRecordSummary`.
+final walletUsageRecordsProvider =
+    FutureProvider.autoDispose<List<UsageRecordSummary>>((ref) async {
+      final uid = ref.watch(authStateProvider).value?.uid ?? '';
+      return ref
+          .watch(walletActivityServiceProvider)
+          .loadUsageRecords(uid, limit: 100);
     });

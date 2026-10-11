@@ -109,6 +109,11 @@ part 'database.g.dart';
 ///   `historyJson` (earlier results kept on Reanalyse). Additive only.
 /// - v15: (photo guidance pass) added `AiSuggestionRows.imageRelevant`,
 ///   `imageUsable` and `imageQualityIssues` (all nullable, additive).
+/// - v18: (Tokens + Drive backup pass) added
+///   `WalletCacheRows.balanceTokens` (nullable — an old Credits-only row
+///   is treated as no cache), the `DriveBackupRows` table (the persistent
+///   Google Drive backup queue) and the `AppSettingRows` key/value table.
+///   Additive only.
 @DriftDatabase(
   tables: [
     InspectionSessionRows,
@@ -121,6 +126,8 @@ part 'database.g.dart';
     WalletCacheRows,
     AreaCandidateRows,
     CustomDefectRows,
+    DriveBackupRows,
+    AppSettingRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -131,7 +138,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -316,6 +323,15 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 17) {
         await migrator.createTable(customDefectRows);
+      }
+      if (from < 18) {
+        await migrator.createTable(driveBackupRows);
+        await migrator.createTable(appSettingRows);
+        await _addColumnIfMissing(
+          migrator,
+          walletCacheRows,
+          walletCacheRows.balanceTokens,
+        );
       }
       if (from < 16) {
         for (final column in [

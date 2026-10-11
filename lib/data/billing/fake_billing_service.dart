@@ -12,7 +12,7 @@ import '../ai/fake_ai_inspection_service.dart';
 /// production design this simulates.
 ///
 /// Starts with a small, deliberately non-generous balance (enough for
-/// a couple of analyses) so the low-balance/insufficient-Credits UI
+/// a couple of analyses) so the low-balance/insufficient-Tokens UI
 /// stays reachable in local-only/demo mode too, not just online.
 ///
 /// Also implements [WalletActivityService] — in local-only mode
@@ -23,19 +23,19 @@ import '../ai/fake_ai_inspection_service.dart';
 /// callables both describe the same underlying wallet.
 class FakeBillingService
     implements BillingService, WalletActivityService, HousePassStatusService {
-  FakeBillingService({int initialBalanceCredits = 500})
-    : _balanceCredits = initialBalanceCredits {
-    if (initialBalanceCredits > 0) {
+  FakeBillingService({int initialBalanceTokens = 5000000})
+    : _balanceTokens = initialBalanceTokens {
+    if (initialBalanceTokens > 0) {
       _record(
         type: WalletTransactionType.topup,
         direction: LedgerDirection.credit,
-        amountCredits: initialBalanceCredits,
+        amountTokens: initialBalanceTokens,
         description: 'Starting balance',
       );
     }
   }
 
-  int _balanceCredits;
+  int _balanceTokens;
   final Map<String, _FakeHousePass> _housePassByInspection = {};
   final Map<String, _FakePendingIntent> _pendingIntents = {};
   final FakeAiInspectionService _aiService = FakeAiInspectionService();
@@ -50,7 +50,7 @@ class FakeBillingService
   void _record({
     required WalletTransactionType type,
     required LedgerDirection direction,
-    required int amountCredits,
+    required int amountTokens,
     required String description,
   }) {
     _ledgerSequence++;
@@ -60,7 +60,7 @@ class FakeBillingService
         id: 'fake_ledger_$_ledgerSequence',
         type: type,
         direction: direction,
-        amountCredits: amountCredits,
+        amountTokens: amountTokens,
         description: description,
         createdAt: DateTime.now(),
       ),
@@ -68,7 +68,15 @@ class FakeBillingService
   }
 
   @override
-  Future<int> loadBalance(String uid) async => _balanceCredits;
+  Future<int> loadBalance(String uid) async => _balanceTokens;
+
+  final List<UsageRecordSummary> _usageRecords = [];
+
+  @override
+  Future<List<UsageRecordSummary>> loadUsageRecords(
+    String uid, {
+    int limit = 100,
+  }) async => _usageRecords.take(limit).toList();
 
   @override
   Future<List<WalletTransactionSummary>> loadRecentTransactions(
@@ -114,45 +122,45 @@ class FakeBillingService
     );
   }
 
-  static const Map<AiLevel, int> _maxCreditsByLevel = {
-    AiLevel.fast: 150,
-    AiLevel.smart: 300,
-    AiLevel.expert: 600,
+  static const Map<AiLevel, int> _maxTokensByLevel = {
+    AiLevel.fast: 1500000,
+    AiLevel.smart: 3000000,
+    AiLevel.expert: 6000000,
   };
   static const _housePassIncludedLevel = AiLevel.smart;
   static const _housePassAllowanceFindings = 5;
   static const _housePassPriceMyr = 30.0;
-  static const _creditsPerMyr = 100;
+  static const _tokensPerMyr = 1000000;
 
   @override
   Future<CommercialConfig> getCommercialConfig() async {
     return CommercialConfig(
-      creditsPerMyr: _creditsPerMyr,
-      lowBalanceThresholdCredits: 200,
+      tokensPerMyr: _tokensPerMyr,
+      lowBalanceThresholdTokens: 2000000,
       topUpPackages: const [
-        TopUpPackage(myr: 10, credits: 1000),
-        TopUpPackage(myr: 30, credits: 3000),
-        TopUpPackage(myr: 50, credits: 5000),
-        TopUpPackage(myr: 100, credits: 10000),
+        TopUpPackage(myr: 10, tokens: 10000000),
+        TopUpPackage(myr: 30, tokens: 30000000),
+        TopUpPackage(myr: 50, tokens: 50000000),
+        TopUpPackage(myr: 100, tokens: 100000000),
       ],
       aiLevels: [
         AiLevelInfo(
           level: AiLevel.fast,
           label: 'Fast',
           description: 'Lowest cost — good for obvious defects.',
-          maximumCredits: _maxCreditsByLevel[AiLevel.fast]!,
+          maximumTokens: _maxTokensByLevel[AiLevel.fast]!,
         ),
         AiLevelInfo(
           level: AiLevel.smart,
           label: 'Smart',
           description: 'Recommended — best balance of cost and accuracy.',
-          maximumCredits: _maxCreditsByLevel[AiLevel.smart]!,
+          maximumTokens: _maxTokensByLevel[AiLevel.smart]!,
         ),
         AiLevelInfo(
           level: AiLevel.expert,
           label: 'Expert',
           description: 'Best for difficult or unclear findings.',
-          maximumCredits: _maxCreditsByLevel[AiLevel.expert]!,
+          maximumTokens: _maxTokensByLevel[AiLevel.expert]!,
         ),
       ],
       housePass: const HousePassInfo(
@@ -174,42 +182,42 @@ class FakeBillingService
     required String findingId,
     required AiLevel aiLevel,
   }) async {
-    final maxCredits = _maxCreditsByLevel[aiLevel]!;
+    final maxTokens = _maxTokensByLevel[aiLevel]!;
     final pass = _housePassByInspection[inspectionId];
 
     if (pass == null || !pass.hasRemainingAllowance) {
-      final eligible = _balanceCredits >= maxCredits;
+      final eligible = _balanceTokens >= maxTokens;
       return AnalysisEstimate(
         aiLevel: aiLevel,
-        estimatedCredits: maxCredits,
-        maximumCredits: maxCredits,
-        currentBalance: _balanceCredits,
+        estimatedTokens: maxTokens,
+        maximumTokens: maxTokens,
+        currentBalance: _balanceTokens,
         paymentMode: CommercialMode.flexCredits,
         includedInHousePass: false,
-        surchargeCredits: 0,
+        surchargeTokens: 0,
         eligible: eligible,
         reason: eligible
             ? null
             : (pass != null
                   ? EstimateIneligibleReason.housePassAllowanceReached
-                  : EstimateIneligibleReason.insufficientCredits),
+                  : EstimateIneligibleReason.insufficientTokens),
       );
     }
 
     final surcharge = _rank(aiLevel) <= _rank(_housePassIncludedLevel)
         ? 0
-        : maxCredits;
-    final eligible = surcharge == 0 || _balanceCredits >= surcharge;
+        : maxTokens;
+    final eligible = surcharge == 0 || _balanceTokens >= surcharge;
     return AnalysisEstimate(
       aiLevel: aiLevel,
-      estimatedCredits: surcharge,
-      maximumCredits: surcharge,
-      currentBalance: _balanceCredits,
+      estimatedTokens: surcharge,
+      maximumTokens: surcharge,
+      currentBalance: _balanceTokens,
       paymentMode: CommercialMode.housePass,
       includedInHousePass: surcharge == 0,
-      surchargeCredits: surcharge,
+      surchargeTokens: surcharge,
       eligible: eligible,
-      reason: eligible ? null : EstimateIneligibleReason.insufficientCredits,
+      reason: eligible ? null : EstimateIneligibleReason.insufficientTokens,
     );
   }
 
@@ -229,8 +237,8 @@ class FakeBillingService
     if (replayed != null) {
       return AnalyseFindingResult(
         aiLevel: replayed.aiLevel,
-        creditsCharged: replayed.creditsCharged,
-        newBalance: _balanceCredits,
+        tokensCharged: replayed.tokensCharged,
+        newBalance: _balanceTokens,
         paymentMode: replayed.paymentMode,
         classification: replayed.classification,
       );
@@ -242,8 +250,8 @@ class FakeBillingService
     );
     if (!estimate.eligible) {
       throw Exception(
-        estimate.reason == EstimateIneligibleReason.insufficientCredits
-            ? "You don't have enough Credits for this analysis."
+        estimate.reason == EstimateIneligibleReason.insufficientTokens
+            ? "You don't have enough Tokens for this analysis."
             : "This House Pass can't be used for this analysis right now.",
       );
     }
@@ -251,8 +259,8 @@ class FakeBillingService
     final classification = await _aiService.classifyFinding(request);
 
     final maxCharge = estimate.paymentMode == CommercialMode.housePass
-        ? estimate.surchargeCredits
-        : estimate.maximumCredits;
+        ? estimate.surchargeTokens
+        : estimate.maximumTokens;
     // A simulated usage-based settlement: an inconclusive (needsReview)
     // finding "used" less of the reserved maximum than a confidently
     // classified one — the same shape as the real backend's real-usage
@@ -260,15 +268,36 @@ class FakeBillingService
     final actualCharge = classification.needsReview
         ? (maxCharge * 0.5).round()
         : maxCharge;
-    _balanceCredits -= actualCharge;
+    _balanceTokens -= actualCharge;
     if (actualCharge > 0) {
       _record(
         type: WalletTransactionType.usage,
         direction: LedgerDirection.debit,
-        amountCredits: actualCharge,
+        amountTokens: actualCharge,
         description: 'AI analysis (${aiLevel.name})',
       );
     }
+
+    // A simulated cost record, split like a real one (mostly AI, a
+    // little storage/processing/other) and always summing to the charge.
+    final storage = actualCharge ~/ 10;
+    final processing = actualCharge ~/ 10;
+    final other = actualCharge ~/ 20;
+    _usageRecords.insert(
+      0,
+      UsageRecordSummary(
+        id: idempotencyKey,
+        operationType: 'aiAnalysis',
+        tokensCharged: actualCharge,
+        aiAnalysisTokens: actualCharge - storage - processing - other,
+        storageTokens: storage,
+        processingTokens: processing,
+        otherTokens: other,
+        createdAt: DateTime.now(),
+        inspectionId: request.sessionId,
+        findingId: request.findingId,
+      ),
+    );
 
     if (estimate.paymentMode == CommercialMode.housePass) {
       _housePassByInspection[request.sessionId]?.recordUsage();
@@ -276,8 +305,8 @@ class FakeBillingService
 
     final result = AnalyseFindingResult(
       aiLevel: aiLevel,
-      creditsCharged: actualCharge,
-      newBalance: _balanceCredits,
+      tokensCharged: actualCharge,
+      newBalance: _balanceTokens,
       paymentMode: estimate.paymentMode,
       classification: classification,
     );
@@ -288,16 +317,16 @@ class FakeBillingService
   @override
   Future<TopUpIntent> createTopUpIntent(double amountMyr) async {
     final intentId = 'fake_topup_${DateTime.now().microsecondsSinceEpoch}';
-    final credits = (amountMyr * _creditsPerMyr).round();
+    final tokens = (amountMyr * _tokensPerMyr).round();
     _pendingIntents[intentId] = _FakePendingIntent(
       purpose: PaymentPurpose.topup,
       amountMyr: amountMyr,
-      creditsAmount: credits,
+      tokensAmount: tokens,
     );
     return TopUpIntent(
       intentId: intentId,
       amountMyr: amountMyr,
-      creditsAmount: credits,
+      tokensAmount: tokens,
     );
   }
 
@@ -323,17 +352,17 @@ class FakeBillingService
     if (intent == null) throw Exception('That could not be found.');
 
     if (intent.purpose == PaymentPurpose.topup) {
-      _balanceCredits += intent.creditsAmount!;
+      _balanceTokens += intent.tokensAmount!;
       _record(
         type: WalletTransactionType.topup,
         direction: LedgerDirection.credit,
-        amountCredits: intent.creditsAmount!,
+        amountTokens: intent.tokensAmount!,
         description: 'Top up — RM${intent.amountMyr.toStringAsFixed(0)}',
       );
       return SandboxPaymentConfirmation(
         purpose: PaymentPurpose.topup,
-        newBalance: _balanceCredits,
-        creditsAdded: intent.creditsAmount!,
+        newBalance: _balanceTokens,
+        tokensAdded: intent.tokensAmount!,
       );
     }
     _housePassByInspection[intent.inspectionId!] = _FakeHousePass(
@@ -342,14 +371,14 @@ class FakeBillingService
     _record(
       type: WalletTransactionType.housePassPurchase,
       direction: LedgerDirection.credit,
-      amountCredits: 0,
+      amountTokens: 0,
       description:
           'House Pass purchase — RM${intent.amountMyr.toStringAsFixed(0)}',
     );
     return SandboxPaymentConfirmation(
       purpose: PaymentPurpose.housePass,
-      newBalance: _balanceCredits,
-      creditsAdded: 0,
+      newBalance: _balanceTokens,
+      tokensAdded: 0,
     );
   }
 }
@@ -369,12 +398,12 @@ class _FakePendingIntent {
   _FakePendingIntent({
     required this.purpose,
     required this.amountMyr,
-    this.creditsAmount,
+    this.tokensAmount,
     this.inspectionId,
   });
 
   final PaymentPurpose purpose;
   final double amountMyr;
-  final int? creditsAmount;
+  final int? tokensAmount;
   final String? inspectionId;
 }
