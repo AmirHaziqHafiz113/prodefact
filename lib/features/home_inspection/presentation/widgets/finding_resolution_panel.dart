@@ -147,6 +147,14 @@ class FindingResolutionPanel extends ConsumerWidget {
             ),
           ),
         if (needsChoice && canPick)
+          _LikelyFromNote(
+            finding: finding,
+            relatedContext: relatedContext,
+            onSelected: (entry) => ref
+                .read(activeSessionProvider.notifier)
+                .selectDefectForFinding(finding.id, entry.id),
+          ),
+        if (needsChoice && canPick)
           _Recommended(
             finding: finding,
             relatedContext: relatedContext,
@@ -261,12 +269,22 @@ class _ComponentDefects extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final intent = readNoteIntent(relatedContext.note);
     final component = likelyComponentFor(relatedContext);
-    if (component == null) return const SizedBox.shrink();
+    // A locked note names the component(s) itself (an element-only note
+    // such as "wall" locks all of that element's components); otherwise
+    // the AI's detected component, as before.
+    final componentIds = intent.isLocked
+        ? intent.lockComponentIds
+        : [if (component != null) component.id];
+    if (componentIds.isEmpty) return const SizedBox.shrink();
     final ranked = rankRelatedDefects(relatedContext)
-        .where((e) => e.componentId == component.id)
+        .where((e) => componentIds.contains(e.componentId))
         .toList();
     if (ranked.isEmpty) return const SizedBox.shrink();
+    final label = intent.isLocked && intent.elementNames.isNotEmpty
+        ? intent.elementNames.first
+        : (component?.name ?? intent.lockComponentNames.first);
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -274,7 +292,9 @@ class _ComponentDefects extends StatelessWidget {
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         title: Text(
-          'All defects for ${component.name}',
+          intent.level == NoteConfidenceLevel.a
+              ? 'Other $label defects'
+              : 'All defects for $label',
           style: Theme.of(context).textTheme.titleSmall,
         ),
         children: [
@@ -288,6 +308,53 @@ class _ComponentDefects extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// "Likely from your note": the catalogue entry the inspector's own note
+/// spells out (component AND defect), shown first when the result still
+/// needs a choice — including after an AI failure, so a known note intent
+/// is never lost to an unrelated generic list. One tap selects it (never an
+/// AI call).
+class _LikelyFromNote extends StatelessWidget {
+  const _LikelyFromNote({
+    required this.finding,
+    required this.relatedContext,
+    required this.onSelected,
+  });
+
+  final Finding finding;
+  final RelatedDefectContext relatedContext;
+  final void Function(DefectCatalogueEntry entry) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final intent = readNoteIntent(relatedContext.note);
+    if (intent.level != NoteConfidenceLevel.a) return const SizedBox.shrink();
+    final entry = likelyNoteEntry(relatedContext);
+    if (entry == null) return const SizedBox.shrink();
+    return Column(
+      key: ValueKey('likely-from-note-${finding.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Likely from your note',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        Card(
+          margin: const EdgeInsets.only(top: AppSpacing.xs),
+          child: ListTile(
+            key: ValueKey('likely-note-${finding.id}-${entry.id}'),
+            dense: true,
+            title: Text(entry.defectDescription),
+            subtitle: Text('${entry.mainElementName} · ${entry.componentName}'),
+            trailing: const Icon(Icons.check_circle_outline),
+            onTap: () => onSelected(entry),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -307,7 +374,6 @@ class _Recommended extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final noteMissing = (finding.defectNote ?? '').trim().isEmpty;
-    final ranked = rankRelatedDefects(relatedContext);
     // With neither a note nor an AI hint there is nothing to rank by —
     // an arbitrary "recommendation" would be noise.
     if (noteMissing &&
@@ -315,7 +381,16 @@ class _Recommended extends StatelessWidget {
         relatedContext.detectedComponent == null) {
       return const SizedBox.shrink();
     }
-    final top = ranked.take(4).toList();
+    // A locked note only ever recommends its own component's defects (the
+    // entry shown under "Likely from your note" is not repeated).
+    final likely =
+        readNoteIntent(relatedContext.note).level == NoteConfidenceLevel.a
+        ? likelyNoteEntry(relatedContext)
+        : null;
+    final top = [
+      for (final e in recommendedDefects(relatedContext, limit: 5))
+        if (e.id != likely?.id) e,
+    ].take(4).toList();
     if (top.isEmpty) return const SizedBox.shrink();
     return Column(
       key: ValueKey('recommended-${finding.id}'),

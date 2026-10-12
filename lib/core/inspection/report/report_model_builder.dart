@@ -87,7 +87,11 @@ ReportModel buildReportModel({
     totalEvidence: totalEvidence,
     areas: areas,
     version: version,
-    propertyTitle: metadata?.title,
+    // A blank title (metadata created only to hold the cover photo) reads
+    // as no title, so the cover falls back to the property type as before.
+    propertyTitle: (metadata?.title.trim().isEmpty ?? true)
+        ? null
+        : metadata!.title,
     propertyAddress: metadata?.address,
     projectDeveloperName: metadata?.projectDeveloperName,
     blockTower: metadata?.blockTower,

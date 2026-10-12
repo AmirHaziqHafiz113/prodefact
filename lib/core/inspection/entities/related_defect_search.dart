@@ -7,6 +7,7 @@ library;
 import 'defect_catalogue.dart';
 import 'defect_terms.dart';
 import 'note_aliases.dart';
+import 'note_intent.dart';
 
 const _stopwords = {
   'the',
@@ -105,8 +106,22 @@ class RelatedDefectContext {
 
 /// One catalogue entry scored against [context] — higher is more
 /// likely to be what this finding actually is.
-double _relatedScore(DefectCatalogueEntry entry, RelatedDefectContext context) {
+double _relatedScore(
+  DefectCatalogueEntry entry,
+  RelatedDefectContext context,
+  NoteIntent intent,
+) {
   var score = 0.0;
+  // NOTE AUTHORITY: a note that clearly names a component outranks any
+  // amount of look-alike wording elsewhere. The spelled-out defect family
+  // leads, then the rest of the locked component(s); everything else only
+  // follows (and is dropped from the top recommendations altogether —
+  // see [recommendedDefects]).
+  if (intent.isLocked) {
+    if (intent.lockComponentIds.contains(entry.componentId)) score += 1000;
+    final lead = intent.entryIds.indexOf(entry.id);
+    if (lead != -1) score += 2000 - lead;
+  }
   final index = context.candidateEntryIds.indexOf(entry.id);
   if (index != -1) {
     // Still ranked first-to-last among themselves.
@@ -147,13 +162,47 @@ List<DefectCatalogueEntry> rankRelatedDefects(RelatedDefectContext context) {
   final all = DefectCatalogue.instance.entries
       .where((e) => e.id != context.excludeEntryId)
       .toList();
+  final intent = readNoteIntent(context.note);
   final scored = [
-    for (final e in all) (entry: e, score: _relatedScore(e, context)),
+    for (final e in all) (entry: e, score: _relatedScore(e, context, intent)),
   ];
   // Stable sort: ties keep the catalogue's own order, so an unscored
   // search still reads as a sensible, consistent list.
   scored.sort((a, b) => b.score.compareTo(a.score));
   return [for (final s in scored) s.entry];
+}
+
+/// The up-to-[limit] best catalogue matches for a finding that still needs
+/// the inspector's choice, in this priority: (1) the entry the note itself
+/// spells out, (2) other defects of the same component, (3) image-supported
+/// alternatives within that component, (4) other components ONLY when the
+/// note locks nothing. A locked note never gets look-alike entries from
+/// another component to fill the list — fewer than [limit] is fine.
+List<DefectCatalogueEntry> recommendedDefects(
+  RelatedDefectContext context, {
+  int limit = 4,
+}) {
+  final intent = readNoteIntent(context.note);
+  final ranked = rankRelatedDefects(context);
+  final pool = intent.isLocked
+      ? [
+          for (final e in ranked)
+            if (intent.lockComponentIds.contains(e.componentId)) e,
+        ]
+      : ranked;
+  return pool.take(limit).toList();
+}
+
+/// The single entry the note itself spells out (component AND defect), best
+/// ranked first — null unless the note is level A. Never an AI result.
+DefectCatalogueEntry? likelyNoteEntry(RelatedDefectContext context) {
+  final intent = readNoteIntent(context.note);
+  if (intent.level != NoteConfidenceLevel.a) return null;
+  final ranked = rankRelatedDefects(context);
+  for (final e in ranked) {
+    if (intent.entryIds.contains(e.id)) return e;
+  }
+  return null;
 }
 
 /// [ranked] narrowed to entries whose element, component, description
@@ -192,6 +241,14 @@ Set<String> _searchableText(DefectCatalogueEntry entry) {
 /// Deterministic and on-device; never calls AI.
 DefectCatalogueComponent? likelyComponentFor(RelatedDefectContext context) {
   final catalogue = DefectCatalogue.instance;
+  // The note decides when it can (note authority): a single locked
+  // component wins over a different one the image suggested.
+  final intent = readNoteIntent(context.note);
+  if (intent.lockComponentIds.length == 1) {
+    for (final c in catalogue.components) {
+      if (c.id == intent.lockComponentIds.single) return c;
+    }
+  }
   final detected = context.detectedComponent?.trim().toLowerCase();
   if (detected != null && detected.isNotEmpty) {
     for (final c in catalogue.components) {

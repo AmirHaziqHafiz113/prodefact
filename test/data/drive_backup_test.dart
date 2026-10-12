@@ -502,4 +502,51 @@ void main() {
     expect(entry!.status, isNot(DriveBackupStatus.verified));
     expect(brokenDrive.uploads, 0);
   });
+
+  test('a Residence / Unit Photo is backed up as its own asset type: its '
+      'own "Residence Photo" folder and tag, never a finding area\'s', () async {
+    final c = coordinator();
+    await connected(c);
+    final file = File('${dir.path}/residence.jpg');
+    await file.writeAsBytes(List<int>.generate(4096, (i) => i % 251));
+    const id = 'residence_session_1_residence';
+    photos[id] = DriveBackupPhoto(
+      evidenceId: id,
+      sessionId: 'session_1',
+      findingId: kResidencePhotoFindingId,
+      sectionId: '__residence__',
+      sectionName: 'Residence Photo',
+      inspectionTitle: 'Residensi Vista',
+      inspectionDate: DateTime(2026, 10, 9),
+      originalFilePath: file.path,
+      assetType: DriveAssetType.residencePhoto,
+    );
+    await c.enqueue(
+      sessionId: 'session_1',
+      findingId: kResidencePhotoFindingId,
+      evidenceId: id,
+    );
+    await c.processQueue();
+
+    final entry = (await store.get(id))!;
+    expect(entry.status, DriveBackupStatus.verified);
+    expect(entry.assetType, DriveAssetType.residencePhoto);
+    expect(drive.folders.keys.last, 'area:session_1:__residence__');
+    expect(drive.folders.keys, isNot(contains('area:session_1:kitchen')));
+    final props = drive.files[entry.driveFileId]!.props;
+    expect(props['prodefactAssetType'], 'residencePhoto');
+    expect(props['prodefactFindingId'], kResidencePhotoFindingId);
+
+    // A defect photo in the same inspection stays separate and is tagged so.
+    await photo('ev_1');
+    await enqueue(c, 'ev_1');
+    await c.processQueue();
+    final evidence = (await store.get('ev_1'))!;
+    expect(evidence.assetType, DriveAssetType.findingEvidence);
+    expect(
+      drive.files[evidence.driveFileId]!.props['prodefactAssetType'],
+      'findingEvidence',
+    );
+    expect(evidence.driveFolderId, isNot(entry.driveFolderId));
+  });
 }

@@ -21,6 +21,17 @@ class EvidenceCaptureException implements Exception {
   String toString() => 'EvidenceCaptureException: $message';
 }
 
+/// Refuses a gallery selection larger than the technical ceiling [max] —
+/// whole, never silently truncated, and before any file is copied.
+void ensureWithinGalleryCeiling(int picked, int max) {
+  if (picked > max) {
+    throw EvidenceCaptureException(
+      'You can add up to $max photos at a time (you picked $picked). '
+      'Please pick fewer.',
+    );
+  }
+}
+
 /// Production [EvidenceCaptureService]: uses `image_picker` to acquire a
 /// photo, then copies it into an app-managed `evidence/<findingId>/`
 /// directory under the app's documents directory so the reference stays
@@ -75,7 +86,7 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
   Future<List<CapturedEvidence>> captureImages({
     required String findingId,
     required EvidenceSource source,
-    int maxImages = 3,
+    int maxImages = kMaxGalleryPhotosPerSelection,
   }) async {
     if (source == EvidenceSource.camera) {
       final single = await captureImage(findingId: findingId, source: source);
@@ -85,7 +96,9 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
     try {
       // Same quality bound as a single pick: whole photo, no crop.
       picked = await _picker.pickMultiImage(
-        limit: maxImages,
+        // Platforms that honour it stop the selection at the ceiling;
+        // picker requires at least 2.
+        limit: maxImages < 2 ? 2 : maxImages,
         maxWidth: 2560,
         maxHeight: 2560,
         imageQuality: 90,
@@ -95,9 +108,11 @@ class ImagePickerEvidenceCaptureService implements EvidenceCaptureService {
         'Could not access the photo library ($error).',
       );
     }
+    // Some platforms ignore `limit`. Never silently drop part of a
+    // selection: refuse it whole, before copying anything, and say why.
+    ensureWithinGalleryCeiling(picked.length, maxImages);
     final captured = <CapturedEvidence>[];
-    // Some platforms ignore `limit`; never attach more than asked.
-    for (final file in picked.take(maxImages)) {
+    for (final file in picked) {
       captured.add(
         CapturedEvidence(
           filePath: await _copyIntoEvidenceDir(findingId, file),

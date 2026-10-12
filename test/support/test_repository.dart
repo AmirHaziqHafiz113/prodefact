@@ -74,7 +74,7 @@ class FakeEvidenceCaptureService implements EvidenceCaptureService {
   Future<List<CapturedEvidence>> captureImages({
     required String findingId,
     required EvidenceSource source,
-    int maxImages = 3,
+    int maxImages = kMaxGalleryPhotosPerSelection,
   }) async {
     if (cancelNextPick) return const [];
     final count = source == EvidenceSource.camera

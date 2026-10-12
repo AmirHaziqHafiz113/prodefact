@@ -88,13 +88,14 @@ void main() {
     expect(container.read(activeSessionProvider)!.findings, hasLength(2));
   });
 
-  test('3. three selected gallery photos create three findings (the pick '
-      'stays capped at 3)', () async {
+  test('3. a gallery selection is NOT capped at 3: seven selected photos '
+      'create seven findings, none dropped', () async {
     final (container, capture) = await _start(galleryPickCount: 7);
     final saved = await _pickAndSave(container, ['A', 'B', 'C']);
-    expect(saved, hasLength(3));
-    expect(capture.captureCount, 3);
-    expect(saved.map((f) => f.description), ['A', 'B', 'C']);
+    expect(saved, hasLength(7));
+    expect(capture.captureCount, 7);
+    expect(saved.take(3).map((f) => f.description), ['A', 'B', 'C']);
+    expect(saved.skip(3).every((f) => f.description == null), isTrue);
   });
 
   test('4. each new finding holds exactly one photo, with its own finding '
@@ -251,7 +252,7 @@ void main() {
       find.textContaining('Each photo is saved as its own finding'),
       findsOneWidget,
     );
-    expect(find.text('Save 3 Findings'), findsOneWidget);
+    expect(find.text('Upload 3 Findings'), findsOneWidget);
     // No AI level choice at upload — that lives only in Profile.
     expect(find.text('Expert'), findsNothing);
 
@@ -279,9 +280,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Save 2 Findings'), findsOneWidget);
+    expect(find.text('Upload 2 Findings'), findsOneWidget);
 
-    await tester.tap(find.text('Save 2 Findings'));
+    await tester.tap(find.text('Upload 2 Findings'));
     await tester.pumpAndSettle();
 
     final findings = container.read(activeSessionProvider)!.findings;

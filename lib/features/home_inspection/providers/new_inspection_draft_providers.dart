@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/inspection/inspection_domain.dart';
+import '../../../data/local/database_providers.dart';
 import '../config/home_inspection_config.dart';
 import '../config/property_type.dart';
 import 'active_session_providers.dart';
@@ -25,6 +28,7 @@ class NewInspectionDraft {
     required this.propertyType,
     required this.sections,
     this.propertyDetails,
+    this.residencePhotoPath,
   });
 
   final PropertyType propertyType;
@@ -46,14 +50,24 @@ class NewInspectionDraft {
   /// override are both still available after setup.
   final PropertyDetails? propertyDetails;
 
+  /// The optional Residence / Unit Photo chosen during setup (a local
+  /// file). It becomes the new inspection's report cover photo when the
+  /// inspection starts. Not a defect photo.
+  final String? residencePhotoPath;
+
   NewInspectionDraft copyWith({
     List<Section>? sections,
     PropertyDetails? propertyDetails,
+    String? residencePhotoPath,
+    bool clearResidencePhoto = false,
   }) {
     return NewInspectionDraft(
       propertyType: propertyType,
       sections: sections ?? this.sections,
       propertyDetails: propertyDetails ?? this.propertyDetails,
+      residencePhotoPath: clearResidencePhoto
+          ? null
+          : (residencePhotoPath ?? this.residencePhotoPath),
     );
   }
 }
@@ -78,7 +92,54 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
 
   /// Abandons the current draft without starting an inspection. Safe
   /// to call any number of times, including when there is no draft.
-  void discard() => state = null;
+  void discard() {
+    final photo = state?.residencePhotoPath;
+    state = null;
+    if (photo != null) _deleteFile(photo);
+  }
+
+  /// Chooses (or replaces) the optional Residence / Unit Photo on the draft.
+  /// Returns whether a photo was set. A capture error is surfaced via
+  /// [activeSessionErrorProvider]; nothing is persisted until the
+  /// inspection starts.
+  Future<bool> chooseResidencePhoto(EvidenceSource source) async {
+    final draft = state;
+    if (draft == null) return false;
+    try {
+      final captured = await ref
+          .read(evidenceCaptureServiceProvider)
+          .captureImage(
+            findingId:
+                'residence_draft_${DateTime.now().microsecondsSinceEpoch}',
+            source: source,
+          );
+      if (captured == null || !ref.mounted || state == null) return false;
+      final previous = state!.residencePhotoPath;
+      state = state!.copyWith(residencePhotoPath: captured.filePath);
+      if (previous != null) _deleteFile(previous);
+      return true;
+    } catch (_) {
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set(
+            'Could not add that photo. Check camera/photo permissions and '
+            'try again.',
+          );
+      return false;
+    }
+  }
+
+  void removeResidencePhoto() {
+    final draft = state;
+    final photo = draft?.residencePhotoPath;
+    if (draft == null || photo == null) return;
+    state = draft.copyWith(clearResidencePhoto: true);
+    _deleteFile(photo);
+  }
+
+  void _deleteFile(String path) {
+    unawaited(ref.read(evidenceFileStoreProvider).deleteEvidenceFile(path));
+  }
 
   /// Records the Property Details step's result on the draft — purely
   /// in-memory, exactly like every other setup-time edit here.
@@ -186,6 +247,12 @@ class NewInspectionDraftNotifier extends Notifier<NewInspectionDraft?> {
             propertyDetails: draft.propertyDetails ?? PropertyDetails.empty,
           );
       if (started) {
+        // The setup photo becomes the new inspection's cover photo — the
+        // same single write path Overview and Report Details use.
+        final photo = draft.residencePhotoPath;
+        if (photo != null) {
+          ref.read(activeSessionProvider.notifier).setResidencePhoto(photo);
+        }
         state = null;
       }
       return started;

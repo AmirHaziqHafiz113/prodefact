@@ -176,6 +176,14 @@ export interface AnalyseFindingResult {
     detectedComponent?: string;
     /** supports | neutral | contradicts | unclear. */
     noteImageAgreement?: string;
+    /** Bounded semantic reading of the quick note (advisory). */
+    normalizedIntent?: string;
+    noteComponentHint?: string;
+    noteDefectHint?: string;
+    noteIntentConfidence?: number;
+    /** Set when a locked note and the photo name different components. */
+    noteComponent?: string;
+    imageComponent?: string;
     /** Why the inspector must review (controlled; see gateway.ts). */
     needsReviewReason?: string;
     confidence?: number;

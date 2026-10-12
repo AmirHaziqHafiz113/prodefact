@@ -254,7 +254,7 @@ class _PermissionDeniedCaptureService implements EvidenceCaptureService {
   Future<List<CapturedEvidence>> captureImages({
     required String findingId,
     required EvidenceSource source,
-    int maxImages = 3,
+    int maxImages = kMaxGalleryPhotosPerSelection,
   }) {
     throw Exception('Photo library permission denied');
   }

@@ -35,6 +35,28 @@ DriveBackupStatus driveBackupStatusFromName(String? name) =>
       orElse: () => DriveBackupStatus.notStarted,
     );
 
+/// What kind of asset a backup row is. Defect evidence and the report-cover
+/// Residence / Unit Photo are tracked separately: different Drive folder,
+/// different metadata, never mixed into a finding's evidence state.
+enum DriveAssetType { findingEvidence, residencePhoto }
+
+/// The reserved "finding id" of a Residence / Unit Photo backup row. It is
+/// not a finding (no finding row ever has this id); it only tags the row so
+/// the queue, the resolver and the Drive metadata can tell the two asset
+/// types apart without a schema change.
+const String kResidencePhotoFindingId = '__residence_photo__';
+
+/// The backup row id of one Residence / Unit Photo file. Unique per
+/// photo file, so replacing the photo queues the new file as its own asset
+/// instead of being skipped as "already queued".
+String residencePhotoBackupId(String sessionId, String filePath) {
+  final name = filePath.split(RegExp(r'[\\/]')).last;
+  final stem = name.contains('.')
+      ? name.substring(0, name.lastIndexOf('.'))
+      : name;
+  return 'residence_${sessionId}_$stem';
+}
+
 /// One photo's backup record (the queue row).
 class DriveBackupEntry {
   const DriveBackupEntry({
@@ -69,6 +91,11 @@ class DriveBackupEntry {
   final DateTime updatedAt;
 
   bool get isVerified => status == DriveBackupStatus.verified;
+
+  /// Defect evidence or the report-cover Residence / Unit Photo.
+  DriveAssetType get assetType => findingId == kResidencePhotoFindingId
+      ? DriveAssetType.residencePhoto
+      : DriveAssetType.findingEvidence;
 
   DriveBackupEntry copyWith({
     DriveBackupStatus? status,

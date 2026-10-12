@@ -1,13 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
-import '../../../../data/local/database_providers.dart';
 import '../../providers/active_session_providers.dart';
+import '../../providers/physical_inspection_providers.dart';
+import '../widgets/residence_photo_section.dart';
 
 /// "Report Details" — lets the inspector review/edit the report's
 /// cover-page metadata right before generating, without going all the
@@ -39,7 +38,7 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
   DateTime _inspectionDate = DateTime.now();
   DateTime _reportDate = DateTime.now();
   bool _prefilled = false;
-  String? _coverPhotoPath;
+  bool _pickingPhoto = false;
 
   @override
   void dispose() {
@@ -58,78 +57,25 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
     super.dispose();
   }
 
-  Future<void> _pickCoverPhoto(String sessionId, EvidenceSource source) async {
+  /// The Residence / Unit Photo is written straight to the session (the one
+  /// source of truth shared with setup and Inspection Overview), not held in
+  /// this form — so Add / Replace / Remove take effect immediately.
+  Future<void> _chooseCoverPhoto(EvidenceSource source) async {
+    setState(() => _pickingPhoto = true);
     try {
-      final captured = await ref
-          .read(evidenceCaptureServiceProvider)
-          .captureImage(findingId: 'cover_$sessionId', source: source);
-      if (captured == null || !mounted) return;
-      setState(() => _coverPhotoPath = captured.filePath);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not add that photo. Check camera/photo permissions and '
-            'try again.',
-          ),
-        ),
-      );
+      await ref
+          .read(activeSessionProvider.notifier)
+          .chooseResidencePhoto(source);
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
     }
-  }
-
-  Widget _buildResidencePhotoCard(String sessionId) {
-    final path = _coverPhotoPath;
-    return AppFormSectionCard(
-      icon: Icons.photo_outlined,
-      title: 'Residence / Unit Photo',
-      subtitle: 'Optional — shown on page 1 of the report',
-      children: [
-        if (path != null)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            child: ColoredBox(
-              color: AppColors.surfaceAlt,
-              child: SizedBox(
-                key: const ValueKey('residence-photo-preview'),
-                height: 160,
-                width: double.infinity,
-                child: Image.file(
-                  File(path),
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Center(child: Icon(Icons.photo_outlined)),
-                ),
-              ),
-            ),
-          ),
-        Wrap(
-          spacing: AppSpacing.sm,
-          children: [
-            OutlinedButton.icon(
-              key: const ValueKey('residence-photo-gallery'),
-              onPressed: () =>
-                  _pickCoverPhoto(sessionId, EvidenceSource.gallery),
-              icon: const Icon(Icons.photo_library_outlined),
-              label: Text(path == null ? 'Choose photo' : 'Change photo'),
-            ),
-            OutlinedButton.icon(
-              key: const ValueKey('residence-photo-camera'),
-              onPressed: () =>
-                  _pickCoverPhoto(sessionId, EvidenceSource.camera),
-              icon: const Icon(Icons.photo_camera_outlined),
-              label: const Text('Take photo'),
-            ),
-            if (path != null)
-              TextButton(
-                key: const ValueKey('residence-photo-remove'),
-                onPressed: () => setState(() => _coverPhotoPath = null),
-                child: const Text('Remove'),
-              ),
-          ],
-        ),
-      ],
-    );
+    if (!mounted) return;
+    final error = ref.read(activeSessionErrorProvider);
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+      ref.read(activeSessionErrorProvider.notifier).clear();
+    }
   }
 
   @override
@@ -160,7 +106,6 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
       _contactNumber.text = metadata.contactNumber ?? '';
       _inspectionDate = metadata.inspectionDate ?? DateTime.now();
       _reportDate = metadata.reportDate ?? DateTime.now();
-      _coverPhotoPath = metadata.coverPhotoPath;
       _prefilled = true;
     }
 
@@ -178,7 +123,15 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.lg),
-              _buildResidencePhotoCard(session.id),
+              ResidencePhotoSection(
+                path: session.reportMetadata?.coverPhotoPath,
+                // A completed inspection is read-only.
+                busy: _pickingPhoto || ref.watch(inspectionReadOnlyProvider),
+                onChoose: _chooseCoverPhoto,
+                onRemove: ref
+                    .read(activeSessionProvider.notifier)
+                    .removeResidencePhoto,
+              ),
               const SizedBox(height: AppSpacing.lg),
               AppFormSectionCard(
                 icon: Icons.home_outlined,
@@ -284,7 +237,10 @@ class _ReportDetailsScreenState extends ConsumerState<ReportDetailsScreen> {
             contactNumber: orNull(_contactNumber),
             inspectionDate: _inspectionDate,
             reportDate: _reportDate,
-            coverPhotoPath: _coverPhotoPath,
+            coverPhotoPath: ref
+                .read(activeSessionProvider)
+                ?.reportMetadata
+                ?.coverPhotoPath,
           ),
         );
     ScaffoldMessenger.of(context)

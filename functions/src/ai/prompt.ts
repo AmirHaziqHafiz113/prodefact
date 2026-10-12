@@ -73,6 +73,10 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "\"detectedComponent\": string | null, " +
     "\"noteImageAgreement\": \"supports\" | \"neutral\" | " +
     "\"contradicts\" | \"unclear\", " +
+    "\"normalizedIntent\": string | null, " +
+    "\"noteComponentHint\": string | null, " +
+    "\"noteDefectHint\": string | null, " +
+    "\"noteIntentConfidence\": number, " +
     "\"catalogueEntryId\": string | null, " +
     "\"defectTerm\": string | null, " +
     "\"confidence\": number, \"shortReason\": string, " +
@@ -113,6 +117,19 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
     "   you put in detectedComponent.",
     "f. Is it reliable enough to accept? If not, set needsReview to",
     "   true — but still give your best entry and the next best ones.",
+    "",
+    "READ THE NOTE SEMANTICALLY: the note may contain typos,",
+    "shorthand, Bahasa Melayu, English or rojak, missing spaces and",
+    "phonetic spelling (\"wal por skim\" = wall poor skim, \"frem",
+    "dent\" = frame dent, \"holo tile\" = hollow tile, \"pintu",
+    "senget\" = door misaligned). Interpret it in THIS answer and",
+    "report: normalizedIntent (the note rewritten in plain English, at",
+    "most 12 words), noteComponentHint (the building component it",
+    "means, ideally a catalogue component name, else null),",
+    "noteDefectHint (the defect it means, in a few words, else null)",
+    "and noteIntentConfidence (0 to 1). These describe the note only —",
+    "they never replace the verbatim note, and catalogueEntryId must",
+    "still be a listed id.",
     "",
     "COMPONENT FIRST, DEFECT SECOND: settle the component (note and",
     "photo together), then choose the defect only among that",
@@ -205,11 +222,12 @@ export function buildSystemPrompt(entries: DefectCatalogueEntry[]): string {
 export function noteReadingLines(input: ClassifyFindingInput): string[] {
   const lines: string[] = [];
   const strong = input.strongNote;
-  if (strong?.componentIds.length) {
+  if (strong?.lockComponentIds.length) {
     lines.push(
-      `note names component: ${strong.componentNames.join(", ")} — choose ` +
-      "the defect WITHIN this component unless the photo plainly shows " +
-      "something else"
+      `note names component: ${strong.lockComponentNames.join(", ")} — ` +
+      "the list below is LIMITED to it; choose the defect WITHIN it. If " +
+      "the photo plainly shows a different building element, set " +
+      "noteImageAgreement to contradicts and needsReview to true"
     );
   }
   if (strong && strong.entryIds.length > 0) {
@@ -353,6 +371,17 @@ export function parseClassificationPayload(
     noteImageAgreement:
       typeof r.noteImageAgreement === "string" ? r.noteImageAgreement :
         undefined,
+    normalizedIntent:
+      typeof r.normalizedIntent === "string" ? r.normalizedIntent :
+        undefined,
+    noteComponentHint:
+      typeof r.noteComponentHint === "string" ? r.noteComponentHint :
+        undefined,
+    noteDefectHint:
+      typeof r.noteDefectHint === "string" ? r.noteDefectHint : undefined,
+    noteIntentConfidence:
+      typeof r.noteIntentConfidence === "number" ?
+        r.noteIntentConfidence : undefined,
     qualityIssues: Array.isArray(r.qualityIssues) ?
       r.qualityIssues.filter((x): x is string => typeof x === "string") :
       undefined,

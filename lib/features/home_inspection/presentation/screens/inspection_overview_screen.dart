@@ -14,6 +14,7 @@ import '../widgets/app_bottom_sheet.dart';
 import '../widgets/session_navigation.dart';
 import '../widgets/session_status_presentation.dart';
 import 'ai_review_overview_screen.dart';
+import 'area_inspection_screen.dart' show chooseEvidenceSource;
 import 'areas_screen.dart';
 import 'photo_guide_screen.dart';
 import 'report_screen.dart';
@@ -356,16 +357,18 @@ Future<void> completePhysicalInspection(
 
 /// Property identity: the residence photo (or illustration), title,
 /// status, address and date.
-class _OverviewHeader extends StatelessWidget {
+class _OverviewHeader extends ConsumerWidget {
   const _OverviewHeader({required this.session});
 
   final InspectionSession session;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final propertyType = PropertyType.values.firstWhereOrNull(
       (p) => p.name == session.assetTypeId,
     );
+    final hasPhoto = session.reportMetadata?.coverPhotoPath?.isNotEmpty == true;
+    final canEditPhoto = session.status != InspectionStatus.reported;
     final details = session.propertyDetails;
     final title = details.title.isNotEmpty
         ? details.title
@@ -390,6 +393,32 @@ class _OverviewHeader extends StatelessWidget {
               radius: 0,
             ),
           ),
+          // Convenience entry point to the SAME Residence / Unit Photo that
+          // Report Details manages (optional; hidden once completed).
+          if (canEditPhoto)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.sm,
+                  top: AppSpacing.xs,
+                ),
+                child: TextButton.icon(
+                  key: const ValueKey('overview-residence-photo'),
+                  onPressed: () async {
+                    final source = await chooseEvidenceSource(context);
+                    if (source == null) return;
+                    await ref
+                        .read(activeSessionProvider.notifier)
+                        .chooseResidencePhoto(source);
+                  },
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label: Text(
+                    hasPhoto ? 'Change residence photo' : 'Add residence photo',
+                  ),
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(

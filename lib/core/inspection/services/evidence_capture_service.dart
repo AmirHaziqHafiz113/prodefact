@@ -1,5 +1,16 @@
 import '../entities/evidence.dart';
 
+/// Technical SAFETY CEILING for one gallery selection — not a product
+/// limit. A selection is never silently truncated: if the platform returns
+/// more than this, the whole selection is refused with a clear message so
+/// the inspector can pick fewer. Raise or lower it per build with
+/// `--dart-define=MAX_GALLERY_PHOTOS=<n>`; 100 findings per pick keeps the
+/// copy-into-app-storage step and the findings list responsive.
+const int kMaxGalleryPhotosPerSelection = int.fromEnvironment(
+  'MAX_GALLERY_PHOTOS',
+  defaultValue: 100,
+);
+
 /// Result of successfully acquiring one photo for a finding: where it
 /// now lives in app-managed local storage.
 class CapturedEvidence {
@@ -23,13 +34,15 @@ abstract class EvidenceCaptureService {
     required EvidenceSource source,
   });
 
-  /// Acquires several photos of the same defect in one action (QA:
-  /// multi-image). From the gallery the inspector can select up to
-  /// [maxImages] at once; the camera still takes a single shot. Returns
-  /// an empty list if cancelled.
+  /// Acquires several photos in one action. From the gallery the
+  /// inspector can select many at once (up to the technical safety
+  /// ceiling [maxImages], [kMaxGalleryPhotosPerSelection] by default —
+  /// never silently truncated); the camera still takes a single shot.
+  /// Each photo becomes its own finding. Returns an empty list if
+  /// cancelled.
   Future<List<CapturedEvidence>> captureImages({
     required String findingId,
     required EvidenceSource source,
-    int maxImages = 3,
+    int maxImages = kMaxGalleryPhotosPerSelection,
   });
 }

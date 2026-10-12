@@ -285,8 +285,9 @@ class _AreaInspectionScreenState extends ConsumerState<AreaInspectionScreen> {
     Map<String, ImageQualityAssessment> quality;
     while (true) {
       setState(() => _isCapturing = true);
-      // Gallery: up to 3 photos in one pick. Camera: one. Either way,
-      // each photo becomes its own finding.
+      // Gallery: many photos in one pick (technical ceiling only, never a
+      // product limit). Camera: one. Either way, each photo becomes its
+      // own finding.
       photos = await notifier.captureFindingPhotos(source: source);
       if (!mounted) return;
       if (photos.isEmpty) {
@@ -571,6 +572,11 @@ class _PreviewResult {
   final List<String> notes;
 }
 
+/// Decode widths for batch previews: screen-size for the selected photo,
+/// tiny for thumbnails (never the full-resolution original).
+const _previewDecodeWidth = 1280;
+const _thumbDecodeWidth = 160;
+
 /// Quick defect note field wording (QA #16), shared by capture and edit.
 const _quickNoteLabel = 'Quick defect note';
 const _quickNoteHint =
@@ -657,18 +663,50 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
   final List<TextEditingController> _removedNotes = [];
   int _selected = 0;
 
+  /// ONE persistent focus node for the single quick-note field. Switching
+  /// photos only swaps the controller shown in that same field, so the
+  /// keyboard never closes and reopens while the inspector annotates a
+  /// batch. It is dismissed only by tapping outside the input area,
+  /// pressing Done, or leaving the sheet.
+  final FocusNode _noteFocus = FocusNode(debugLabel: 'preview-quick-note');
+
   @override
   void dispose() {
+    _noteFocus.dispose();
     for (final c in [..._notes, ..._removedNotes]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  /// Moves to photo [index], keeping the keyboard open (and the cursor at
+  /// the end of that photo's own note) when it was open.
+  void _select(int index) {
+    if (index == _selected || index < 0 || index >= _photos.length) return;
+    final keepKeyboard = _noteFocus.hasFocus;
+    setState(() => _selected = index);
+    final note = _notes[index];
+    note.selection = TextSelection.collapsed(offset: note.text.length);
+    if (keepKeyboard) _restoreNoteFocus();
+  }
+
+  /// Re-focuses the note field after the frame (a no-op if it still has
+  /// focus), e.g. after the native gallery or the markup screen closed it.
+  void _restoreNoteFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_noteFocus.hasFocus) _noteFocus.requestFocus();
+    });
+  }
+
   Future<void> _markUp() async {
     final photo = _photos[_selected];
+    final hadKeyboard = _noteFocus.hasFocus;
     final bytes = await showPhotoAnnotation(context, filePath: photo.filePath);
-    if (bytes == null || !mounted) return;
+    if (!mounted) return;
+    // Coming back from the markup screen: bring the keyboard back if the
+    // inspector was typing before they opened it.
+    if (hadKeyboard) _restoreNoteFocus();
+    if (bytes == null) return;
     final annotated = await ref
         .read(activeSessionProvider.notifier)
         .annotateCapturedPhoto(photo, bytes);
@@ -681,7 +719,11 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
     setState(() {
       _removed.add(_photos.removeAt(index));
       _removedNotes.add(_notes.removeAt(index));
-      if (_selected >= _photos.length) _selected = _photos.length - 1;
+      if (index < _selected) {
+        _selected -= 1; // the selected photo moved one place left
+      } else if (_selected >= _photos.length) {
+        _selected = _photos.length - 1;
+      }
     });
   }
 
@@ -721,7 +763,7 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
               child: Text(
                 _photos.length == 1
                     ? 'Save Finding'
-                    : 'Save ${_photos.length} Findings',
+                    : 'Upload ${_photos.length} Findings',
               ),
             ),
           ),
@@ -742,6 +784,8 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
                   File(current.displayFilePath),
                   key: ValueKey(current.displayFilePath),
                   fit: BoxFit.contain,
+                  // Decode at screen size, never the full 2560px original.
+                  cacheWidth: _previewDecodeWidth,
                 ),
               ),
             ),
@@ -749,46 +793,89 @@ class _PhotoPreviewSheetState extends ConsumerState<_PhotoPreviewSheet> {
           _QualityHint(assessment: widget.quality[current.filePath]),
           if (_photos.length > 1) ...[
             const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Photo ${_selected + 1} of ${_photos.length}. Each photo is '
-              'saved as its own finding, with its own note.',
-              key: const ValueKey('preview-photo-count'),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            SizedBox(
-              height: 64,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _photos.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: AppSpacing.sm),
-                itemBuilder: (context, i) => _PreviewThumb(
-                  key: ValueKey('preview-thumb-$i'),
-                  photo: _photos[i],
-                  selected: i == _selected,
-                  onTap: () => setState(() => _selected = i),
-                  onRemove: () => _remove(i),
-                ),
+            // Taps on the batch controls are "inside" the note field's tap
+            // region, so choosing another photo never dismisses the keyboard.
+            TextFieldTapRegion(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        key: const ValueKey('preview-previous'),
+                        tooltip: 'Previous photo',
+                        onPressed: _selected > 0
+                            ? () => _select(_selected - 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Photo ${_selected + 1} of ${_photos.length}. Each '
+                          'photo is saved as its own finding, with its own '
+                          'note.',
+                          key: const ValueKey('preview-photo-count'),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      IconButton(
+                        key: const ValueKey('preview-next'),
+                        tooltip: 'Next photo',
+                        onPressed: _selected < _photos.length - 1
+                            ? () => _select(_selected + 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  SizedBox(
+                    height: 64,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _photos.length,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(width: AppSpacing.sm),
+                      itemBuilder: (context, i) => _PreviewThumb(
+                        key: ValueKey('preview-thumb-$i'),
+                        photo: _photos[i],
+                        selected: i == _selected,
+                        hasNote: _notes[i].text.trim().isNotEmpty,
+                        onTap: () => _select(i),
+                        onRemove: () => _remove(i),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _markUp,
-              icon: const Icon(Icons.draw_outlined),
-              label: Text(
-                current.annotatedFilePath == null ? 'Mark Up' : 'Redo Markup',
+            child: TextFieldTapRegion(
+              child: TextButton.icon(
+                onPressed: _markUp,
+                icon: const Icon(Icons.draw_outlined),
+                label: Text(
+                  current.annotatedFilePath == null ? 'Mark Up' : 'Redo Markup',
+                ),
               ),
             ),
           ),
           TextField(
-            // Rebuilt per photo so each finding keeps its own note.
-            key: ValueKey('preview-note-$_selected-${_photos.length}'),
+            // ONE stable field (key + focus node): only its controller
+            // changes per photo, so each finding keeps its own note while
+            // the keyboard stays open across photo switches.
+            key: const ValueKey('preview-note'),
             controller: _notes[_selected],
+            focusNode: _noteFocus,
             maxLines: 2,
             textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            // Done / tapping outside the input area dismiss the keyboard.
+            onSubmitted: (_) => _noteFocus.unfocus(),
+            onTapOutside: (_) => _noteFocus.unfocus(),
             decoration: const InputDecoration(
               labelText: _quickNoteLabel,
               hintText: _quickNoteHint,
@@ -810,12 +897,16 @@ class _PreviewThumb extends StatelessWidget {
     super.key,
     required this.photo,
     required this.selected,
+    this.hasNote = false,
     required this.onTap,
     required this.onRemove,
   });
 
   final CapturedFindingPhoto photo;
   final bool selected;
+
+  /// Whether this photo already has a quick note (a small dot).
+  final bool hasNote;
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
@@ -839,11 +930,25 @@ class _PreviewThumb extends StatelessWidget {
             child: Image.file(
               File(photo.displayFilePath),
               fit: BoxFit.cover,
+              // Thumbnails decode tiny, so a 100-photo batch never holds
+              // 100 full-size bitmaps in memory.
+              cacheWidth: _thumbDecodeWidth,
               errorBuilder: (context, error, stackTrace) =>
                   const ColoredBox(color: AppColors.surfaceAlt),
             ),
           ),
         ),
+        if (hasNote)
+          const Positioned(
+            bottom: 4,
+            left: 4,
+            child: Icon(
+              Icons.edit_note,
+              size: 14,
+              color: Colors.white,
+              shadows: [Shadow(blurRadius: 3)],
+            ),
+          ),
         Positioned(
           top: 0,
           right: 0,

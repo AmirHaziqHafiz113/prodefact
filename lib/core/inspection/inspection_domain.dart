@@ -44,6 +44,7 @@ export 'entities/custom_defect.dart';
 export 'entities/defect_catalogue.dart';
 export 'entities/defect_terms.dart';
 export 'entities/note_aliases.dart';
+export 'entities/note_intent.dart';
 export 'entities/related_defect_search.dart';
 export 'entities/element.dart';
 export 'entities/evidence.dart';

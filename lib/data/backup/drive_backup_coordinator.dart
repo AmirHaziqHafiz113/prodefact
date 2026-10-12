@@ -18,6 +18,7 @@ class DriveBackupPhoto {
     required this.inspectionTitle,
     required this.inspectionDate,
     required this.originalFilePath,
+    this.assetType = DriveAssetType.findingEvidence,
   });
 
   final String evidenceId;
@@ -30,6 +31,10 @@ class DriveBackupPhoto {
 
   /// The ORIGINAL photo — never the marked-up copy.
   final String originalFilePath;
+
+  /// Defect evidence, or the report-cover Residence / Unit Photo (which is
+  /// filed in its own "Residence Photo" folder, never an area's).
+  final DriveAssetType assetType;
 }
 
 /// Resolves a queued entry to its photo; null when the photo (or its
@@ -314,6 +319,7 @@ class DriveBackupCoordinator {
           'prodefactInspectionId': photo.sessionId,
           'prodefactFindingId': photo.findingId,
           'prodefactSectionId': photo.sectionId,
+          'prodefactAssetType': photo.assetType.name,
         },
       );
       // Record the file id before verifying, so a crash here re-checks

@@ -1,6 +1,6 @@
 import {DefectCatalogueEntry, defectCatalogue} from "./defect_catalogue";
 import {defectTermsFor} from "./defect_terms";
-import {StrongNoteMatch} from "./types";
+import {NoteConfidenceLevel, StrongNoteMatch} from "./types";
 import {
   NormalizationStrategy,
   normalizeInspectorNote,
@@ -292,32 +292,32 @@ export function buildCatalogueShortlist(input: {
 
   const strongNote = detectStrongNote(normalized || note);
   let entries = chosen.map((s) => s.entry);
-  // Component first: when the note names a component, every entry of
-  // it is offered (and ranked first) — the defect is then chosen
-  // within that component rather than across look-alike ones.
-  if (strongNote.componentIds.length > 0) {
-    const named = new Set(strongNote.componentIds);
-    const fromNamed = all.filter((e) => named.has(e.componentId));
-    const ordered = [
-      ...strongNote.entryIds.flatMap((id) => {
-        const e = all.find((x) => x.id === id);
-        return e ? [e] : [];
-      }),
-      ...fromNamed,
-      ...entries,
-    ];
+  const leadEntries = strongNote.entryIds.flatMap((id) => {
+    const e = all.find((x) => x.id === id);
+    return e ? [e] : [];
+  });
+  const dedupeEntries = (list: DefectCatalogueEntry[]) => {
     const seen = new Set<string>();
-    entries = ordered.filter((e) => !seen.has(e.id) && seen.add(e.id))
-      .slice(0, Math.max(maxEntries, fromNamed.length));
-  } else if (strongNote.entryIds.length > 0) {
+    return list.filter((e) => !seen.has(e.id) && seen.add(e.id));
+  };
+  if (strongNote.lockComponentIds.length > 0) {
+    // COMPONENT LOCK (levels A and B): the note decides the component, so
+    // the shortlist is that component's entries and NOTHING else — a
+    // wall note is never offered door hinges because they share words
+    // such as "poor" or "paint". The spelled-out defect leads, then the
+    // rest of the locked components by score. A photo that plainly shows
+    // something else is handled by the contradiction check (gateway),
+    // not by quietly widening the list.
+    const locked = new Set(strongNote.lockComponentIds);
+    const fromLocked = byScore.filter((s) => locked.has(s.entry.componentId))
+      .map((s) => s.entry);
+    const cap = strongNote.componentIds.length > 0 ?
+      Math.max(maxEntries, fromLocked.length) :
+      maxEntries;
+    entries = dedupeEntries([...leadEntries, ...fromLocked]).slice(0, cap);
+  } else if (leadEntries.length > 0) {
     // A defect family the note spells out ("poor paint") leads the list.
-    const lead = strongNote.entryIds.flatMap((id) => {
-      const e = all.find((x) => x.id === id);
-      return e ? [e] : [];
-    });
-    const seen = new Set<string>();
-    entries = [...lead, ...entries]
-      .filter((e) => !seen.has(e.id) && seen.add(e.id))
+    entries = dedupeEntries([...leadEntries, ...entries])
       .slice(0, maxEntries);
   }
   return {
@@ -341,7 +341,8 @@ export function buildCatalogueShortlist(input: {
 export function detectStrongNote(text: string): StrongNoteMatch {
   const none: StrongNoteMatch = {
     matched: false, componentIds: [], componentNames: [], entryIds: [],
-    unlistedTerms: [],
+    unlistedTerms: [], lockComponentIds: [], lockComponentNames: [],
+    elementNames: [], level: "C",
   };
   const noteWords = Array.from(new Set(words(text)));
   if (noteWords.length === 0) return none;
@@ -376,16 +377,55 @@ export function detectStrongNote(text: string): StrongNoteMatch {
     !chosen.some((o) => o !== c && o.ws.length > c.ws.length &&
       c.ws.every((w) => o.ws.includes(w))));
 
-  const componentWords = new Set(finalNamed.flatMap((c) => c.ws));
+  // A note that names only an ELEMENT ("wall poor skim", "sliding door
+  // scratch") still pins the finding to that element's components. Not
+  // when it names an uncatalogued part ("floor trap"), which is never
+  // forced onto a look-alike.
+  const elements = new Map<string, {name: string; ws: string[]}>();
+  for (const e of all) {
+    elements.set(e.mainElementId, {
+      name: e.mainElementName, ws: words(e.mainElementName),
+    });
+  }
+  const namedElements = finalNamed.length === 0 && unlistedTerms.length === 0 ?
+    Array.from(elements.entries())
+      .filter(([, el]) => el.ws.length > 0 &&
+        el.ws.every((w) => noteWords.some((n) => same(n, w))))
+      .map(([id, el]) => ({id, ...el})) :
+    [];
+
+  const componentWords = new Set([
+    ...finalNamed.flatMap((c) => c.ws),
+    ...namedElements.flatMap((el) => el.ws),
+  ]);
+
+  // The components the note locks to (before the defect narrows them).
+  const slidingNote = noteWords.some((w) => same(w, "slid"));
+  let lockPool: DefectCatalogueEntry[] = [];
+  if (finalNamed.length > 0) {
+    lockPool = all.filter((e) =>
+      finalNamed.some((c) => c.id === e.componentId));
+  } else if (namedElements.length > 0) {
+    lockPool = all.filter((e) =>
+      namedElements.some((el) => el.id === e.mainElementId));
+    if (slidingNote) {
+      const sliding = lockPool.filter((e) => /\bsliding\b/i
+        .test(e.componentName));
+      if (sliding.length > 0) lockPool = sliding;
+    }
+  }
+  // "sliding" qualifies the component that was just locked; it is not a
+  // defect word.
+  const qualifierLocked = slidingNote && lockPool.length > 0 &&
+    lockPool.every((e) => /\bsliding\b/i.test(e.componentName));
   const defectWords = noteWords.filter((w) =>
     !Array.from(componentWords).some((c) => same(c, w)) &&
-    !Array.from(unlistedWords).some((u) => same(u, w)));
-  const pool = finalNamed.length > 0 ?
-    all.filter((e) => finalNamed.some((c) => c.id === e.componentId)) :
-    all;
-  // With a named component one more word is enough ("railing paint");
+    !Array.from(unlistedWords).some((u) => same(u, w)) &&
+    !(qualifierLocked && same(w, "slid")));
+  const pool = lockPool.length > 0 ? lockPool : all;
+  // With a locked component one more word is enough ("railing paint");
   // without one the note must spell out a defect ("poor paint").
-  const needed = finalNamed.length > 0 ? 1 : 2;
+  const needed = lockPool.length > 0 ? 1 : 2;
   const entryIds = defectWords.length >= needed ?
     pool.filter((e) => {
       const dw = [
@@ -396,12 +436,29 @@ export function detectStrongNote(text: string): StrongNoteMatch {
     }).slice(0, 12).map((e) => e.id) :
     [];
 
+  // Level A narrows the lock to the components that actually word the
+  // defect the note spells out; level B keeps every component named.
+  const lockEntries = lockPool.length > 0 && entryIds.length > 0 ?
+    all.filter((e) => entryIds.includes(e.id)) :
+    lockPool;
+  const lockComponentIds = Array.from(new Set(lockEntries.map(
+    (e) => e.componentId)));
+  const lockComponentNames = lockComponentIds.map((id) =>
+    components.get(id) ?? id);
+  const level: NoteConfidenceLevel = lockComponentIds.length === 0 ? "C" :
+    entryIds.length > 0 ? "A" : "B";
+
   return {
-    matched: finalNamed.length > 0 || entryIds.length > 0,
+    matched: finalNamed.length > 0 || entryIds.length > 0 ||
+      lockComponentIds.length > 0,
     componentIds: finalNamed.map((c) => c.id),
     componentNames: finalNamed.map((c) => c.name),
     entryIds,
     unlistedTerms,
+    lockComponentIds,
+    lockComponentNames,
+    elementNames: namedElements.map((el) => el.name),
+    level,
   };
 }
 

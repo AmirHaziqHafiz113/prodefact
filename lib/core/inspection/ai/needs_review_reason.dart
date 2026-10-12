@@ -3,7 +3,8 @@
 /// absent reason — technical codes are never shown as-is.
 String? needsReviewReasonText(String? reason) => switch (reason) {
   'low_confidence' => "AI wasn't confident enough to decide on its own.",
-  'note_image_contradiction' => "The photo doesn't seem to match the note.",
+  'note_image_contradiction' =>
+    'Quick note and image may refer to different components.',
   'image_quality' => 'The photo was hard to read.',
   'unrelated_image' => "The photo doesn't look like an inspection photo.",
   'no_catalogue_match' =>

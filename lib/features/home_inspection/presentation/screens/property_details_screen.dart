@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/design_system.dart';
 import '../../../../core/inspection/inspection_domain.dart';
 import '../../providers/new_inspection_draft_providers.dart';
+import '../widgets/residence_photo_section.dart';
 import '../../providers/user_profile_providers.dart';
 import 'area_configuration_screen.dart';
 import 'property_type_selection_screen.dart';
@@ -123,6 +124,22 @@ class _PropertyDetailsScreenState extends ConsumerState<PropertyDetailsScreen> {
                     textCapitalization: TextCapitalization.sentences,
                   ),
                 ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              // Optional: becomes the report's cover photo once the
+              // inspection starts. Not a defect photo.
+              ResidencePhotoSection(
+                path: ref.watch(
+                  newInspectionDraftProvider.select(
+                    (draft) => draft?.residencePhotoPath,
+                  ),
+                ),
+                onChoose: (source) => ref
+                    .read(newInspectionDraftProvider.notifier)
+                    .chooseResidencePhoto(source),
+                onRemove: ref
+                    .read(newInspectionDraftProvider.notifier)
+                    .removeResidencePhoto,
               ),
               const SizedBox(height: AppSpacing.lg),
               AppFormSectionCard(

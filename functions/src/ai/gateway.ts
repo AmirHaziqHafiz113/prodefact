@@ -75,6 +75,7 @@ export type NeedsReviewReason = typeof NEEDS_REVIEW_REASONS[number];
  * or output tokens. */
 const MAX_SHORT_REASON = 200;
 const MAX_DETECTED = 60;
+const MAX_INTENT = 80;
 
 /**
  * @param {string} text a name.
@@ -276,6 +277,12 @@ export function validateAndNormalize(
   const agreement = String(result.noteImageAgreement);
   const detectedName = bounded(result.detectedComponent, MAX_DETECTED);
 
+  const lockIds = strong?.lockComponentIds ?? [];
+  const escapedEntry = rawId !== undefined && validId === undefined &&
+    lockIds.length > 0 && defectCatalogue.isValidEntryId(rawId) ?
+    defectCatalogue.getById(rawId) :
+    undefined;
+
   // The note names a part the catalogue has no component for (e.g. a
   // railing): never forced onto a look-alike component.
   const unlistedPart = (strong?.unlistedTerms.length ?? 0) > 0 &&
@@ -290,7 +297,8 @@ export function validateAndNormalize(
     strong.entryIds.length === 1 && isAllowed(strong.entryIds[0]) ?
     strong.entryIds[0] :
     undefined;
-  if (validId === undefined && anchorId !== undefined && imageIsUsable &&
+  if (validId === undefined && escapedEntry === undefined &&
+    anchorId !== undefined && imageIsUsable &&
     agreement !== "contradicts" && !unlistedPart) {
     const anchorEntry = defectCatalogue.getById(anchorId);
     if (anchorEntry && (detectedName === undefined ||
@@ -321,11 +329,11 @@ export function validateAndNormalize(
 
   const detectedComponent = detectedName;
   const detectedElement = bounded(result.detectedElement, MAX_DETECTED);
-  const noteImageAgreement = (NOTE_IMAGE_AGREEMENT as readonly string[])
+  const reportedAgreement = (NOTE_IMAGE_AGREEMENT as readonly string[])
     .includes(String(result.noteImageAgreement)) ?
     String(result.noteImageAgreement) :
     undefined;
-  const contradicts = noteImageAgreement === "contradicts";
+  const contradicts = reportedAgreement === "contradicts";
   // The chosen entry must be consistent with what the model itself
   // says the photo shows; a mismatch is never auto-accepted.
   const componentMismatch = entry !== undefined && (
@@ -340,14 +348,35 @@ export function validateAndNormalize(
 
   // The note names one component but the model chose another without
   // saying the photo contradicts the note: a disagreement the
-  // inspector settles, never a confident wrong answer.
-  const noteComponentMismatch = entry !== undefined &&
-    (strong?.componentIds.length ?? 0) > 0 &&
-    !strong!.componentIds.includes(entry.componentId) && !contradicts;
+  // inspector settles, never a confident wrong answer. The shortlist is
+  // already locked to the note's component(s), so an id outside it is
+  // the same disagreement.
+  const noteComponentMismatch = lockIds.length > 0 && !contradicts && (
+    (entry !== undefined && !lockIds.includes(entry.componentId)) ||
+    (escapedEntry !== undefined &&
+      !lockIds.includes(escapedEntry.componentId))
+  );
+
+  // A locked note (level A/B) against a photo of a different building
+  // element ("wall poor skim" over a door): reported as a contradiction
+  // — the note is never silently ignored and a contradictory component
+  // is never auto-accepted. Compared at element level, so a "Wall Tile"
+  // photo does not contradict a "wall" note.
+  const lockNames = [
+    ...(strong?.lockComponentNames ?? []),
+    ...(strong?.elementNames ?? []),
+  ];
+  const crossComponent = lockIds.length > 0 && !unlistedPart &&
+    detectedComponent !== undefined && lockNames.length > 0 &&
+    !detectedMatches(detectedComponent, lockNames) &&
+    !(entry !== undefined && detectedMatches(detectedComponent,
+      [entry.mainElementName]));
+  const contradictsNote = contradicts || crossComponent;
+  const noteImageAgreement = crossComponent ? "contradicts" : reportedAgreement;
 
   const reason: NeedsReviewReason | undefined =
     !imageUsable ? "image_quality" :
-      contradicts ? "note_image_contradiction" :
+      contradictsNote ? "note_image_contradiction" :
         unlistedPart ? "no_catalogue_match" :
           componentMismatch || noteComponentMismatch ?
             "component_mismatch" :
@@ -394,6 +423,15 @@ export function validateAndNormalize(
     detectedElement,
     detectedComponent,
     noteImageAgreement,
+    // The model's semantic reading of the note (advisory, bounded).
+    normalizedIntent: bounded(result.normalizedIntent, MAX_INTENT),
+    noteComponentHint: bounded(result.noteComponentHint, MAX_DETECTED),
+    noteDefectHint: bounded(result.noteDefectHint, MAX_INTENT),
+    noteIntentConfidence: clampConfidence(result.noteIntentConfidence),
+    // Both sides of a note/photo disagreement, for the inspector.
+    noteComponent: crossComponent ? strong?.lockComponentNames[0] ??
+      strong?.elementNames[0] : undefined,
+    imageComponent: crossComponent ? detectedComponent : undefined,
     // An uncertain pick is still returned as the AI's best guess (the
     // inspector can Accept it in one tap); needsReview is what keeps it
     // from being accepted automatically.

@@ -57,6 +57,9 @@ final driveBackupCoordinatorProvider = Provider<DriveBackupCoordinator>((ref) {
     auth: ref.watch(driveAuthServiceProvider),
     onVerified: (entry) async {
       // Mirror the Drive metadata onto the cloud evidence record.
+      // A Residence / Unit Photo is not finding evidence: it has no cloud
+      // evidence record to mirror onto.
+      if (entry.assetType == DriveAssetType.residencePhoto) return;
       if (!ref.read(firebaseReadyProvider)) return;
       final uid = ref.read(authServiceProvider).currentUser?.uid;
       if (uid == null) return;
@@ -68,6 +71,29 @@ final driveBackupCoordinatorProvider = Provider<DriveBackupCoordinator>((ref) {
     resolvePhoto: (entry) async {
       final s = await session(entry.sessionId);
       if (s == null) return null;
+      if (entry.assetType == DriveAssetType.residencePhoto) {
+        // The CURRENT residence photo only: a replaced or removed one is
+        // no longer the report's cover, so its queued row simply goes.
+        final path = s.reportMetadata?.coverPhotoPath;
+        if (path == null ||
+            residencePhotoBackupId(s.id, path) != entry.evidenceId) {
+          return null;
+        }
+        final details = s.propertyDetails;
+        return DriveBackupPhoto(
+          evidenceId: entry.evidenceId,
+          sessionId: s.id,
+          findingId: kResidencePhotoFindingId,
+          sectionId: '__residence__',
+          sectionName: 'Residence Photo',
+          inspectionTitle: details.title.isNotEmpty
+              ? details.title
+              : s.assetTypeId,
+          inspectionDate: details.inspectionDate ?? s.createdAt,
+          originalFilePath: path,
+          assetType: DriveAssetType.residencePhoto,
+        );
+      }
       final finding = s.findings.firstWhereOrNull(
         (f) => f.id == entry.findingId,
       );

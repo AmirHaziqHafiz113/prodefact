@@ -172,7 +172,9 @@ void main() {
     final callsBefore = c.backend.calls;
 
     await tester.tap(
-      find.byKey(ValueKey('recommended-${c.findingId}-wall.wall_tile.04')),
+      // "hollow wall tile" is a level-A note: its own entry leads under
+      // "Likely from your note" and is not repeated in Recommended.
+      find.byKey(ValueKey('likely-note-${c.findingId}-wall.wall_tile.04')),
     );
     await tester.pump();
     await tester.pump();
@@ -218,7 +220,9 @@ void main() {
 
     final callsBefore = c.backend.calls;
     await tester.tap(
-      find.byKey(ValueKey('recommended-${c.findingId}-wall.wall_tile.04')),
+      // "hollow wall tile" is a level-A note: its own entry leads under
+      // "Likely from your note" and is not repeated in Recommended.
+      find.byKey(ValueKey('likely-note-${c.findingId}-wall.wall_tile.04')),
     );
     await tester.pump();
     await tester.pump();
@@ -345,5 +349,53 @@ void main() {
     expect(_tone(c, FindingTone.green), findsOneWidget);
     expect(DefectCatalogue.instance.masterEntries.length, masterCount);
     DefectCatalogue.instance.replaceCustomEntries(const []);
+  });
+
+  testWidgets('NOTE AUTHORITY: after an AI failure "Wal por skim" still shows '
+      '"Likely from your note" (Wall · Concrete Wall) plus the other Wall '
+      'defects, with no Door/Window recommendation and no extra AI call', (
+    tester,
+  ) async {
+    final c = await _pump(
+      tester,
+      backend: _Backend()..fail = true,
+      note: 'Wal por skim',
+      firstArea: true,
+    );
+    expect(c.finding.aiStatus, AiFindingStatus.failed);
+
+    expect(
+      find.byKey(ValueKey('likely-from-note-${c.findingId}')),
+      findsOneWidget,
+    );
+    expect(find.text('Likely from your note'), findsOneWidget);
+    expect(find.text('Wall · Concrete Wall'), findsWidgets);
+    expect(
+      find.byKey(ValueKey('likely-note-${c.findingId}-wall.concrete_wall.03')),
+      findsOneWidget,
+    );
+    expect(find.text('Other Wall defects'), findsOneWidget);
+
+    // Nothing from another component is recommended.
+    final recommended = find.descendant(
+      of: find.byKey(ValueKey('recommended-${c.findingId}')),
+      matching: find.byType(ListTile),
+    );
+    for (final tile in tester.widgetList<ListTile>(recommended)) {
+      final subtitle = (tile.subtitle! as Text).data!;
+      expect(subtitle, startsWith('Wall'));
+    }
+    expect(find.textContaining('Door'), findsNothing);
+    expect(find.textContaining('Window'), findsNothing);
+
+    // Selecting the note-derived entry settles it by hand: no new AI call.
+    final calls = c.backend.calls;
+    await tester.tap(
+      find.byKey(ValueKey('likely-note-${c.findingId}-wall.concrete_wall.03')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(c.suggestion!.finalCatalogueEntryId, 'wall.concrete_wall.03');
+    expect(c.backend.calls, calls);
   });
 }

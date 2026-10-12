@@ -3,7 +3,6 @@ import {test} from "node:test";
 import {
   SHORTLIST_BROAD_MAX,
   SHORTLIST_MAX,
-  SHORTLIST_MIN,
   buildCatalogueShortlist,
 } from "./catalogue_shortlist";
 import {defectCatalogue} from "./defect_catalogue";
@@ -26,19 +25,15 @@ const input = (note: string | undefined, area = "Master Bathroom",
   note,
 });
 
-test("2. \"holo wall tile\" puts every wall-tile entry first, then close " +
-  "alternatives, within the target size", () => {
+test("2. \"holo wall tile\" locks the shortlist to the wall-tile " +
+  "entries (component lock): nothing from another component", () => {
   const r = buildCatalogueShortlist(input("holo wall tile"));
   assert.equal(r.strategy, "noteMatch");
-  assert.ok(r.entries.length >= SHORTLIST_MIN);
-  assert.ok(r.entries.length <= SHORTLIST_MAX);
   const wallTile = defectCatalogue.entries
     .filter((e) => e.componentName === "Wall Tile")
     .map((e) => e.id);
-  assert.deepEqual(r.entryIds.slice(0, wallTile.length).sort(),
-    [...wallTile].sort());
-  // Alternatives are kept, not excluded: e.g. a hollow floor tile.
-  assert.ok(r.entries.some((e) => e.componentName === "Floor Tiles"));
+  assert.deepEqual([...r.entryIds].sort(), [...wallTile].sort());
+  assert.equal(r.strongNote.level, "A");
 });
 
 test("shorthand and Malay are understood: \"win frem gap\" -> windows, " +

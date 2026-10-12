@@ -73,7 +73,25 @@ export interface StrongNoteMatch {
    * for (e.g. "railing"): such a finding is never forced onto a
    * look-alike component. */
   unlistedTerms: string[];
+  /**
+   * Which catalogue components the note LOCKS the finding to (empty when
+   * the note names none): the named components, or — for a note that only
+   * names an element ("wall poor skim") — that element's components,
+   * narrowed to those that actually word the spelled-out defect.
+   */
+  lockComponentIds: string[];
+  lockComponentNames: string[];
+  /** The catalogue element(s) the note names ("Wall"), if any. */
+  elementNames: string[];
+  /**
+   * How much the note settles by itself:
+   * A = component AND defect family, B = component only, C = no reliable
+   * component (the photo decides).
+   */
+  level: NoteConfidenceLevel;
 }
+
+export type NoteConfidenceLevel = "A" | "B" | "C";
 
 /** One evidence image, already downloaded, validated, and normalized
  * (see `ai/evidence.ts`) — ready to hand to a multimodal provider. */
@@ -141,6 +159,20 @@ export interface ClassificationResult {
   /** Whether the photo supports the note: supports | neutral |
    * contradicts | unclear. */
   noteImageAgreement?: string;
+  /**
+   * The model's semantic reading of the quick note (typos, shorthand,
+   * Bahasa Melayu, rojak) — bounded, advisory, never stored as the note
+   * and never able to introduce a catalogue id of its own.
+   */
+  normalizedIntent?: string;
+  noteComponentHint?: string;
+  noteDefectHint?: string;
+  /** 0.0-1.0: how sure the model is of that reading. */
+  noteIntentConfidence?: number;
+  /** Set by the server when a locked note and the photo name different
+   * components (the note's component, the photo's component). */
+  noteComponent?: string;
+  imageComponent?: string;
   /** Why a result needs the inspector (controlled — see
    * `NEEDS_REVIEW_REASONS` in gateway.ts). Set by the server only. */
   needsReviewReason?: string;

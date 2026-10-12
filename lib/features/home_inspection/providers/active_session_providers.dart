@@ -4,9 +4,12 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/inspection/backup/drive_backup.dart'
+    show kResidencePhotoFindingId, residencePhotoBackupId;
 import '../../../core/inspection/inspection_domain.dart';
 import '../../../core/logging/app_logger.dart';
 import 'drive_backup_providers.dart';
+import 'finding_job_gate.dart';
 import '../../../data/ai/ai_providers.dart';
 import '../../../data/areas/area_candidate_providers.dart';
 import '../../../data/analytics/analytics_providers.dart';
@@ -771,14 +774,14 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
   }
 
   /// Captures photos for **new** findings in one action: from the
-  /// gallery the inspector can pick up to [maxImages] photos; the camera
-  /// takes one. One photo = one finding, so every photo gets its OWN
+  /// gallery the inspector can pick many photos (up to the technical
+  /// ceiling [maxImages], never silently truncated); the camera takes one. One photo = one finding, so every photo gets its OWN
   /// pending finding id and is saved as its own finding — even several
   /// angles of the same defect. Empty if cancelled or on a capture
   /// failure (surfaced via [activeSessionErrorProvider]).
   Future<List<CapturedFindingPhoto>> captureFindingPhotos({
     required EvidenceSource source,
-    int maxImages = 3,
+    int maxImages = kMaxGalleryPhotosPerSelection,
   }) async {
     final pendingFindingId = 'finding_${DateTime.now().microsecondsSinceEpoch}';
     try {
@@ -1736,6 +1739,36 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
     AiLevel? aiLevel,
     bool reanalyse = false,
   }) async {
+    // Bounded concurrency: a large gallery selection queues every finding
+    // at once, but only [kMaxConcurrentFindingJobs] upload/classify at a
+    // time; the rest wait here (still `queued`) and start as slots free.
+    if (!_gatedFindingIds.add(findingId)) return; // already waiting a turn
+    await _findingJobGate.acquire();
+    _gatedFindingIds.remove(findingId);
+    try {
+      await _runAiClassification(
+        sessionId,
+        findingId,
+        aiLevel: aiLevel,
+        reanalyse: reanalyse,
+      );
+    } finally {
+      _findingJobGate.release();
+    }
+  }
+
+  /// Findings waiting for a [_findingJobGate] slot (dedupes re-triggers).
+  final Set<String> _gatedFindingIds = {};
+
+  /// Bounds how many findings upload + classify at once.
+  final FindingJobGate _findingJobGate = FindingJobGate();
+
+  Future<void> _runAiClassification(
+    String sessionId,
+    String findingId, {
+    AiLevel? aiLevel,
+    bool reanalyse = false,
+  }) async {
     if (!_classifyingFindingIds.add(findingId)) return;
     try {
       // The notifier (and its `ref`) may already be disposed by the
@@ -2282,6 +2315,114 @@ class ActiveInspectionSession extends Notifier<InspectionSession?> {
         action: 'update report details',
       ),
     );
+  }
+
+  // ---- Residence / Unit Photo (report cover) ----
+
+  /// Lets the inspector choose the Residence / Unit Photo from the camera
+  /// or gallery and makes it the report's cover photo. NOT a defect photo:
+  /// no finding is created, no defect AI runs, nothing shows in Area
+  /// Findings or AI Review. Returns whether a photo was set (false when
+  /// cancelled, on a capture error — surfaced via
+  /// [activeSessionErrorProvider] — or when the inspection is read-only).
+  Future<bool> chooseResidencePhoto(EvidenceSource source) async {
+    final session = state;
+    if (session == null || session.status == InspectionStatus.reported) {
+      return false;
+    }
+    try {
+      final captured = await ref
+          .read(evidenceCaptureServiceProvider)
+          .captureImage(findingId: 'residence_${session.id}', source: source);
+      if (captured == null || !ref.mounted) return false;
+      setResidencePhoto(captured.filePath);
+      return true;
+    } catch (error, stackTrace) {
+      AppLogger.error('Residence photo capture failed', error, stackTrace);
+      ref
+          .read(activeSessionErrorProvider.notifier)
+          .set(
+            'Could not add that photo. Check camera/photo permissions and '
+            'try again.',
+          );
+      return false;
+    }
+  }
+
+  /// THE single write path for the Residence / Unit Photo, used by New
+  /// Inspection setup, Inspection Overview and Report Details alike: the
+  /// photo lives in the session's [ReportMetadata.coverPhotoPath], so every
+  /// screen, the report and Past Inspection read the same value. Setting or
+  /// clearing it bumps `updatedAt`, which marks an already-generated report
+  /// stale (regenerating creates the next version). A completed (read-only)
+  /// inspection is never changed.
+  void setResidencePhoto(String? path) {
+    final session = state;
+    if (session == null || session.status == InspectionStatus.reported) return;
+    final previous = session.reportMetadata?.coverPhotoPath;
+    final next = (path == null || path.isEmpty) ? null : path;
+    if (previous == next) return;
+
+    final base = session.reportMetadata ?? _metadataFromDetails(session);
+    setReportMetadata(
+      next == null
+          ? base.copyWith(clearCoverPhoto: true)
+          : base.copyWith(coverPhotoPath: next),
+    );
+
+    if (previous != null) {
+      // The replaced/removed file is no longer the cover: free the space
+      // and drop its backup row unless it already reached Drive.
+      unawaited(
+        ref.read(evidenceFileStoreProvider).deleteEvidenceFile(previous),
+      );
+      unawaited(_dropUnverifiedResidenceBackup(session.id, previous));
+    }
+    if (next != null) {
+      // Tracked as its own asset type — never as defect evidence.
+      unawaited(
+        _enqueueDriveBackup(
+          session.id,
+          kResidencePhotoFindingId,
+          residencePhotoBackupId(session.id, next),
+        ),
+      );
+    }
+  }
+
+  /// Removes the Residence / Unit Photo (the report shows its placeholder).
+  void removeResidencePhoto() => setResidencePhoto(null);
+
+  /// The report metadata a session would show with no edits yet — a copy of
+  /// its setup details, with NO report date (the report then stamps the day
+  /// it is generated, exactly as when no metadata exists).
+  ReportMetadata _metadataFromDetails(InspectionSession session) {
+    final d = session.propertyDetails;
+    return ReportMetadata(
+      title: d.title,
+      projectDeveloperName: d.resolvedProjectDeveloperName,
+      address: d.address,
+      blockTower: d.blockTower,
+      unitNumber: d.unitNumber,
+      clientName: d.clientName,
+      inspectorName: d.inspectorName,
+      contactNumber: d.contactNumber,
+      inspectionDate: d.inspectionDate,
+    );
+  }
+
+  Future<void> _dropUnverifiedResidenceBackup(
+    String sessionId,
+    String path,
+  ) async {
+    try {
+      final store = ref.read(driveBackupStoreProvider);
+      final id = residencePhotoBackupId(sessionId, path);
+      final entry = await store.get(id);
+      if (entry != null && !entry.isVerified) await store.remove(id);
+    } catch (error) {
+      AppLogger.warning('drive_backup_residence_cleanup_failed', error);
+    }
   }
 
   // ---- report generation (Phase 7) ----
