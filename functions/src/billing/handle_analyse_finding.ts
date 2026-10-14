@@ -11,12 +11,17 @@ import {
 import {defectCatalogue} from "../ai/defect_catalogue";
 import {parseClassifyFindingInput} from "../ai/validation";
 import {resolveFindingEvidence} from "../ai/evidence";
-import {buildCatalogueShortlist} from "../ai/catalogue_shortlist";
+import {
+  buildNoteFallback,
+  finalizeClassification,
+  NoteFallback,
+  prepareClassification,
+  safeDiagnostics,
+} from "../ai/pipeline";
 import {
   createProvider,
   NEEDS_REVIEW_REASONS,
   SupportedProviderId,
-  validateAndNormalize,
 } from "../ai/gateway";
 import {AiLevelConfig, loadPricingConfig} from "./pricing_config";
 import {
@@ -691,9 +696,18 @@ export function providerUsageRecord(params: {
  * app reads that as "outcome unknown" (its own call timing out) and
  * would park the finding as queued for minutes before re-checking.
  * @param {unknown} error the provider error.
+ * @param {NoteFallback} [fallback] what the note alone still determines.
+ *   Attached (note-derived only, never image-derived) so the app's
+ *   fallback list is driven by the inspector's note, not by guesses.
  * @return {HttpsError} the error to throw to the app.
  */
-function providerFailureError(error: unknown): HttpsError {
+function providerFailureError(
+  error: unknown,
+  fallback?: NoteFallback
+): HttpsError {
+  const extra = fallback && fallback.source === "note" ?
+    {noteFallback: fallback} :
+    {};
   const kind = error instanceof AiProviderError ?
     error.detail.kind ??
       (error.message.includes("transient") ? "unavailable" : "rejected") :
@@ -704,28 +718,28 @@ function providerFailureError(error: unknown): HttpsError {
       "resource-exhausted",
       "AI analysis is unavailable right now. You have not been charged. " +
         "Please try again later or classify manually.",
-      {reason: "providerQuotaExceeded", retryable: false}
+      {reason: "providerQuotaExceeded", retryable: false, ...extra}
     );
   case "rateLimited":
     return new HttpsError(
       "resource-exhausted",
       "AI is busy right now. You have not been charged. Please retry " +
         "in a moment or classify manually.",
-      {reason: "providerRateLimited", retryable: true}
+      {reason: "providerRateLimited", retryable: true, ...extra}
     );
   case "unavailable":
     return new HttpsError(
       "internal",
       "AI analysis timed out. You have not been charged. Please retry " +
         "or classify manually.",
-      {reason: "providerUnavailable", retryable: true}
+      {reason: "providerUnavailable", retryable: true, ...extra}
     );
   default:
     return new HttpsError(
       "internal",
       "AI analysis failed. You have not been charged. Please retry or " +
         "classify manually.",
-      {reason: "providerRejected", retryable: true}
+      {reason: "providerRejected", retryable: true, ...extra}
     );
   }
 }
@@ -854,13 +868,10 @@ async function runClaimedJob(params: {
     // only its ids may be chosen. One finding = ONE provider request:
     // an answer the shortlist can't settle becomes needsReview, never
     // a second (full-catalogue) call.
-    const shortlist = buildCatalogueShortlist(input);
-    const shortlistedInput = {
-      ...input,
-      shortlistEntryIds: shortlist.entryIds,
-      shortlistStrategy: shortlist.strategy,
-      strongNote: shortlist.strongNote,
-    };
+    // (The same prepare/finalize functions drive the terminal QA harness
+    // in src/qa — see ai/pipeline.ts.)
+    const prepared = prepareClassification(input);
+    const {shortlist, shortlistedInput} = prepared;
 
     let result: ClassificationResult;
     let usage: {inputTokens: number; outputTokens: number} | undefined;
@@ -920,10 +931,10 @@ async function runClaimedJob(params: {
         console.info("tokens_released", {idempotencyKey});
       }
       await failDefinitively(`provider_${detail.kind ?? "failed"}`);
-      throw providerFailureError(error);
+      throw providerFailureError(error, buildNoteFallback(prepared));
     }
 
-    const normalized = validateAndNormalize(shortlistedInput, result);
+    const {normalized, diagnostics} = finalizeClassification(prepared, result);
     const usageRecord = {
       ...providerUsageRecord({usage, levelConfig, providerDurationMs}),
       shortlistSize: shortlist.entryIds.length,
@@ -947,6 +958,9 @@ async function runClaimedJob(params: {
       aiLevel,
       ...usageRecord,
       totalCatalogueSize: shortlist.totalCatalogueSize,
+      // Structured trace of the note -> lock -> shortlist -> answer chain
+      // (ids, counts and component names only; never the note or image).
+      diagnostics: safeDiagnostics(diagnostics),
       isRelevantInspectionImage: normalized.isRelevantInspectionImage,
       imageUsable: normalized.imageUsable,
       qualityIssues: normalized.qualityIssues ?? [],

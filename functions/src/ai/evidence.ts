@@ -72,6 +72,29 @@ async function evidenceIsOwnedByCaller(
 }
 
 /**
+ * `sharp` both validates (throws on anything it can't decode — this is
+ * the corrupted/unsupported-format guard) and normalizes: auto-orients
+ * per EXIF, downsamples to a bounded long edge, and re-encodes as JPEG
+ * at a fixed quality so payload size/tokens are predictable regardless
+ * of the original photo's resolution. Shared with the terminal QA
+ * harness so it sends the provider exactly what production sends.
+ * @param {Buffer} bytes the original image bytes.
+ * @return {Promise<Buffer>} the normalized JPEG.
+ */
+export async function normalizeEvidenceBytes(bytes: Buffer): Promise<Buffer> {
+  return sharp(bytes)
+    .rotate()
+    .resize({
+      width: MAX_OUTPUT_DIMENSION,
+      height: MAX_OUTPUT_DIMENSION,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({quality: OUTPUT_JPEG_QUALITY})
+    .toBuffer();
+}
+
+/**
  * Downloads, validates, and normalizes one evidence image. Returns
  * null (never throws) for anything that can't be safely used — a
  * missing Firestore record, a missing/oversized Storage object, or an
@@ -118,21 +141,7 @@ export async function resolveEvidenceImage(params: {
 
     const [bytes] = await file.download();
 
-    // `sharp` both validates (throws on anything it can't decode —
-    // this is the corrupted/unsupported-format guard) and normalizes:
-    // auto-orients per EXIF, downsamples to a bounded long edge, and
-    // re-encodes as JPEG at a fixed quality so payload size/tokens are
-    // predictable regardless of the original photo's resolution.
-    const normalized = await sharp(bytes)
-      .rotate()
-      .resize({
-        width: MAX_OUTPUT_DIMENSION,
-        height: MAX_OUTPUT_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({quality: OUTPUT_JPEG_QUALITY})
-      .toBuffer();
+    const normalized = await normalizeEvidenceBytes(bytes);
 
     return {
       evidenceId,

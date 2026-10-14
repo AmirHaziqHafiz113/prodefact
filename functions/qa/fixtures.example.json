@@ -1,0 +1,6 @@
+[
+  {"name": "wall typo", "note": "Wal por skim", "image": "/absolute/path/wall.jpg", "expectedComponent": "Concrete Wall"},
+  {"name": "wall clean note", "note": "wall poor skim", "image": "/absolute/path/wall.jpg", "expectedComponent": "Concrete Wall"},
+  {"name": "door frame", "note": "door frame dent", "image": "/absolute/path/door-frame.jpg", "expectedComponent": "Door Frame"},
+  {"name": "contradiction", "note": "wall poor skim", "image": "/absolute/path/door.jpg", "expectedAgreement": "contradicts"}
+]

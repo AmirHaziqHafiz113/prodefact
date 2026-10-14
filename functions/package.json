@@ -9,7 +9,10 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "qa:note": "npm run build --silent && node lib/qa/cli_note.js",
+    "qa:ai": "npm run build --silent && node lib/qa/cli_ai.js",
+    "qa:ai-batch": "npm run build --silent && node lib/qa/cli_ai_batch.js"
   },
   "engines": {
     "node": "24"

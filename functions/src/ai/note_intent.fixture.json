@@ -1,0 +1,128 @@
+{
+  "Wal por skim": {
+    "level": "A",
+    "lockComponentNames": [
+      "Concrete Wall"
+    ],
+    "leadEntryId": "wall.concrete_wall.03",
+    "unlisted": []
+  },
+  "wall poor skim": {
+    "level": "A",
+    "lockComponentNames": [
+      "Concrete Wall"
+    ],
+    "leadEntryId": "wall.concrete_wall.03",
+    "unlisted": []
+  },
+  "wall por skim": {
+    "level": "A",
+    "lockComponentNames": [
+      "Concrete Wall"
+    ],
+    "leadEntryId": "wall.concrete_wall.03",
+    "unlisted": []
+  },
+  "dinding por skim": {
+    "level": "A",
+    "lockComponentNames": [
+      "Concrete Wall"
+    ],
+    "leadEntryId": "wall.concrete_wall.03",
+    "unlisted": []
+  },
+  "door frame dent": {
+    "level": "B",
+    "lockComponentNames": [
+      "Door Frame"
+    ],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "door frame": {
+    "level": "B",
+    "lockComponentNames": [
+      "Door Frame"
+    ],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "wall": {
+    "level": "B",
+    "lockComponentNames": [
+      "Concrete Wall",
+      "Wall Tile"
+    ],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "window": {
+    "level": "B",
+    "lockComponentNames": [
+      "Window Awning",
+      "Window Frame",
+      "Window Glass",
+      "Window Handle",
+      "Window Hinge",
+      "Window Leaf"
+    ],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "sliding door": {
+    "level": "B",
+    "lockComponentNames": [
+      "Sliding Door Frame",
+      "Sliding Door Glass",
+      "Sliding Door Panel"
+    ],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "sliding door scratch": {
+    "level": "A",
+    "lockComponentNames": [
+      "Sliding Door Frame",
+      "Sliding Door Glass",
+      "Sliding Door Panel"
+    ],
+    "leadEntryId": "door.sliding_door_frame.05",
+    "unlisted": []
+  },
+  "floor tile hollow": {
+    "level": "A",
+    "lockComponentNames": [
+      "Floor Tiles"
+    ],
+    "leadEntryId": "floor.floor_tiles.05",
+    "unlisted": []
+  },
+  "crack": {
+    "level": "C",
+    "lockComponentNames": [],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "frem dent": {
+    "level": "C",
+    "lockComponentNames": [],
+    "leadEntryId": null,
+    "unlisted": []
+  },
+  "railing paint": {
+    "level": "C",
+    "lockComponentNames": [],
+    "leadEntryId": null,
+    "unlisted": [
+      "railing"
+    ]
+  },
+  "floor trap": {
+    "level": "C",
+    "lockComponentNames": [],
+    "leadEntryId": null,
+    "unlisted": [
+      "floor trap"
+    ]
+  }
+}
