@@ -172,6 +172,10 @@ export function buildDiagnostics(
       final.catalogueEntryId && rawId === undefined ?
         "accepted:anchored_by_note" :
         "accepted";
+    if (final.catalogueEntryId && rawId !== undefined && inShortlist &&
+      final.catalogueEntryId !== rawId && strong.level === "A") {
+      decision += "|note_defect_held_over_provider";
+    }
     if (rawId !== undefined && !inShortlist) {
       decision += rawEntry ?
         "|provider_pick_outside_shortlist_discarded" :

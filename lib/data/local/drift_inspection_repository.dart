@@ -109,6 +109,7 @@ class DriftInspectionRepository implements InspectionRepository {
     required Section section,
     required int orderIndex,
     required DateTime timestamp,
+    String? status,
   }) {
     return _db
         .into(_db.sectionRows)
@@ -124,6 +125,7 @@ class DriftInspectionRepository implements InspectionRepository {
             createdAt: timestamp,
             updatedAt: timestamp,
             note: Value(section.note),
+            status: status == null ? const Value.absent() : Value(status),
           ),
         );
   }
@@ -489,6 +491,14 @@ class DriftInspectionRepository implements InspectionRepository {
   Future<void> saveSections(String sessionId, List<Section> sections) async {
     final now = DateTime.now();
     await _db.transaction(() async {
+      // Rewriting the area list must not reset per-area progress: the
+      // status lives on the section row, so carry it across the
+      // delete/re-insert (otherwise a completed area reloads as
+      // not-started and the report counts 0 completed areas).
+      final existing = await (_db.select(
+        _db.sectionRows,
+      )..where((t) => t.sessionId.equals(sessionId))).get();
+      final statusById = {for (final row in existing) row.id: row.status};
       await (_db.delete(
         _db.sectionRows,
       )..where((t) => t.sessionId.equals(sessionId))).go();
@@ -498,6 +508,7 @@ class DriftInspectionRepository implements InspectionRepository {
           section: sections[i],
           orderIndex: i,
           timestamp: now,
+          status: statusById[sections[i].id],
         );
       }
       await _touchSession(sessionId, now);

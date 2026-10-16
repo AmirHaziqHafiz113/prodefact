@@ -24,6 +24,15 @@ export const MAX_CANDIDATE_ENTRIES = 4;
  * inspector as needsReview, with the entry kept as a candidate. */
 export const MIN_CONFIDENT_CONFIDENCE = 0.6;
 
+/**
+ * Inside a locked component, a provider pick that differs from the
+ * defect the inspector's note spells out only overrides the note when it
+ * is this confident AND the model does not say the photo supports the
+ * note. Anything weaker is run-to-run noise: the note's defect stands.
+ * An override that does qualify is never silent — it goes to review.
+ */
+export const STRONG_DEFECT_CONFLICT_CONFIDENCE = 0.9;
+
 /** The only image-quality values a result may carry. */
 export const QUALITY_ISSUES = [
   "blur",
@@ -309,12 +318,46 @@ export function validateAndNormalize(
     }
   }
 
+  // Level A note (component AND defect spelled out), component locked:
+  // the exact defect inside that component is anchored to the note. The
+  // model verifies/contradicts it; a small visual uncertainty must not
+  // flip the result between neighbouring defects of the same component
+  // ("wall poor skim" -> chipped / uneven / stain) from run to run.
+  const noteFamily = strong?.level === "A" && lockIds.length > 0 &&
+    !unlistedPart ?
+    strong.entryIds.filter((id) => {
+      const e = isAllowed(id) ? defectCatalogue.getById(id) : undefined;
+      return e !== undefined && lockIds.includes(e.componentId);
+    }) :
+    [];
+  let providerAlternativeId: string | undefined;
+  let noteHeld = false;
+  let defectConflict = false;
+  const pickedEntry = validId ? defectCatalogue.getById(validId) : undefined;
+  if (validId !== undefined && noteFamily.length > 0 &&
+    !noteFamily.includes(validId) && pickedEntry !== undefined &&
+    lockIds.includes(pickedEntry.componentId)) {
+    providerAlternativeId = validId;
+    validId = noteFamily[0];
+    noteHeld = true;
+    defectConflict = agreement === "contradicts" || (
+      (confidence ?? 0) >= STRONG_DEFECT_CONFLICT_CONFIDENCE &&
+      agreement !== "supports");
+    if (!defectConflict) {
+      // The provider's own confidence belonged to its (outvoted) pick.
+      confidence = Math.max(confidence ?? 0, MIN_CONFIDENT_CONFIDENCE);
+    }
+  }
+
   const entry = validId ? defectCatalogue.getById(validId) : undefined;
   const allowedTerms = entry ? defectTermsFor(entry.defectDescription) : [];
   const defectTerm = entry ?
     matchDefectTerm(
       entry.defectDescription,
-      result.defectTerm ?? (anchoredByNote ? input.note : undefined)
+      // A swapped-in note defect takes its term from the note, never
+      // from the term the provider wrote for its own (outvoted) pick.
+      noteHeld ? input.note :
+        result.defectTerm ?? (anchoredByNote ? input.note : undefined)
     ) :
     undefined;
   // An entry that words several defects needs the ONE term too;
@@ -371,8 +414,9 @@ export function validateAndNormalize(
     !detectedMatches(detectedComponent, lockNames) &&
     !(entry !== undefined && detectedMatches(detectedComponent,
       [entry.mainElementName]));
-  const contradictsNote = contradicts || crossComponent;
-  const noteImageAgreement = crossComponent ? "contradicts" : reportedAgreement;
+  const contradictsNote = contradicts || crossComponent || defectConflict;
+  const noteImageAgreement = crossComponent || defectConflict ?
+    "contradicts" : reportedAgreement;
 
   const reason: NeedsReviewReason | undefined =
     !imageUsable ? "image_quality" :
@@ -385,7 +429,8 @@ export function validateAndNormalize(
                 !hasValidCandidate(result, isAllowed) ?
                 "no_catalogue_match" :
                 validId === undefined || missingTerm ||
-                  (result.needsReview === true && !anchoredByNote) ?
+                  (result.needsReview === true &&
+                    !anchoredByNote && !noteHeld) ?
                   "ambiguous_candidates" :
                   undefined;
   const needsReview = reason !== undefined;
@@ -409,6 +454,7 @@ export function validateAndNormalize(
   const noteLead = needsReview && dropPick ? strong?.entryIds ?? [] : [];
   const candidateEntryIds = dedupe([
     ...(needsReview && validId && !dropPick ? [validId] : []),
+    ...(providerAlternativeId && needsReview ? [providerAlternativeId] : []),
     ...noteLead.filter(isAllowed),
     ...combinedIds,
     ...modelCandidates,

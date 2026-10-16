@@ -66,22 +66,26 @@ class PdfReportRenderer implements ReportRenderer {
       ),
     );
 
-    // The defect table is ONE table in ONE flowing MultiPage: rows are
-    // packed until the next complete row genuinely cannot fit in what is
-    // left of the printable height, then the table continues on the next
-    // page with its header row repeated. A row is never split, and no
-    // height is estimated or reserved up front (the old planner capped a
-    // page at 5 findings and budgeted rows from a generous estimate,
-    // which left up to half of each page blank).
-    final entries = _tableEntries(model);
-    if (entries.isNotEmpty) {
+    // The defect table flows in a MultiPage: rows are packed until the
+    // next complete row genuinely cannot fit in what is left of the
+    // printable height, then the table continues on the next page with
+    // its header row repeated. A row is never split, and no height is
+    // estimated or reserved up front (the old planner capped a page at 5
+    // findings and budgeted rows from a generous estimate, which left up
+    // to half of each page blank).
+    //
+    // Area boundaries: each area gets its own MultiPage, so a new area
+    // always starts on a fresh page, while a long area still flows over
+    // as many pages as it needs (nothing is shrunk to fit an area on one
+    // page).
+    for (final areaEntries in _tableEntries(model)) {
       doc.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: _pageMargin,
           header: (context) => _buildRunningHeader(model),
           footer: _buildFooter,
-          build: (context) => [_buildDefectTable(entries)],
+          build: (context) => [_buildDefectTable(areaEntries)],
         ),
       );
     }
@@ -341,12 +345,14 @@ class PdfReportRenderer implements ReportRenderer {
   static const _photoBoxWidth = 150.0;
   static const _photoBoxHeight = 124.0;
 
-  /// The table's rows, in report order: one per finding, or one
-  /// "No defects recorded" row for an inspected area without findings.
-  /// An area's note rides on its first row.
-  List<ReportPageEntry> _tableEntries(ReportModel model) {
-    final entries = <ReportPageEntry>[];
+  /// The table's rows, in report order, grouped per area: one row per
+  /// finding, or one "No defects recorded" row for an inspected area
+  /// without findings. An area's note rides on its first row.
+  List<List<ReportPageEntry>> _tableEntries(ReportModel model) {
+    final groups = <List<ReportPageEntry>>[];
     for (final area in model.areas) {
+      final entries = <ReportPageEntry>[];
+      groups.add(entries);
       if (area.findings.isEmpty) {
         entries.add(ReportPageEntry(areaName: area.name, areaNote: area.note));
         continue;
@@ -361,7 +367,7 @@ class PdfReportRenderer implements ReportRenderer {
         );
       }
     }
-    return entries;
+    return groups;
   }
 
   pw.Widget _buildDefectTable(List<ReportPageEntry> entries) {

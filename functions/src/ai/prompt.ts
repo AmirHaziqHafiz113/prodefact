@@ -235,7 +235,10 @@ export function noteReadingLines(input: ClassifyFindingInput): string[] {
   if (strong && strong.entryIds.length > 0) {
     lines.push(
       "note spells out a defect that matches the first listed entries — " +
-      "the photo only needs to confirm the component"
+      "the photo only needs to confirm the component. Choose among those " +
+      "first entries unless the photo clearly shows a different defect; " +
+      "in that case set noteImageAgreement to contradicts and " +
+      "needsReview to true instead of choosing a neighbouring entry"
     );
   }
   if (strong?.unlistedTerms.length) {
