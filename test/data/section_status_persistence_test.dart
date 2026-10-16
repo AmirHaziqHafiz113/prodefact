@@ -1,6 +1,5 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:prodefact/core/inspection/ai/ai_progress.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 import 'package:prodefact/data/local/database.dart';
 import 'package:prodefact/data/local/drift_inspection_repository.dart';

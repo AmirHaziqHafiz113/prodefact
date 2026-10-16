@@ -57,3 +57,14 @@ The error's `details.noteFallback` carries the **note-derived** fallback
 (locked component, note-spelled defect first, then that component's other
 defects). The app's on-device reading is pinned to the backend by
 `functions/src/ai/note_intent.fixture.json` (both test suites).
+
+## Level A stability inside a locked component
+
+With a Level A note (component + defect spelled out) the exact defect is
+anchored to the note's defect (`strongNote.entryIds[0]`). A provider pick
+for a *different* defect of the same component is held to the note's defect
+unless the provider contradicts (`noteImageAgreement: contradicts`) or is
+>= 0.9 confident without saying the photo supports the note; those go to
+Needs Review (`note_image_contradiction`) with the note's defect as the lead
+candidate — never a silent switch. Level B/C are unchanged (image-led).
+Diagnostics show `|note_defect_held_over_provider` when it applied.

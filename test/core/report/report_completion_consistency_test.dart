@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:prodefact/core/inspection/ai/ai_progress.dart';
 import 'package:prodefact/core/inspection/inspection_domain.dart';
 
 /// The Report screen's "Physical inspection X/Y complete" comes from
